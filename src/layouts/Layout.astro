@@ -1,6 +1,5 @@
 ---
 import "../styles/global.css";
-import { GlitchText } from "../components/GlitchText";
 
 interface Props {
   title?: string;
@@ -27,7 +26,7 @@ const nav = [
     <title>{title}</title>
   </head>
   <body
-    class="bg-black text-[#ccc] font-mono min-h-screen relative text-[13px]"
+    class="bg-black text-[#ccc] font-mono min-h-screen relative text-[14px]"
   >
     <!-- Scanline overlay -->
     <div
@@ -37,7 +36,7 @@ const nav = [
     </div>
 
     <div
-      class="max-w-190 px-7 py-6 max-[480px]:px-3.5 max-[480px]:py-4 max-[999px]:mx-auto min-[1000px]:ml-[10vw] min-[1400px]:ml-[14vw]"
+      class="max-w-[960px] mx-auto px-7 py-6 max-[480px]:px-3.5 max-[480px]:py-4"
     >
       <!-- Header -->
       <header
@@ -47,21 +46,21 @@ const nav = [
           href="/"
           class="text-white no-underline tracking-[0.2em] text-[15px]"
         >
-          <GlitchText client:only="react">// LAN_BUNKER //</GlitchText>
+          // LAN_BUNKER //
         </a>
         <span id="clock" class="text-[#666] tabular-nums text-[12px]"></span>
       </header>
 
       <!-- Nav -->
       <nav
-        class="border-b-2 border-white py-3.5 flex gap-1 flex-wrap text-[13px] max-[480px]:gap-0 max-[480px]:text-[12px]"
+        class="border-b-2 border-white py-3.5 flex gap-1 flex-wrap text-[14px] max-[480px]:gap-0 max-[480px]:text-[12px]"
       >
         {
           nav.map((item) => (
             <a
               href={item.href}
               class:list={[
-                "font-mono text-[13px] max-[480px]:text-[12px] cursor-pointer px-2.5 py-1.5 max-[480px]:px-1.5 tracking-[0.05em] no-underline transition-colors duration-100",
+                "font-mono text-[14px] max-[480px]:text-[12px] cursor-pointer px-2.5 py-1.5 max-[480px]:px-1.5 tracking-[0.05em] no-underline transition-colors duration-100",
                 active === item.key
                   ? "bg-white text-black font-bold"
                   : "text-[#999] hover:text-accent",
@@ -74,7 +73,7 @@ const nav = [
       </nav>
 
       <!-- Content -->
-      <main class="animate-[fadeIn_0.25s_ease]">
+      <main>
         <slot />
       </main>
 

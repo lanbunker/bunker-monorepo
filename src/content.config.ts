@@ -10,7 +10,7 @@ const events = defineCollection({
         status: z.string(),
         slots: z.string(),
         games: z.string(),
-        image: z.string(),
+        image: z.string().optional(),
     }),
 })
 
