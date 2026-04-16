@@ -1,0 +1,32 @@
+{
+    "name": "lanbunker-website",
+    "version": "0.0.1",
+    "type": "module",
+    "scripts": {
+        "dev": "astro dev",
+        "build": "astro build",
+        "preview": "astro preview",
+        "astro": "astro",
+        "fmt": "oxfmt"
+    },
+    "dependencies": {
+        "@astrojs/cloudflare": "^13.1.10",
+        "@astrojs/markdown-remark": "^7.1.0",
+        "@astrojs/react": "^5.0.3",
+        "@astrojs/tailwind": "^6.0.2",
+        "@tailwindcss/vite": "^4.2.2",
+        "@types/react": "^19.2.14",
+        "@types/react-dom": "^19.2.3",
+        "astro": "^6.1.7",
+        "react": "^19.2.5",
+        "react-dom": "^19.2.5",
+        "tailwindcss": "^4.2.2",
+        "wrangler": "^4.83.0"
+    },
+    "devDependencies": {
+        "oxfmt": "^0.45.0"
+    },
+    "engines": {
+        "node": ">=22.12.0"
+    }
+}

@@ -1,0 +1,106 @@
+---
+import Layout from "../layouts/Layout.astro";
+import { getCollection } from "astro:content";
+import { GlitchText } from "../components/GlitchText";
+import DuotoneImage from "../components/DuotoneImage.astro";
+import { parseEurDate } from "../lib/dates";
+
+const events = (await getCollection("events")).sort(
+  (a, b) => parseEurDate(b.data.date) - parseEurDate(a.data.date),
+);
+
+const upcoming = events.filter(
+  (e) => e.data.status === "OPEN" || e.data.status === "SOON",
+);
+const previous = events.filter((e) => e.data.status === "CLOSED");
+---
+
+<Layout title="LAN BUNKER // EVENTS" active="events">
+  <h2 class="text-[14px] mt-8 mb-4 text-accent font-normal font-mono">
+    {">"} UPCOMING_EVENTS <span class="text-dim">// ls -la</span>
+  </h2>
+
+  {
+    upcoming.length > 0 ? (
+      <div class="flex flex-col gap-5">
+        {upcoming.map((ev) => (
+          <div
+            class:list={[
+              "border",
+              ev.data.status === "OPEN" ? "border-accent" : "border-border",
+            ]}
+          >
+            <DuotoneImage src={ev.data.image} alt={ev.data.name} />
+            <div class="p-4">
+              <div class="flex justify-between flex-wrap gap-2">
+                <span class="text-white text-[14px]">
+                  <GlitchText client:only="react">{ev.data.name}</GlitchText>
+                </span>
+                <span
+                  class:list={[
+                    "text-[11px] px-2 py-0.5 font-bold text-black",
+                    ev.data.status === "OPEN" ? "bg-accent" : "bg-yellow-400",
+                  ]}
+                >
+                  {ev.data.status}
+                </span>
+              </div>
+              <div class="text-[12px] text-dim mt-2.5 leading-[1.8]">
+                <div>
+                  DATE: <span class="text-[#ddd]">{ev.data.date}</span>
+                </div>
+                <div>
+                  SLOTS: <span class="text-[#ddd]">{ev.data.slots}</span>
+                </div>
+                <div>
+                  GAMES: <span class="text-[#ddd]">{ev.data.games}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    ) : (
+      <p class="text-dim text-[12px]">NO UPCOMING EVENTS.</p>
+    )
+  }
+
+  {
+    previous.length > 0 && (
+      <>
+        <h2 class="text-[14px] mt-10 mb-4 text-accent font-normal font-mono">
+          {">"} PREVIOUS_EVENTS <span class="text-dim">// archive</span>
+        </h2>
+
+        <div class="flex flex-col gap-5">
+          {previous.map((ev) => (
+            <div class="border border-border">
+              <DuotoneImage src={ev.data.image} alt={ev.data.name} />
+              <div class="p-4">
+                <div class="flex justify-between flex-wrap gap-2">
+                  <span class="text-white text-[14px]">
+                    <GlitchText client:only="react">{ev.data.name}</GlitchText>
+                  </span>
+                  <span class="text-[11px] px-2 py-0.5 font-bold text-black bg-[#666]">
+                    {ev.data.status}
+                  </span>
+                </div>
+                <div class="text-[12px] text-dim mt-2.5 leading-[1.8]">
+                  <div>
+                    DATE: <span class="text-[#ddd]">{ev.data.date}</span>
+                  </div>
+                  <div>
+                    SLOTS: <span class="text-[#ddd]">{ev.data.slots}</span>
+                  </div>
+                  <div>
+                    GAMES: <span class="text-[#ddd]">{ev.data.games}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </>
+    )
+  }
+</Layout>

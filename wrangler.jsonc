@@ -1,0 +1,18 @@
+{
+    "$schema": "node_modules/wrangler/config-schema.json",
+    "name": "lanbunker-website",
+    "compatibility_date": "2026-04-14",
+    "compatibility_flags": ["nodejs_compat"],
+    "observability": {
+        "enabled": true,
+    },
+
+    // Uncomment when ready for D1
+    // "d1_databases": [
+    //   {
+    //     "binding": "DB",
+    //     "database_name": "lanbunker-db",
+    //     "database_id": "<your-database-id>"
+    //   }
+    // ]
+}

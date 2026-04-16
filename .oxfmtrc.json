@@ -1,0 +1,14 @@
+{
+    "tabWidth": 4,
+    "arrowParens": "avoid",
+    "semi": false,
+    "singleQuote": false,
+    "trailingComma": "all",
+    "printWidth": 90,
+    "sortImports": {},
+    "sortTailwindcss": {
+        "functions": ["clsx", "cn", "twmerge", "cva", "styles"]
+    },
+    "sortPackageJson": true,
+    "ignorePatterns": ["dist/**", "db/migrations/**", "db/drizzle/**", "openapi-dist/**"]
+}

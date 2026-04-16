@@ -1,0 +1,54 @@
+---
+import Layout from "../layouts/Layout.astro";
+
+type Tournament = {
+  id: string;
+  name: string;
+  format: string;
+  slots: string;
+  winner?: string;
+  status: "OPEN" | "CLOSED";
+};
+
+const tournaments = [
+  {
+    id: "t1",
+    name: "CALL OF DUTY BO2: GUN GAME 1V1",
+    format: "1v1 DIRECT ELIMINATION",
+    slots: "20",
+    winner: "MARINO",
+    status: "CLOSED",
+  },
+];
+---
+
+<Layout title="LAN BUNKER // TOURNAMENTS" active="tournaments">
+  <h2 class="text-[14px] mt-8 mb-4 text-accent font-normal font-mono">
+    {">"} TOURNAMENTS <span class="text-dim">// subscribe</span>
+  </h2>
+
+  <div class="flex flex-col gap-3">
+    {
+      tournaments.map((t) => (
+        <div class="border border-border p-4">
+          <div class="flex justify-between items-center flex-wrap gap-2">
+            <div>
+              <span class="text-white text-[13px]">{t.name}</span>
+              <span class="text-dim text-[11px] ml-3">{t.format}</span>
+            </div>
+            <span class="text-[11px] text-dim">{t.slots}</span>
+          </div>
+          {t.status === "OPEN" ? (
+            <div class="mt-3 text-[11px] text-dim">
+              // REGISTRATION FORM COMING SOON
+            </div>
+          ) : (
+            <div class="mt-3 text-[11px] text-[#666]">
+              REGISTRATION {t.status}
+            </div>
+          )}
+        </div>
+      ))
+    }
+  </div>
+</Layout>

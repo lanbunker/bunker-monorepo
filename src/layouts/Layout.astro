@@ -1,0 +1,100 @@
+---
+import "../styles/global.css";
+import { GlitchText } from "../components/GlitchText";
+
+interface Props {
+  title?: string;
+  active: "home" | "scores" | "events" | "tournaments" | "about";
+}
+
+const { title = "LAN BUNKER", active } = Astro.props;
+
+const nav = [
+  { key: "home", label: "[HOME]", href: "/" },
+  { key: "scores", label: "[SCORES]", href: "/scores" },
+  { key: "events", label: "[EVENTS]", href: "/events" },
+  { key: "tournaments", label: "[TOURNAMENTS]", href: "/tournaments" },
+  { key: "about", label: "[ABOUT]", href: "/about" },
+] as const;
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <title>{title}</title>
+  </head>
+  <body
+    class="bg-black text-[#ccc] font-mono min-h-screen relative text-[13px]"
+  >
+    <!-- Scanline overlay -->
+    <div
+      class="fixed inset-0 pointer-events-none z-9999"
+      style="background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(255,255,255,0.007) 2px, rgba(255,255,255,0.007) 4px);"
+    >
+    </div>
+
+    <div
+      class="max-w-190 px-7 py-6 max-[480px]:px-3.5 max-[480px]:py-4 max-[999px]:mx-auto min-[1000px]:ml-[10vw] min-[1400px]:ml-[14vw]"
+    >
+      <!-- Header -->
+      <header
+        class="flex justify-between items-center pb-2.5 border-b-2 border-white text-[11px]"
+      >
+        <a
+          href="/"
+          class="text-white no-underline tracking-[0.2em] text-[15px]"
+        >
+          <GlitchText client:only="react">LAN BUNKER</GlitchText>
+        </a>
+        <span id="clock" class="text-[#666] tabular-nums text-[12px]"></span>
+      </header>
+
+      <!-- Nav -->
+      <nav
+        class="border-b-2 border-white py-3.5 flex gap-1 flex-wrap text-[13px] max-[480px]:gap-0 max-[480px]:text-[12px]"
+      >
+        {
+          nav.map((item) => (
+            <a
+              href={item.href}
+              class:list={[
+                "font-mono text-[13px] max-[480px]:text-[12px] cursor-pointer px-2.5 py-1.5 max-[480px]:px-1.5 tracking-[0.05em] no-underline transition-colors duration-100",
+                active === item.key
+                  ? "bg-white text-black font-bold"
+                  : "text-[#999] hover:text-accent",
+              ]}
+            >
+              {item.label}
+            </a>
+          ))
+        }
+      </nav>
+
+      <!-- Content -->
+      <main class="animate-[fadeIn_0.25s_ease]">
+        <slot />
+      </main>
+
+      <!-- Footer -->
+      <footer
+        class="mt-12 pt-4 border-t border-border text-[10px] text-[#666] flex justify-between flex-wrap gap-2 pb-8 tracking-[0.05em]"
+      >
+        <span>&copy; LAN BUNKER {new Date().getFullYear()}</span>
+      </footer>
+    </div>
+
+    <script>
+      function updateClock() {
+        const el = document.getElementById("clock");
+        if (el) {
+          el.textContent = new Date().toLocaleTimeString("en-GB");
+        }
+      }
+      updateClock();
+      setInterval(updateClock, 1000);
+    </script>
+  </body>
+</html>
