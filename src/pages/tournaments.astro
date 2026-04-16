@@ -7,16 +7,20 @@ type Tournament = {
   format: string;
   slots: string;
   winner?: string;
+  winnerImage?: string;
+  formLink?: string;
+  openUntil?: string; // UTC ISO datetime e.g. "2026-05-10T20:00:00Z"
   status: "OPEN" | "CLOSED";
 };
 
-const tournaments = [
+const tournaments: Tournament[] = [
   {
     id: "t1",
     name: "CALL OF DUTY BO2: GUN GAME 1V1",
     format: "1v1 DIRECT ELIMINATION",
     slots: "20",
     winner: "MARINO",
+    winnerImage: "/images/winners/winner-cod-feb26.png",
     status: "CLOSED",
   },
 ];
@@ -31,24 +35,215 @@ const tournaments = [
     {
       tournaments.map((t) => (
         <div class="border border-border p-4">
-          <div class="flex justify-between items-center flex-wrap gap-2">
-            <div>
-              <span class="text-white text-[13px]">{t.name}</span>
-              <span class="text-dim text-[11px] ml-3">{t.format}</span>
+          {/* Title */}
+          <div class="text-white text-[14px]">{t.name}</div>
+
+          {/* Two-column: left info, right image */}
+          <div
+            class:list={["mt-3", t.winnerImage ? "flex gap-6 flex-wrap" : ""]}
+          >
+            {/* Left column */}
+            <div class="flex-1 min-w-[180px]">
+              {/* Status badge */}
+              <div>
+                <span
+                  class:list={[
+                    "text-[11px] px-2 py-0.5 font-bold",
+                    t.status === "OPEN"
+                      ? "bg-accent text-black"
+                      : "bg-[#666] text-black",
+                  ]}
+                >
+                  {t.status === "OPEN"
+                    ? "REGISTRATION OPEN"
+                    : "REGISTRATION CLOSED"}
+                </span>
+              </div>
+
+              {/* Info */}
+              <div class="mt-3 text-[11px] text-dim tracking-[0.1em] leading-[2]">
+                <div>
+                  FORMAT: <span class="text-[#ccc]">{t.format}</span>
+                </div>
+                <div>
+                  TOT_PLAYERS: <span class="text-[#ccc]">{t.slots}</span>
+                </div>
+              </div>
+
+              {/* OPEN: form link + deadline */}
+              {t.status === "OPEN" && t.openUntil && (
+                <div class="mt-3">
+                  <div
+                    class="text-[11px] text-dim tracking-[0.1em] mb-2 open-until-wrap"
+                    data-deadline={t.openUntil}
+                  >
+                    OPEN UNTIL: <span class="open-until-value text-[#ccc]" />
+                  </div>
+                  {t.formLink && (
+                    <a
+                      href={t.formLink}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      class="register-btn inline-block bg-accent text-black px-5 py-2 text-[12px] font-bold font-mono tracking-[0.05em] no-underline hover:brightness-120 cursor-pointer"
+                      data-deadline={t.openUntil}
+                    >
+                      [REGISTER]
+                    </a>
+                  )}
+                </div>
+              )}
+
+              {/* Winner info */}
+              {t.status === "CLOSED" && t.winner && (
+                <div class="mt-4">
+                  <div class="border-l-2 border-accent pl-3">
+                    <div class="text-[10px] text-dim tracking-[0.2em] mb-1">
+                      SUBJECT
+                    </div>
+                    <div class="text-[20px] text-white tracking-[0.1em] leading-tight">
+                      {t.winner}
+                    </div>
+                  </div>
+                  <div class="mt-2 text-[10px] text-dim tracking-[0.15em]">
+                    STATUS: <span class="text-accent">CHAMPION</span>
+                  </div>
+                </div>
+              )}
+
+              {t.status === "CLOSED" && !t.winner && (
+                <div class="mt-3 text-[11px] text-[#666]">
+                  NO WINNER RECORDED.
+                </div>
+              )}
             </div>
-            <span class="text-[11px] text-dim">{t.slots}</span>
+
+            {/* Right column: winner image */}
+            {t.winnerImage && (
+              <div class="winner-card">
+                <div class="winner-img-wrap">
+                  <img
+                    src={t.winnerImage}
+                    alt={`Winner: ${t.winner}`}
+                    loading="lazy"
+                    class="w-full h-full object-cover block"
+                  />
+                  <div class="winner-scanlines" />
+                </div>
+                <div class="winner-label">
+                  <span>&#9733; WINNER &#9733;</span>
+                  {t.winner && <span class="winner-name">{t.winner}</span>}
+                </div>
+              </div>
+            )}
           </div>
-          {t.status === "OPEN" ? (
-            <div class="mt-3 text-[11px] text-dim">
-              // REGISTRATION FORM COMING SOON
-            </div>
-          ) : (
-            <div class="mt-3 text-[11px] text-[#666]">
-              REGISTRATION {t.status}
-            </div>
-          )}
         </div>
       ))
     }
   </div>
 </Layout>
+
+<style>
+  .winner-card {
+    width: 180px;
+    flex-shrink: 0;
+    background: #111;
+    border: 2px solid #00ff41;
+    box-shadow: 4px 4px 0 #000;
+  }
+
+  .winner-img-wrap {
+    position: relative;
+    width: 100%;
+    height: 180px;
+    overflow: hidden;
+  }
+
+  .winner-img-wrap img {
+    filter: saturate(0.6) contrast(1.1) brightness(0.95);
+  }
+
+  .winner-scanlines {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(0, 0, 0, 0.2) 2px,
+      rgba(0, 0, 0, 0.2) 4px
+    );
+  }
+
+  .winner-label {
+    padding: 8px 10px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 10px;
+    font-family: "Courier New", "Lucida Console", monospace;
+    color: #00ff41;
+    letter-spacing: 0.15em;
+    font-weight: bold;
+    border-top: 1px solid #333;
+    background: #0a0a0a;
+  }
+
+  .winner-name {
+    color: #fff;
+    font-weight: normal;
+    letter-spacing: 0.05em;
+  }
+</style>
+
+<script>
+  function initDeadlines() {
+    const now = Date.now();
+    const tzOffset = new Date().getTimezoneOffset();
+    const tzHours = -Math.floor(tzOffset / 60);
+    const tzMins = Math.abs(tzOffset % 60);
+    const tzLabel =
+      "UTC" +
+      (tzHours >= 0 ? "+" : "") +
+      tzHours +
+      (tzMins > 0 ? ":" + String(tzMins).padStart(2, "0") : "");
+
+    document
+      .querySelectorAll<HTMLElement>(".open-until-wrap")
+      .forEach((wrap) => {
+        const deadline = wrap.dataset.deadline;
+        if (!deadline) return;
+
+        const dt = new Date(deadline);
+        const expired = now >= dt.getTime();
+
+        const day = String(dt.getDate()).padStart(2, "0");
+        const month = String(dt.getMonth() + 1).padStart(2, "0");
+        const year = dt.getFullYear();
+        const hours = String(dt.getHours()).padStart(2, "0");
+        const mins = String(dt.getMinutes()).padStart(2, "0");
+        const formatted = `${day}/${month}/${year} ${hours}:${mins} ${tzLabel}`;
+
+        const valueEl = wrap.querySelector(".open-until-value");
+        if (valueEl) {
+          if (expired) {
+            valueEl.innerHTML = `<span style="color:#666;text-decoration:line-through">${formatted}</span> <span style="color:#ff4444">// TIMED OUT</span>`;
+          } else {
+            valueEl.textContent = formatted;
+          }
+        }
+
+        const btn =
+          wrap.parentElement?.querySelector<HTMLAnchorElement>(".register-btn");
+        if (btn && expired) {
+          btn.removeAttribute("href");
+          btn.style.opacity = "0.3";
+          btn.style.pointerEvents = "none";
+          btn.style.cursor = "not-allowed";
+          btn.textContent = "[REGISTRATION CLOSED]";
+        }
+      });
+  }
+
+  initDeadlines();
+</script>
