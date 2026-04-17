@@ -1,0 +1,37 @@
+---
+import type { CollectionEntry } from "astro:content"
+import DuotoneImage from "./DuotoneImage.astro"
+
+interface Props {
+  event: CollectionEntry<"events">
+}
+
+const { event } = Astro.props
+const status = event.data.status
+
+const borderClass = status === "OPEN" ? "border-accent" : "border-border"
+const badgeClass: Record<typeof status, string> = {
+  OPEN: "bg-accent",
+  SOON: "bg-yellow-400",
+  CLOSED: "bg-[#666]",
+}
+---
+
+<div class:list={["border", borderClass]}>
+  {event.data.image && <DuotoneImage src={event.data.image} alt={event.data.name} />}
+  <div class="p-4">
+    <div class="flex justify-between flex-wrap gap-2">
+      <span class="text-white text-[14px]">
+        {event.data.name}
+      </span>
+      <span class:list={["text-[11px] px-2 py-0.5 font-bold text-black", badgeClass[status]]}>
+        {status}
+      </span>
+    </div>
+    <div class="text-[12px] text-dim mt-2.5 leading-[1.8]">
+      <div>DATE: <span class="text-[#ddd]">{event.data.date}</span></div>
+      <div>SLOTS: <span class="text-[#ddd]">{event.data.slots}</span></div>
+      <div>GAMES: <span class="text-[#ddd]">{event.data.games}</span></div>
+    </div>
+  </div>
+</div>

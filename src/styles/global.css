@@ -30,6 +30,11 @@ p {
 }
 
 /* Scrollbar */
+html {
+    scrollbar-color: var(--color-border) #000;
+    scrollbar-width: thin;
+}
+
 ::-webkit-scrollbar {
     width: 6px;
     height: 4px;
@@ -50,4 +55,3 @@ p {
         opacity: 0;
     }
 }
-

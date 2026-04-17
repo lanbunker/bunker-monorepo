@@ -4,6 +4,7 @@ import Layout from "../layouts/Layout.astro";
 type Tournament = {
   id: string;
   name: string;
+  date: string; // e.g. "26/02/2026"
   format: string;
   slots: string;
   winner?: string;
@@ -17,6 +18,7 @@ const tournaments: Tournament[] = [
   {
     id: "t1",
     name: "CALL OF DUTY BO2: GUN GAME 1V1",
+    date: "26/02/2026",
     format: "1v1 DIRECT ELIMINATION",
     slots: "20",
     winner: "MARINO",
@@ -60,6 +62,9 @@ const tournaments: Tournament[] = [
               FORMAT: <span class="text-[#ccc]">{t.format}</span>
             </div>
             <div>
+              DATE: <span class="text-[#ccc]">{t.date}</span>
+            </div>
+            <div>
               TOT_PLAYERS: <span class="text-[#ccc]">{t.slots}</span>
             </div>
           </div>
@@ -71,7 +76,7 @@ const tournaments: Tournament[] = [
                 class="text-[12px] text-dim tracking-widest mb-2 open-until-wrap"
                 data-deadline={t.openUntil}
               >
-                OPEN UNTIL: <span class="open-until-value text-[#ccc]" />
+                OPEN_UNTIL: <span class="open-until-value text-[#ccc]" />
               </div>
               {t.formLink && (
                 <a
@@ -164,7 +169,7 @@ const tournaments: Tournament[] = [
 </style>
 
 <script>
-  function initDeadlines() {
+  const initDeadlines = () => {
     const now = Date.now();
     const tzOffset = new Date().getTimezoneOffset();
     const tzHours = -Math.floor(tzOffset / 60);
@@ -210,7 +215,7 @@ const tournaments: Tournament[] = [
           btn.textContent = "[REGISTRATION CLOSED]";
         }
       });
-  }
+  };
 
   initDeadlines();
 </script>

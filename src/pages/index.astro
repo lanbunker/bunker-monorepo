@@ -2,6 +2,7 @@
 import Layout from "../layouts/Layout.astro";
 import { getCollection } from "astro:content";
 import { parseEurDate } from "../lib/dates";
+import ASCIIText from "../components/ASCIIText";
 
 const events = (await getCollection("events")).sort(
   (a, b) => parseEurDate(b.data.date) - parseEurDate(a.data.date),
@@ -12,20 +13,24 @@ const prevEvent = events.find((e) => e.data.status === "CLOSED");
 ---
 
 <Layout title="LAN BUNKER" active="home">
-  <!-- ASCII Logo -->
-  <div
-    class="mt-9 mb-6 overflow-x-auto overflow-y-hidden [-webkit-overflow-scrolling:touch]"
-  >
-    <pre
-      class="text-white text-[8.5px] leading-[1.15] whitespace-pre m-0 inline-block min-w-max min-[1000px]:text-[10px] min-[1400px]:text-[11px] max-[480px]:text-[6px]">{`░▒▓███████▓▒░░▒▓█▓▒░░▒▓█▓▒░▒▓███████▓▒░░▒▓█▓▒░░▒▓█▓▒░▒▓████████▓▒░▒▓███████▓▒░
+  <div class="h-64 max-[480px]:h-37.5 min-[1000px]:h-100 w-full">
+    <ASCIIText
+      client:only="react"
+      text="BUNKER"
+      asciiFontSize={14}
+      textFontSize={210}
+      textColor="white"
+      planeBaseHeight={12}
+      enableWaves={true}
+      fallback={`░▒▓███████▓▒░░▒▓█▓▒░░▒▓█▓▒░▒▓███████▓▒░░▒▓█▓▒░░▒▓█▓▒░▒▓████████▓▒░▒▓███████▓▒░
 ░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░      ░▒▓█▓▒░░▒▓█▓▒░
 ░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░      ░▒▓█▓▒░░▒▓█▓▒░
 ░▒▓███████▓▒░░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░▒▓███████▓▒░░▒▓██████▓▒░ ░▒▓███████▓▒░
 ░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░      ░▒▓█▓▒░░▒▓█▓▒░
 ░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░      ░▒▓█▓▒░░▒▓█▓▒░
-░▒▓███████▓▒░ ░▒▓██████▓▒░░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░▒▓████████▓▒░▒▓█▓▒░░▒▓█▓▒░`}</pre>
+░▒▓███████▓▒░ ░▒▓██████▓▒░░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░▒▓████████▓▒░▒▓█▓▒░░▒▓█▓▒░`}
+    />
   </div>
-
   <div class="my-8">
     <div class="text-[12px] text-dim mb-4 tracking-[0.2em]">
       ── LOCAL AREA NETWORK PARTY ──
@@ -36,41 +41,57 @@ const prevEvent = events.find((e) => e.data.status === "CLOSED");
       class="mt-6 text-[12px] text-dim animate-[fadeIn_0.5s_ease] leading-[2.2] hidden"
     >
       <p>STATUS: <span class="text-accent">■</span> ONLINE</p>
-      {nextEvent ? (
-        <p>NEXT EVENT: <span class="text-white">{nextEvent.data.date} // {nextEvent.data.name}</span></p>
-      ) : (
-        <p>NEXT EVENT: <span class="text-white">TO BE ANNOUNCED</span></p>
-      )}
-      {prevEvent && (
-        <p>PREVIOUS EVENT: <span class="text-white">{prevEvent.data.date} // {prevEvent.data.name}</span></p>
-      )}
+      {
+        nextEvent ? (
+          <p>
+            NEXT EVENT:{" "}
+            <span class="text-white">
+              {nextEvent.data.date} // {nextEvent.data.name}
+            </span>
+          </p>
+        ) : (
+          <p>
+            NEXT EVENT: <span class="text-white">TO BE ANNOUNCED</span>
+          </p>
+        )
+      }
+      {
+        prevEvent && (
+          <p>
+            PREVIOUS EVENT:{" "}
+            <span class="text-white">
+              {prevEvent.data.date} // {prevEvent.data.name}
+            </span>
+          </p>
+        )
+      }
     </div>
   </div>
-
-  <pre
-    class="text-[#aaa] text-[11px] mt-10 whitespace-pre-wrap border-l-2 border-accent pl-4">{`CONSOLES · ARCADE · CONTROLLERS · SCREENS
-ALL PROVIDED. JUST SHOW UP.
-WE HANDLE THE GEAR. YOU HANDLE THE W.`}</pre>
 
   <script>
     const text = "> ENTER THE BUNKER. LAN PARTY REIMAGINED FOR THE MODERN AGE.";
     const el = document.getElementById("typewriter");
     const statusBlock = document.getElementById("status-block");
-    let i = 0;
 
-    function type() {
-      if (!el || !statusBlock) return;
-      i++;
-      el.innerHTML =
-        text.slice(0, i) +
-        '<span class="animate-[blink_1s_step-end_infinite] text-accent">█</span>';
-      if (i < text.length) {
-        setTimeout(type, 25);
-      } else {
-        statusBlock.classList.remove("hidden");
-      }
+    if (el && statusBlock) {
+      const textNode = document.createTextNode("");
+      const cursor = document.createElement("span");
+      cursor.className = "animate-[blink_1s_step-end_infinite] text-accent";
+      cursor.textContent = "\u2588";
+      el.appendChild(textNode);
+      el.appendChild(cursor);
+
+      let i = 0;
+      const type = () => {
+        i++;
+        textNode.textContent = text.slice(0, i);
+        if (i < text.length) {
+          setTimeout(type, 25);
+        } else {
+          statusBlock.classList.remove("hidden");
+        }
+      };
+      type();
     }
-
-    type();
   </script>
 </Layout>
