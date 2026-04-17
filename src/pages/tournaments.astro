@@ -7,6 +7,7 @@ import winnerCodFeb26 from "../assets/images/winners/winner-cod-feb26.webp";
 type Tournament = {
   id: string;
   name: string;
+  description?: string;
   date: string; // e.g. "26/02/2026"
   format: string;
   slots: string;
@@ -20,10 +21,12 @@ type Tournament = {
 const tournaments: Tournament[] = [
   {
     id: "t1",
-    name: "CALL OF DUTY BO2: GUN GAME 1V1",
+    name: "COD BLACK OPS 2: 1V1 GUN GAME",
+    description:
+      "1V1 Gun Game on 'Hijack' map, UAV always active, -3 weapons on melee death.",
     date: "26/02/2026",
-    format: "1v1 DIRECT ELIMINATION",
-    slots: "20",
+    format: "1V1 DIRECT ELIMINATION",
+    slots: "unlimited",
     winner: "MARINO",
     winnerImage: winnerCodFeb26,
     status: "CLOSED",
@@ -36,12 +39,17 @@ const tournaments: Tournament[] = [
     {">"} TOURNAMENTS <span class="text-dim">// subscribe</span>
   </h2>
 
-  <div class="flex flex-col gap-3">
+  <div class="flex flex-col gap-4">
     {
       tournaments.map((t) => (
-        <div class="border border-border p-4">
+        <div
+          class={`border ${t.status === "OPEN" || t.status === "UPCOMING" ? "border-accent" : "border-border"} p-4`}
+        >
           {/* Title */}
           <div class="text-white text-[15px]">{t.name}</div>
+          {t.description && (
+            <div class="text-dim text-[12px] mt-1">{t.description}</div>
+          )}
 
           {/* Status badge */}
           <div class="mt-2">
@@ -68,7 +76,7 @@ const tournaments: Tournament[] = [
               DATE: <span class="text-[#ccc]">{t.date}</span>
             </div>
             <div>
-              TOT_PLAYERS: <span class="text-[#ccc]">{t.slots}</span>
+              SLOTS: <span class="text-[#ccc]">{t.slots}</span>
             </div>
           </div>
 
@@ -81,17 +89,32 @@ const tournaments: Tournament[] = [
               >
                 OPEN_UNTIL: <span class="open-until-value text-[#ccc]" />
               </div>
-              {t.formLink && (
-                <a
-                  href={t.formLink}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  class="register-btn inline-block bg-accent text-black px-5 py-2 text-[12px] font-bold font-mono tracking-[0.05em] no-underline hover:brightness-120 cursor-pointer"
+              <div class="flex items-center gap-4 flex-wrap">
+                {t.formLink && (
+                  <a
+                    href={t.formLink}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    class="register-btn inline-block bg-accent text-black px-5 py-2 text-[12px] font-bold font-mono tracking-[0.05em] no-underline hover:brightness-120 cursor-pointer"
+                    data-deadline={t.openUntil}
+                  >
+                    [REGISTER]
+                  </a>
+                )}
+                <div
+                  class="countdown font-mono text-[12px] tracking-widest text-accent flex items-center gap-1"
                   data-deadline={t.openUntil}
                 >
-                  [REGISTER]
-                </a>
-              )}
+                  <span class="text-dim text-[10px] mr-1">T-</span>
+                  <span class="countdown-d cd-segment" />
+                  <span class="text-dim">:</span>
+                  <span class="countdown-h cd-segment" />
+                  <span class="text-dim">:</span>
+                  <span class="countdown-m cd-segment" />
+                  <span class="text-dim">:</span>
+                  <span class="countdown-s cd-segment" />
+                </div>
+              </div>
             </div>
           )}
 
@@ -140,6 +163,29 @@ const tournaments: Tournament[] = [
 </Layout>
 
 <style>
+  .cd-segment {
+    background: rgba(0, 255, 65, 0.08);
+    border: 1px solid rgba(0, 255, 65, 0.25);
+    padding: 0.15rem 0.35rem;
+    min-width: 1.8rem;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .countdown.expired {
+    opacity: 0.3;
+  }
+
+  .countdown.expired .cd-segment {
+    border-color: rgba(255, 68, 68, 0.3);
+    background: rgba(255, 68, 68, 0.06);
+    color: #ff4444;
+  }
+
+  .countdown.expired span {
+    color: #ff4444;
+  }
+
   .winner-card {
     width: 120px;
     height: 120px;
@@ -175,16 +221,23 @@ const tournaments: Tournament[] = [
 </style>
 
 <script>
-  const initDeadlines = () => {
-    const now = Date.now();
-    const tzOffset = new Date().getTimezoneOffset();
+  const pad2 = (n: number) => String(n).padStart(2, "0");
+
+  const formatLocalDeadline = (dt: Date) => {
+    const tzOffset = dt.getTimezoneOffset();
     const tzHours = -Math.floor(tzOffset / 60);
     const tzMins = Math.abs(tzOffset % 60);
     const tzLabel =
       "UTC" +
       (tzHours >= 0 ? "+" : "") +
       tzHours +
-      (tzMins > 0 ? ":" + String(tzMins).padStart(2, "0") : "");
+      (tzMins > 0 ? ":" + pad2(tzMins) : "");
+
+    return `${pad2(dt.getDate())}/${pad2(dt.getMonth() + 1)}/${dt.getFullYear()} ${pad2(dt.getHours())}:${pad2(dt.getMinutes())} ${tzLabel}`;
+  };
+
+  const initDeadlines = () => {
+    const now = Date.now();
 
     document
       .querySelectorAll<HTMLElement>(".open-until-wrap")
@@ -194,13 +247,7 @@ const tournaments: Tournament[] = [
 
         const dt = new Date(deadline);
         const expired = now >= dt.getTime();
-
-        const day = String(dt.getDate()).padStart(2, "0");
-        const month = String(dt.getMonth() + 1).padStart(2, "0");
-        const year = dt.getFullYear();
-        const hours = String(dt.getHours()).padStart(2, "0");
-        const mins = String(dt.getMinutes()).padStart(2, "0");
-        const formatted = `${day}/${month}/${year} ${hours}:${mins} ${tzLabel}`;
+        const formatted = formatLocalDeadline(dt);
 
         const valueEl = wrap.querySelector(".open-until-value");
         if (valueEl) {
@@ -223,5 +270,43 @@ const tournaments: Tournament[] = [
       });
   };
 
+  const tickCountdowns = () => {
+    document.querySelectorAll<HTMLElement>(".countdown").forEach((el) => {
+      const deadline = el.dataset.deadline;
+      if (!deadline) return;
+
+      const remaining = new Date(deadline).getTime() - Date.now();
+      const expired = remaining <= 0;
+
+      const dEl = el.querySelector<HTMLElement>(".countdown-d");
+      const hEl = el.querySelector<HTMLElement>(".countdown-h");
+      const mEl = el.querySelector<HTMLElement>(".countdown-m");
+      const sEl = el.querySelector<HTMLElement>(".countdown-s");
+      if (!dEl || !hEl || !mEl || !sEl) return;
+
+      if (expired) {
+        el.classList.add("expired");
+        dEl.textContent = "00";
+        hEl.textContent = "00";
+        mEl.textContent = "00";
+        sEl.textContent = "00";
+        return;
+      }
+
+      const totalSec = Math.floor(remaining / 1000);
+      const d = Math.floor(totalSec / 86400);
+      const h = Math.floor((totalSec % 86400) / 3600);
+      const m = Math.floor((totalSec % 3600) / 60);
+      const s = totalSec % 60;
+
+      dEl.textContent = pad2(d);
+      hEl.textContent = pad2(h);
+      mEl.textContent = pad2(m);
+      sEl.textContent = pad2(s);
+    });
+  };
+
   initDeadlines();
+  tickCountdowns();
+  setInterval(tickCountdowns, 1000);
 </script>
