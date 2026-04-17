@@ -43,7 +43,7 @@ const tournaments: Tournament[] = [
     {
       tournaments.map((t) => (
         <div
-          class={`border ${t.status === "OPEN" || t.status === "UPCOMING" ? "border-accent" : "border-border"} p-4`}
+          class={`border ${t.status === "OPEN" ? "border-accent" : "border-border"} p-4`}
         >
           {/* Title */}
           <div class="text-white text-[15px]">{t.name}</div>
