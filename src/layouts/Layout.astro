@@ -3,16 +3,17 @@ import "../styles/global.css";
 
 interface Props {
   title?: string;
-  active: "home" | "scores" | "events" | "tournaments" | "about";
+  active: "home" | "scores" | "events" | "tournaments" | "media" | "about";
 }
 
 const { title = "LAN BUNKER", active } = Astro.props;
 
 const nav = [
   { key: "home", label: "[HOME]", href: "/" },
-  { key: "scores", label: "[SCORES]", href: "/scores" },
   { key: "events", label: "[EVENTS]", href: "/events" },
   { key: "tournaments", label: "[TOURNAMENTS]", href: "/tournaments" },
+  { key: "scores", label: "[SCORES]", href: "/scores" },
+  { key: "media", label: "[MEDIA]", href: "/media" },
   { key: "about", label: "[ABOUT]", href: "/about" },
 ] as const;
 ---
@@ -22,11 +23,17 @@ const nav = [
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width" />
-    <meta name="description" content="LAN BUNKER — recurring local multiplayer event blending DJ night with gaming." />
+    <meta
+      name="description"
+      content="LAN BUNKER — recurring local multiplayer event blending DJ night with gaming."
+    />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet" />
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600&display=swap"
+      rel="stylesheet"
+    />
     <title>{title}</title>
   </head>
   <body

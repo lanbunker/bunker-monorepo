@@ -1,0 +1,185 @@
+---
+import Layout from "../layouts/Layout.astro";
+import { Image, getImage } from "astro:assets";
+
+const images = import.meta.glob<{ default: ImageMetadata }>(
+  "/src/assets/images/gallery/*.{jpg,jpeg,png,webp,JPG,JPEG,PNG,WEBP}",
+  { eager: true },
+);
+
+const gallery = await Promise.all(
+  Object.entries(images).map(async ([path, mod]) => {
+    const full = await getImage({
+      src: mod.default,
+      format: "webp",
+      quality: 85,
+    });
+    return {
+      src: mod.default,
+      fullSrc: full.src,
+      fullWidth: mod.default.width,
+      fullHeight: mod.default.height,
+      name:
+        path
+          .split("/")
+          .pop()
+          ?.replace(/\.[^.]+$/, "") ?? "",
+    };
+  }),
+).then((items) => items.sort((a, b) => a.name.localeCompare(b.name)));
+---
+
+<Layout title="MEDIA — LAN BUNKER" active="media">
+  <div class="my-8">
+    <div class="text-[12px] text-dim mb-6 tracking-[0.2em]">── MEDIA ──</div>
+
+    {
+      gallery.length === 0 ? (
+        <p class="text-dim text-[12px]">NO MEDIA AVAILABLE.</p>
+      ) : (
+        <div
+          id="gallery"
+          class="columns-1 min-[640px]:columns-2 min-[800px]:columns-3 gap-3"
+        >
+          {gallery.map((img) => (
+            <a
+              href={img.fullSrc}
+              data-pswp-width={img.fullWidth}
+              data-pswp-height={img.fullHeight}
+              class="mb-3 break-inside-avoid block"
+            >
+              <Image
+                src={img.src}
+                alt={img.name}
+                width={800}
+                format="webp"
+                quality={80}
+                class="w-full h-auto block border border-border hover:border-accent transition-colors duration-200 cursor-pointer"
+                loading="lazy"
+                decoding="async"
+              />
+            </a>
+          ))}
+        </div>
+      )
+    }
+  </div>
+
+  <style is:global>
+    /* PhotoSwipe above scanlines (z-50) */
+    .pswp {
+      z-index: 60 !important;
+    }
+
+    .pswp__bg {
+      background: rgba(0, 0, 0, 0.95) !important;
+    }
+
+    /* Hide all default icons */
+    .pswp__icn {
+      display: none !important;
+    }
+
+    /* Shared button style */
+    .pswp__button {
+      background: none !important;
+      box-shadow: none !important;
+      border: 1px solid #444 !important;
+      border-radius: 0 !important;
+      opacity: 1 !important;
+      width: auto !important;
+      height: auto !important;
+      padding: 0.375rem 0.625rem !important;
+      font-family: "Courier New", "Lucida Console", monospace !important;
+      color: #888 !important;
+      transition:
+        border-color 0.15s,
+        color 0.15s !important;
+    }
+
+    .pswp__button:hover {
+      border-color: #00ff41 !important;
+      color: #00ff41 !important;
+    }
+
+    /* Arrows */
+    .pswp__button--arrow--prev::after {
+      content: "[<]";
+      font-size: 14px;
+      letter-spacing: 0.1em;
+    }
+
+    .pswp__button--arrow--next::after {
+      content: "[>]";
+      font-size: 14px;
+      letter-spacing: 0.1em;
+    }
+
+    /* Close */
+    .pswp__button--close::after {
+      content: "[X]";
+      font-size: 14px;
+      letter-spacing: 0.1em;
+    }
+
+    /* Hide zoom button */
+    .pswp__button--zoom {
+      display: none !important;
+    }
+
+    /* Counter */
+    .pswp__counter {
+      font-family: "Courier New", "Lucida Console", monospace !important;
+      color: #888 !important;
+      font-size: 12px !important;
+      letter-spacing: 0.1em !important;
+      opacity: 1 !important;
+    }
+
+    /* Preloader — blinking terminal cursor */
+    .pswp__preloader {
+      position: absolute !important;
+      top: 50% !important;
+      left: 50% !important;
+      transform: translate(-50%, -50%) !important;
+      width: auto !important;
+      height: auto !important;
+    }
+
+    .pswp__preloader .pswp__icn {
+      display: none !important;
+    }
+
+    .pswp__preloader::after {
+      content: "█ LOADING";
+      color: #00ff41;
+      font-family: "Courier New", "Lucida Console", monospace;
+      font-size: 12px;
+      letter-spacing: 0.15em;
+      animation: blink 1s step-end infinite;
+    }
+
+    /* Image border */
+    .pswp__img {
+      border: 1px solid #444 !important;
+    }
+
+    /* Top bar */
+    .pswp__top-bar {
+      background: none !important;
+    }
+  </style>
+
+  <script>
+    import PhotoSwipeLightbox from "photoswipe/lightbox";
+    import "photoswipe/style.css";
+
+    const lightbox = new PhotoSwipeLightbox({
+      gallery: "#gallery",
+      children: "a",
+      pswpModule: () => import("photoswipe"),
+    });
+
+    lightbox.init();
+  </script>
+</Layout>
