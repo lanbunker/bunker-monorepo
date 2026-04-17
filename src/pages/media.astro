@@ -3,7 +3,7 @@ import Layout from "../layouts/Layout.astro";
 import { Image, getImage } from "astro:assets";
 
 const images = import.meta.glob<{ default: ImageMetadata }>(
-  "/src/assets/images/gallery/*.{jpg,jpeg,png,webp,JPG,JPEG,PNG,WEBP}",
+  "/src/assets/images/gallery/*.webp",
   { eager: true },
 );
 
@@ -138,25 +138,7 @@ const gallery = await Promise.all(
 
     /* Preloader — blinking terminal cursor */
     .pswp__preloader {
-      position: absolute !important;
-      top: 50% !important;
-      left: 50% !important;
-      transform: translate(-50%, -50%) !important;
-      width: auto !important;
-      height: auto !important;
-    }
-
-    .pswp__preloader .pswp__icn {
       display: none !important;
-    }
-
-    .pswp__preloader::after {
-      content: "█ LOADING";
-      color: #00ff41;
-      font-family: "Courier New", "Lucida Console", monospace;
-      font-size: 12px;
-      letter-spacing: 0.15em;
-      animation: blink 1s step-end infinite;
     }
 
     /* Image border */

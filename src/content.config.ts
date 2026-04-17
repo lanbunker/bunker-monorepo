@@ -4,14 +4,15 @@ import { defineCollection } from "astro:content"
 
 const events = defineCollection({
     loader: glob({ pattern: "**/*.md", base: "./src/content/events" }),
-    schema: z.object({
-        date: z.string(),
-        name: z.string(),
-        status: z.enum(["OPEN", "CLOSED", "SOON"]),
-        slots: z.string(),
-        games: z.string(),
-        image: z.string().optional(),
-    }),
+    schema: ({ image }) =>
+        z.object({
+            date: z.string(),
+            name: z.string(),
+            status: z.enum(["OPEN", "CLOSED", "SOON"]),
+            slots: z.string(),
+            games: z.string(),
+            image: image().optional(),
+        }),
 })
 
 const about = defineCollection({

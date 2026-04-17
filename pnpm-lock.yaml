@@ -57,6 +57,9 @@ importers:
       oxfmt:
         specifier: ^0.45.0
         version: 0.45.0
+      sharp:
+        specifier: ^0.34.5
+        version: 0.34.5
 
 packages:
 

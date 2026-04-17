@@ -7,7 +7,8 @@
         "build": "astro build",
         "preview": "astro preview",
         "astro": "astro",
-        "fmt": "oxfmt"
+        "fmt": "oxfmt",
+        "optimize:imgs": "node scripts/optimize-imgs.mjs"
     },
     "dependencies": {
         "@astrojs/cloudflare": "^13.1.10",
@@ -27,7 +28,8 @@
         "wrangler": "^4.83.0"
     },
     "devDependencies": {
-        "oxfmt": "^0.45.0"
+        "oxfmt": "^0.45.0",
+        "sharp": "^0.34.5"
     },
     "engines": {
         "node": ">=22.12.0"

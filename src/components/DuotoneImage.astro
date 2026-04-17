@@ -1,6 +1,9 @@
 ---
+import type { ImageMetadata } from "astro"
+import { Image } from "astro:assets"
+
 interface Props {
-  src: string;
+  src: ImageMetadata;
   alt: string;
 }
 
@@ -10,9 +13,12 @@ const { src, alt } = Astro.props;
 <div
   class="relative w-full h-[160px] overflow-hidden bg-black lg:h-[200px] max-[480px]:h-[130px]"
 >
-  <img
+  <Image
     src={src}
     alt={alt}
+    width={800}
+    format="webp"
+    quality={80}
     loading="lazy"
     class="w-full h-full object-cover block grayscale contrast-[1.6] brightness-[0.9] mix-blend-luminosity"
   />

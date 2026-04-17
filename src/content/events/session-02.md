@@ -4,5 +4,5 @@ name: "BUNKER//SESSION 02"
 status: "CLOSED"
 slots: "30/30"
 games: "CALL OF DUTY BO2, MARIO KART 8, CASUAL GAMES"
-image: "/images/events/oct2025-cover.jpg"
+image: "../../assets/images/events/oct2025-cover.webp"
 ---
