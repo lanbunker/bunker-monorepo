@@ -5,7 +5,7 @@ import { getEntry } from "astro:content";
 const entry = await getEntry("about", "about");
 ---
 
-<Layout title="LAN BUNKER // ABOUT" active="about">
+<Layout title="ABOUT//LAN_BUNKER" active="about">
   <h2 class="text-[14px] mt-8 mb-4 text-accent font-normal font-mono">
     {">"}
     {entry?.data.title ?? "README.txt"}

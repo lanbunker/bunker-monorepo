@@ -3,7 +3,14 @@ import "../styles/global.css";
 
 interface Props {
   title?: string;
-  active: "home" | "scores" | "events" | "tournaments" | "media" | "about";
+  active:
+    | "home"
+    | "scores"
+    | "events"
+    | "tournaments"
+    | "media"
+    | "shop"
+    | "about";
 }
 
 const { title = "LAN BUNKER", active } = Astro.props;
@@ -14,6 +21,7 @@ const nav = [
   { key: "tournaments", label: "[TOURNAMENTS]", href: "/tournaments" },
   { key: "scores", label: "[SCORES]", href: "/scores" },
   { key: "media", label: "[MEDIA]", href: "/media" },
+  { key: "shop", label: "[SHOP]", href: "/shop" },
   { key: "about", label: "[ABOUT]", href: "/about" },
 ] as const;
 ---

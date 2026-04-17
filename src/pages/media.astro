@@ -29,7 +29,7 @@ const gallery = await Promise.all(
 ).then((items) => items.sort((a, b) => a.name.localeCompare(b.name)));
 ---
 
-<Layout title="MEDIA — LAN BUNKER" active="media">
+<Layout title="MEDIA//LAN_BUNKER" active="media">
   <div class="my-8">
     <div class="text-[12px] text-dim mb-6 tracking-[0.2em]">── MEDIA ──</div>
 
@@ -63,6 +63,7 @@ const gallery = await Promise.all(
         </div>
       )
     }
+    <div class="text-[12px] text-dim mt-6 tracking-[0.2em]">── EOF ──</div>
   </div>
 
   <style is:global>

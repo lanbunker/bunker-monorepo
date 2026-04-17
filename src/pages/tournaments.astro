@@ -1,8 +1,8 @@
 ---
-import type { ImageMetadata } from "astro"
-import { Image } from "astro:assets"
+import type { ImageMetadata } from "astro";
+import { Image } from "astro:assets";
 import Layout from "../layouts/Layout.astro";
-import winnerCodFeb26 from "../assets/images/winners/winner-cod-feb26.webp"
+import winnerCodFeb26 from "../assets/images/winners/winner-cod-feb26.webp";
 
 type Tournament = {
   id: string;
@@ -31,7 +31,7 @@ const tournaments: Tournament[] = [
 ];
 ---
 
-<Layout title="LAN BUNKER // TOURNAMENTS" active="tournaments">
+<Layout title="TOURNAMENTS//LAN_BUNKER" active="tournaments">
   <h2 class="text-[14px] mt-8 mb-4 text-accent font-normal font-mono">
     {">"} TOURNAMENTS <span class="text-dim">// subscribe</span>
   </h2>
