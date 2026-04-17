@@ -1,12 +1,8 @@
 {
     "$schema": "node_modules/wrangler/config-schema.json",
     "name": "lanbunker",
-    "pages_build_output_dir": "dist",
     "compatibility_date": "2026-04-14",
     "compatibility_flags": ["nodejs_compat"],
-    "assets": {
-        "binding": "STATIC_ASSETS"
-    },
     "observability": {
         "enabled": true,
     },
