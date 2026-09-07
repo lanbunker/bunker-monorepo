@@ -1,7 +1,7 @@
 ---
 import Layout from "../layouts/Layout.astro";
 import { getCollection } from "astro:content";
-import { parseEurDate } from "../lib/dates";
+import { formatEurDate, parseEurDate } from "../lib/dates";
 import ASCIIText from "../components/ASCIIText";
 
 const events = (await getCollection("events")).sort(
@@ -46,7 +46,7 @@ const prevEvent = events.find((e) => e.data.status === "CLOSED");
           <p>
             NEXT EVENT:{" "}
             <span class="text-white">
-              {nextEvent.data.date} // {nextEvent.data.name}
+              {formatEurDate(nextEvent.data.date)} // {nextEvent.data.name}
             </span>
           </p>
         ) : (
@@ -60,7 +60,7 @@ const prevEvent = events.find((e) => e.data.status === "CLOSED");
           <p>
             PREVIOUS EVENT:{" "}
             <span class="text-white">
-              {prevEvent.data.date} // {prevEvent.data.name}
+              {formatEurDate(prevEvent.data.date)} // {prevEvent.data.name}
             </span>
           </p>
         )

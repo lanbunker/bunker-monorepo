@@ -2,7 +2,6 @@
 date: "21/06/2025"
 name: "FPS ARENA LAN PARTY @theoffice"
 status: "CLOSED"
-slots: "16/16"
 games: "QUAKE 3 ARENA"
 image: "../../assets/images/events/jun2025-cover.webp"
 ---

@@ -1,6 +1,7 @@
 ---
 import type { CollectionEntry } from "astro:content"
 import DuotoneImage from "./DuotoneImage.astro"
+import { formatEurDate } from "../lib/dates"
 
 interface Props {
   event: CollectionEntry<"events">
@@ -29,8 +30,7 @@ const badgeClass: Record<typeof status, string> = {
       </span>
     </div>
     <div class="text-[12px] text-dim mt-2.5 leading-[1.8]">
-      <div>DATE: <span class="text-[#ddd]">{event.data.date}</span></div>
-      <div>SLOTS: <span class="text-[#ddd]">{event.data.slots}</span></div>
+      <div>DATE: <span class="text-[#ddd]">{formatEurDate(event.data.date)}</span></div>
       <div>GAMES: <span class="text-[#ddd]">{event.data.games}</span></div>
     </div>
   </div>

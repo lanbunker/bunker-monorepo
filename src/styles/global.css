@@ -31,6 +31,8 @@ p {
 
 /* Scrollbar */
 html {
+    /* Reserve the gutter so short pages do not shift the centered layout. */
+    scrollbar-gutter: stable;
     scrollbar-color: var(--color-border) #000;
     scrollbar-width: thin;
 }

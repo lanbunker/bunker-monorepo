@@ -1,7 +1,6 @@
 ---
-date: "TBA"
-name: "BUNKER//SESSION 04 // SUMMER EDITION"
-status: "SOON"
-slots: "TBA"
-games: "TBA"
+date: "24/10/2026"
+name: "BUNKER//SESSION 04 @theoffice"
+status: "OPEN"
+games: "CALL OF DUTY BO2, CALL OF DUTY MW2, HALO 3, MARIO KART, ARCADE & CASUAL GAMES"
 ---
