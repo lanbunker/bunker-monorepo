@@ -1,16 +1,18 @@
 ---
-import Layout from "../layouts/Layout.astro";
-import { getEntry } from "astro:content";
+import { getEntry } from "astro:content"
+import Panel from "../components/ui/Panel.astro"
+import Prompt from "../components/ui/Prompt.astro"
+import Layout from "../layouts/Layout.astro"
 
-const entry = await getEntry("about", "about");
+const entry = await getEntry("about", "about")
+const title = entry?.data.title ?? "README.txt"
 ---
 
 <Layout title="ABOUT//LAN_BUNKER" active="about">
-  <h2 class="text-[14px] mt-8 mb-4 text-accent font-normal font-mono">
-    {">"}
-    {entry?.data.title ?? "README.txt"}
-  </h2>
+  <Prompt command={`cat ${title}`} />
 
-  <pre
-    class="text-[12px] leading-[1.8] text-[#ccc] whitespace-pre-wrap wrap-break-word">{entry?.body?.trim()}</pre>
+  <Panel>
+    <pre
+      class="m-0 font-mono text-xs leading-[1.9] whitespace-pre-wrap wrap-break-word text-ink">{entry?.body?.trim()}</pre>
+  </Panel>
 </Layout>

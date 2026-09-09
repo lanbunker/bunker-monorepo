@@ -1,0 +1,25 @@
+---
+type Tone = "default" | "accent" | "warn" | "alert"
+
+interface Props {
+  label: string
+  tone?: Tone
+}
+
+const { label, tone = "default" } = Astro.props
+
+const valueClass: Record<Tone, string> = {
+  default: "text-ink",
+  accent: "text-accent",
+  warn: "text-warn",
+  alert: "text-alert",
+}
+---
+
+<div class="flex items-baseline gap-2 text-xs">
+  <span class="shrink-0 text-dim tracking-wide lowercase">{label}</span>
+  <span class="leader" aria-hidden="true"></span>
+  <span class:list={["max-w-[65%] text-right", valueClass[tone]]}>
+    <slot />
+  </span>
+</div>

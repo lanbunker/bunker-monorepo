@@ -1,97 +1,115 @@
 ---
-import Layout from "../layouts/Layout.astro";
-import { getCollection } from "astro:content";
-import { formatEurDate, parseEurDate } from "../lib/dates";
-import ASCIIText from "../components/ASCIIText";
+import { getCollection } from "astro:content"
+import AsciiBanner from "../components/AsciiBanner.astro"
+import Button from "../components/ui/Button.astro"
+import Kv from "../components/ui/Kv.astro"
+import Panel from "../components/ui/Panel.astro"
+import { isRegistrationOpen, upcomingTournament } from "../data/tournaments"
+import Layout from "../layouts/Layout.astro"
+import { formatEurDate, parseEurDate } from "../lib/dates"
 
 const events = (await getCollection("events")).sort(
   (a, b) => parseEurDate(b.data.date) - parseEurDate(a.data.date),
-);
+)
 
-const nextEvent = events.find((e) => e.data.status === "OPEN");
-const prevEvent = events.find((e) => e.data.status === "CLOSED");
+// Events sort newest first, so the last upcoming entry is the soonest one.
+const nextEvent = events.findLast(e => e.data.status === "OPEN" || e.data.status === "SOON")
+const prevEvent = events.find(e => e.data.status === "CLOSED")
+const canRegister = upcomingTournament ? isRegistrationOpen(upcomingTournament) : false
 ---
 
 <Layout title="LAN BUNKER" active="home">
-  <div class="h-64 max-[480px]:h-37.5 min-[1000px]:h-100 w-full">
-    <ASCIIText
-      client:only="react"
-      text="BUNKER"
-      asciiFontSize={14}
-      textFontSize={210}
-      textColor="white"
-      planeBaseHeight={12}
-      enableWaves={true}
-      fallback={`░▒▓███████▓▒░░▒▓█▓▒░░▒▓█▓▒░▒▓███████▓▒░░▒▓█▓▒░░▒▓█▓▒░▒▓████████▓▒░▒▓███████▓▒░
-░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░      ░▒▓█▓▒░░▒▓█▓▒░
-░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░      ░▒▓█▓▒░░▒▓█▓▒░
-░▒▓███████▓▒░░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░▒▓███████▓▒░░▒▓██████▓▒░ ░▒▓███████▓▒░
-░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░      ░▒▓█▓▒░░▒▓█▓▒░
-░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░      ░▒▓█▓▒░░▒▓█▓▒░
-░▒▓███████▓▒░ ░▒▓██████▓▒░░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░▒▓████████▓▒░▒▓█▓▒░░▒▓█▓▒░`}
-    />
+  <AsciiBanner text="BUNKER" class="h-48 max-[30rem]:h-36 min-[62.5rem]:h-72" />
+
+  <div class="-mt-2 text-center text-2xs tracking-wider text-dim">
+    ── local area network party ──
   </div>
-  <div class="my-8">
-    <div class="text-[12px] text-dim mb-4 tracking-[0.2em]">
-      ── LOCAL AREA NETWORK PARTY ──
+
+  <div class="mt-8">
+    <div class="flex flex-wrap items-baseline gap-x-2 text-sm">
+      <span class="text-dim">bunker@office:~$</span>
+      <span class="text-accent-soft">./enter.sh</span>
     </div>
-    <div id="typewriter" class="text-[15px] leading-[1.8] text-white"></div>
-    <div
-      id="status-block"
-      class="mt-6 text-[12px] text-dim animate-[fadeIn_0.5s_ease] leading-[2.2] hidden"
-    >
-      <p>STATUS: <span class="text-accent">■</span> ONLINE</p>
-      {
-        nextEvent ? (
-          <p>
-            NEXT EVENT:{" "}
-            <span class="text-white">
-              {formatEurDate(nextEvent.data.date)} // {nextEvent.data.name}
-            </span>
-          </p>
-        ) : (
-          <p>
-            NEXT EVENT: <span class="text-white">TO BE ANNOUNCED</span>
-          </p>
-        )
-      }
-      {
-        prevEvent && (
-          <p>
-            PREVIOUS EVENT:{" "}
-            <span class="text-white">
-              {formatEurDate(prevEvent.data.date)} // {prevEvent.data.name}
-            </span>
-          </p>
-        )
-      }
+    <ol id="boot-log" class="m-0 mt-2 list-none p-0 text-xs text-dim" aria-live="polite"></ol>
+    <p id="tagline" class="mt-2 hidden text-base text-bright">
+      Enter the bunker. LAN party reimagined for the modern age.<span
+        class="animate-blink text-accent"
+        aria-hidden="true">█</span
+      >
+    </p>
+
+    <div id="status-block" class="mt-6 hidden">
+      <Panel>
+        <div class="flex flex-col gap-1">
+          <Kv label="System" tone="accent">■ online</Kv>
+          <Kv label="Next event">
+            {
+              nextEvent ? (
+                <a href="/events" class="text-bright no-underline hover:text-accent">
+                  {formatEurDate(nextEvent.data.date)} // {nextEvent.data.name}
+                </a>
+              ) : (
+                "to be announced"
+              )
+            }
+          </Kv>
+          {
+            prevEvent && (
+              <Kv label="Previous event">
+                <a href="/events" class="text-bright no-underline hover:text-accent">
+                  {formatEurDate(prevEvent.data.date)} // {prevEvent.data.name}
+                </a>
+              </Kv>
+            )
+          }
+          {
+            upcomingTournament && (
+              <Kv label="Tournament" tone={canRegister ? "accent" : "default"}>
+                {upcomingTournament.game} // {upcomingTournament.name}
+                {!canRegister && <span class="text-dim"> // registration closed</span>}
+              </Kv>
+            )
+          }
+        </div>
+        <div class="mt-4 flex flex-wrap gap-3">
+          <Button href="/events" variant="ghost">EVENTS</Button>
+          {canRegister && <Button href="/tournaments">REGISTER</Button>}
+        </div>
+      </Panel>
     </div>
   </div>
 
   <script>
-    const text = "> ENTER THE BUNKER. LAN PARTY REIMAGINED FOR THE MODERN AGE";
-    const el = document.getElementById("typewriter");
-    const statusBlock = document.getElementById("status-block");
+    const BOOT_LINES = [
+      "mounting /dev/bunker",
+      "loading events",
+      "checking tournaments",
+      "uplink established",
+    ]
+    const STEP_MS = 110
 
-    if (el && statusBlock) {
-      const textNode = document.createTextNode("");
-      const cursor = document.createElement("span");
-      cursor.className = "animate-[blink_1s_step-end_infinite] text-accent";
-      cursor.textContent = "\u2588";
-      el.appendChild(textNode);
-      el.appendChild(cursor);
+    const log = document.getElementById("boot-log")
+    const tagline = document.getElementById("tagline")
+    const statusBlock = document.getElementById("status-block")
+    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches
 
-      let i = 0;
-      const type = () => {
-        i++;
-        textNode.textContent = text.slice(0, i);
-        if (i < text.length) {
-          setTimeout(type, 25);
-        } else {
-          statusBlock.classList.remove("hidden");
-        }
-      };
-      type();
+    const printLine = (text: string) => {
+      const li = document.createElement("li")
+      li.innerHTML = `<span class="text-accent">[ OK ]</span> ${text}`
+      log?.append(li)
+    }
+
+    const finish = () => {
+      tagline?.classList.remove("hidden")
+      statusBlock?.classList.remove("hidden")
+    }
+
+    if (reduced) {
+      for (const line of BOOT_LINES) printLine(line)
+      finish()
+    } else {
+      BOOT_LINES.map((line, i) => setTimeout(() => printLine(line), STEP_MS * (i + 1)))
+      setTimeout(finish, STEP_MS * (BOOT_LINES.length + 1))
     }
   </script>
 </Layout>

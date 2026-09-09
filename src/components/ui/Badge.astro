@@ -1,0 +1,33 @@
+---
+type Tone = "accent" | "warn" | "muted" | "alert"
+
+interface Props {
+  tone: Tone
+  filled?: boolean
+}
+
+const { tone, filled = false } = Astro.props
+
+const filledClass: Record<Tone, string> = {
+  accent: "bg-accent text-black",
+  warn: "bg-warn text-black",
+  muted: "bg-mute text-black",
+  alert: "bg-alert text-black",
+}
+
+const outlineClass: Record<Tone, string> = {
+  accent: "border-accent text-accent",
+  warn: "border-warn text-warn",
+  muted: "border-border text-dim",
+  alert: "border-alert text-alert",
+}
+---
+
+<span
+  class:list={[
+    "inline-block shrink-0 whitespace-nowrap px-2 py-px text-2xs font-bold tracking-wider uppercase",
+    filled ? filledClass[tone] : ["border", outlineClass[tone]],
+  ]}
+>
+  <slot />
+</span>

@@ -1,11 +1,12 @@
 ---
-import Layout from "../layouts/Layout.astro";
-import { Image, getImage } from "astro:assets";
+import { Image, getImage } from "astro:assets"
+import Prompt from "../components/ui/Prompt.astro"
+import Layout from "../layouts/Layout.astro"
 
 const images = import.meta.glob<{ default: ImageMetadata }>(
   "/src/assets/images/gallery/*.webp",
   { eager: true },
-);
+)
 
 const gallery = await Promise.all(
   Object.entries(images).map(async ([path, mod]) => {
@@ -13,7 +14,7 @@ const gallery = await Promise.all(
       src: mod.default,
       format: "webp",
       quality: 85,
-    });
+    })
     return {
       src: mod.default,
       fullSrc: full.src,
@@ -24,22 +25,21 @@ const gallery = await Promise.all(
           .split("/")
           .pop()
           ?.replace(/\.[^.]+$/, "") ?? "",
-    };
+    }
   }),
-).then((items) => items.sort((a, b) => a.name.localeCompare(b.name)));
+).then(items => items.sort((a, b) => a.name.localeCompare(b.name)))
 ---
 
 <Layout title="MEDIA//LAN_BUNKER" active="media">
-  <div class="my-8">
-    <div class="text-[12px] text-dim mb-6 tracking-[0.2em]">── MEDIA ──</div>
+  <Prompt command="ls ./media/*.webp" comment={`${gallery.length} files`} />
 
     {
       gallery.length === 0 ? (
-        <p class="text-dim text-[12px]">NO MEDIA AVAILABLE.</p>
+        <p class="text-xs text-dim">no media available.</p>
       ) : (
         <div
           id="gallery"
-          class="columns-1 min-[640px]:columns-2 min-[800px]:columns-3 gap-3"
+          class="columns-1 gap-3 min-[40rem]:columns-2 min-[50rem]:columns-3"
         >
           {gallery.map((img) => (
             <a
@@ -54,7 +54,7 @@ const gallery = await Promise.all(
                 width={800}
                 format="webp"
                 quality={80}
-                class="w-full h-auto block border border-border hover:border-accent cursor-pointer"
+                class="block h-auto w-full cursor-pointer border border-border hover:border-accent"
                 loading="lazy"
                 decoding="async"
               />
@@ -63,8 +63,7 @@ const gallery = await Promise.all(
         </div>
       )
     }
-    <div class="text-[12px] text-dim mt-6 tracking-[0.2em]">── EOF ──</div>
-  </div>
+  <div class="mt-6 text-2xs tracking-wider text-mute">── EOF ──</div>
 
   <style is:global>
     /* PhotoSwipe above scanlines (z-50) */
@@ -85,22 +84,19 @@ const gallery = await Promise.all(
     .pswp__button {
       background: none !important;
       box-shadow: none !important;
-      border: 1px solid #444 !important;
+      border: 1px solid var(--color-border) !important;
       border-radius: 0 !important;
       opacity: 1 !important;
       width: auto !important;
       height: auto !important;
       padding: 0.375rem 0.625rem !important;
-      font-family: "Courier New", "Lucida Console", monospace !important;
-      color: #888 !important;
-      transition:
-        border-color 0.15s,
-        color 0.15s !important;
+      font-family: var(--font-mono) !important;
+      color: var(--color-dim) !important;
     }
 
     .pswp__button:hover {
-      border-color: #00ff41 !important;
-      color: #00ff41 !important;
+      border-color: var(--color-accent) !important;
+      color: var(--color-accent) !important;
     }
 
     /* Arrows */
@@ -130,21 +126,21 @@ const gallery = await Promise.all(
 
     /* Counter */
     .pswp__counter {
-      font-family: "Courier New", "Lucida Console", monospace !important;
-      color: #888 !important;
+      font-family: var(--font-mono) !important;
+      color: var(--color-dim) !important;
       font-size: 12px !important;
       letter-spacing: 0.1em !important;
       opacity: 1 !important;
     }
 
-    /* Preloader — blinking terminal cursor */
+    /* Preloader */
     .pswp__preloader {
       display: none !important;
     }
 
     /* Image border */
     .pswp__img {
-      border: 1px solid #444 !important;
+      border: 1px solid var(--color-border) !important;
     }
 
     /* Top bar */
@@ -161,6 +157,10 @@ const gallery = await Promise.all(
       gallery: "#gallery",
       children: "a",
       pswpModule: () => import("photoswipe"),
+      showHideAnimationType: "none",
+      showAnimationDuration: 0,
+      hideAnimationDuration: 0,
+      zoomAnimationDuration: 0,
     });
 
     lightbox.init();

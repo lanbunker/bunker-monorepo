@@ -1,16 +1,14 @@
 ---
-import Layout from "../layouts/Layout.astro";
+import Panel from "../components/ui/Panel.astro"
+import Prompt from "../components/ui/Prompt.astro"
+import Layout from "../layouts/Layout.astro"
 ---
 
 <Layout title="SCORES//LAN_BUNKER" active="scores">
-  <h2 class="text-[14px] mt-8 mb-4 text-accent font-normal font-mono">
-    {">"} HIGH_SCORES.db <span class="text-dim">// ALL TIME</span>
-  </h2>
+  <Prompt command="cat ./scores.db" comment="all time" />
 
-  <div class="border border-border p-8 text-center">
-    <p class="text-dim text-[12px] tracking-[0.2em]">// COMING SOON</p>
-    <p class="text-[#555] text-[11px] mt-3">
-      SCOREBOARD SYSTEM UNDER CONSTRUCTION.
-    </p>
-  </div>
+  <Panel tone="muted" class="text-center">
+    <p class="text-xs tracking-wider text-dim">{"// coming soon"}</p>
+    <p class="mt-2 text-2xs text-mute">player profiles, karma and all-time rankings.</p>
+  </Panel>
 </Layout>

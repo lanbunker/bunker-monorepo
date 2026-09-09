@@ -6,7 +6,9 @@ const events = defineCollection({
     loader: glob({ pattern: "**/*.md", base: "./src/content/events" }),
     schema: ({ image }) =>
         z.object({
-            date: z.string(),
+            date: z
+                .string()
+                .regex(/^(\d{2}\/\d{2}\/\d{4}|TBA)$/, "Use DD/MM/YYYY or TBA"),
             name: z.string(),
             status: z.enum(["OPEN", "CLOSED", "SOON"]),
             games: z.string(),

@@ -1,0 +1,19 @@
+---
+import Button from "../components/ui/Button.astro"
+import Layout from "../layouts/Layout.astro"
+
+Astro.response.status = 404
+const path = Astro.url.pathname
+---
+
+<Layout title="404//LAN_BUNKER" active="home">
+  <div class="mt-8 flex flex-wrap items-baseline gap-x-2 text-sm">
+    <span class="text-dim">bunker@office:~$</span>
+    <span class="text-accent-soft">cd {path}</span>
+  </div>
+  <p class="mt-2 text-xs text-alert">bash: cd: {path}: no such file or directory</p>
+  <p class="mt-6 text-xs text-dim">the sector you requested does not exist in this bunker.</p>
+  <div class="mt-4">
+    <Button href="/">HOME</Button>
+  </div>
+</Layout>

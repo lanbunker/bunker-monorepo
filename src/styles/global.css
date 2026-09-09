@@ -1,19 +1,50 @@
 @import "tailwindcss";
 
 @theme {
+    /* Palette: phosphor green on near-black, amber for pending, red for expired. */
+    --color-bg: #050505;
+    --color-panel: #0a0a0a;
+    --color-ink: #e4e4e4;
+    --color-bright: #ffffff;
+    --color-dim: #9c9c9c;
+    --color-mute: #5e5e5e;
+    --color-border: #4a4a4a;
+    --color-faint: #262626;
     --color-accent: #00ff41;
-    --color-dim: #888;
-    --color-border: #444;
-    --color-faint: #333;
-    --font-mono: "Courier New", "Lucida Console", monospace;
+    --color-accent-soft: #35c95d;
+    --color-warn: #ffb000;
+    --color-alert: #ff3b3b;
+
+    --font-mono: "Courier New", Courier, "Lucida Console", monospace;
+
+    /* Type scale in rem. Courier is light at small sizes, so 2xs = 11px, xs = 13px, sm = 15px. */
+    --text-2xs: 0.6875rem;
+    --text-2xs--line-height: 1rem;
+    --text-xs: 0.8125rem;
+    --text-xs--line-height: 1.25rem;
+    --text-sm: 0.9375rem;
+    --text-sm--line-height: 1.5rem;
+    --text-base: 1.0625rem;
+    --text-base--line-height: 1.75rem;
+
+    --tracking-wide: 0.1em;
+    --tracking-wider: 0.2em;
+
+    --animate-blink: blink 1s step-end infinite;
+
+    @keyframes blink {
+        50% {
+            opacity: 0;
+        }
+    }
 }
 
-/* Base */
 html,
 body {
     margin: 0;
     padding: 0;
-    background: #000;
+    background: var(--color-bg);
+    color-scheme: dark;
 }
 
 * {
@@ -29,20 +60,19 @@ p {
     color: #000;
 }
 
-/* Scrollbar */
 html {
     /* Reserve the gutter so short pages do not shift the centered layout. */
     scrollbar-gutter: stable;
-    scrollbar-color: var(--color-border) #000;
+    scrollbar-color: var(--color-border) var(--color-bg);
     scrollbar-width: thin;
 }
 
 ::-webkit-scrollbar {
-    width: 6px;
-    height: 4px;
+    width: 0.375rem;
+    height: 0.25rem;
 }
 ::-webkit-scrollbar-track {
-    background: #000;
+    background: var(--color-bg);
 }
 ::-webkit-scrollbar-thumb {
     background: var(--color-border);
@@ -51,9 +81,41 @@ html {
     background: var(--color-accent);
 }
 
-/* Animations */
-@keyframes blink {
-    50% {
-        opacity: 0;
+/* Focus ring in brand color for keyboard users. */
+:focus-visible {
+    outline: 1px solid var(--color-accent);
+    outline-offset: 0.125rem;
+}
+
+/* CRT texture. Kept faint so text stays crisp. */
+.scanlines {
+    background: repeating-linear-gradient(
+        0deg,
+        transparent,
+        transparent 2px,
+        rgba(255, 255, 255, 0.012) 2px,
+        rgba(255, 255, 255, 0.012) 4px
+    );
+}
+
+.vignette {
+    background: radial-gradient(
+        ellipse at center,
+        transparent 55%,
+        rgba(0, 0, 0, 0.55) 100%
+    );
+}
+
+/* Dotted leader between a key and a value. */
+.leader {
+    flex: 1 1 auto;
+    min-width: 1rem;
+    border-bottom: 1px dotted var(--color-mute);
+    transform: translateY(-0.35em);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .animate-blink {
+        animation: none;
     }
 }

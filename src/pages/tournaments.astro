@@ -1,330 +1,38 @@
 ---
-import type { ImageMetadata } from "astro";
-import { Image } from "astro:assets";
-import Layout from "../layouts/Layout.astro";
-import winnerCodFeb26 from "../assets/images/winners/winner-cod-feb26.webp";
-import { formatEurDate } from "../lib/dates";
+import TournamentCard from "../components/TournamentCard.astro"
+import Prompt from "../components/ui/Prompt.astro"
+import { tournaments } from "../data/tournaments"
+import Layout from "../layouts/Layout.astro"
 
-type Tournament = {
-  id: string;
-  name: string;
-  description?: string;
-  date: string; // e.g. "26/02/2026"
-  format: string;
-  participants?: number;
-  winner?: string;
-  winnerImage?: ImageMetadata;
-  formLink?: string;
-  openUntil?: string; // UTC ISO datetime e.g. "2026-05-10T20:00:00Z"
-  status: "OPEN" | "CLOSED";
-};
-
-const tournaments: Tournament[] = [
-  {
-    id: "t2",
-    name: "COD MODERN WARFARE 2: 1V1 SNIPER ONLY",
-    description:
-      "1V1 Sniper Only on 'Rust' map, direct elimination bracket.",
-    date: "24/10/2026",
-    format: "1V1 DIRECT ELIMINATION",
-    formLink:
-      "https://docs.google.com/forms/d/e/1FAIpQLSfJknBekQGU0dAodeJlWL-rnnZAxMMZRTVaAqOV4yVSbkl1yA/viewform?usp=dialog",
-    openUntil: "2026-10-23T21:59:59Z",
-    status: "OPEN",
-  },
-  {
-    id: "t1",
-    name: "COD BLACK OPS 2: 1V1 GUN GAME",
-    description:
-      "1V1 Gun Game on 'Hijack' map, UAV always active, -3 weapons on melee death.",
-    date: "26/02/2026",
-    format: "1V1 DIRECT ELIMINATION",
-    participants: 20,
-    winner: "MARINO",
-    winnerImage: winnerCodFeb26,
-    status: "CLOSED",
-  },
-];
+const open = tournaments.filter(t => t.status === "OPEN")
+const closed = tournaments.filter(t => t.status === "CLOSED")
 ---
 
 <Layout title="TOURNAMENTS//LAN_BUNKER" active="tournaments">
-  <h2 class="text-[14px] mt-8 mb-4 text-accent font-normal font-mono">
-    {">"} TOURNAMENTS <span class="text-dim">// subscribe</span>
-  </h2>
+  <Prompt command="cat ./tournaments/open" comment="subscribe" />
 
-  <div class="flex flex-col gap-4">
-    {
-      tournaments.map((t) => (
-        <div
-          class={`border ${t.status === "OPEN" ? "border-accent" : "border-border"} p-4`}
-        >
-          {/* Title */}
-          <div class="text-white text-[15px]">{t.name}</div>
-          {t.description && (
-            <div class="text-dim text-[12px] mt-1">{t.description}</div>
-          )}
+  {
+    open.length > 0 ? (
+      <div class="flex flex-col gap-6">
+        {open.map(t => (
+          <TournamentCard tournament={t} />
+        ))}
+      </div>
+    ) : (
+      <p class="text-xs text-dim">no open tournaments.</p>
+    )
+  }
 
-          {/* Status badge */}
-          <div class="mt-2">
-            <span
-              class:list={[
-                "text-[11px] px-2 py-0.5 font-bold",
-                t.status === "OPEN"
-                  ? "bg-accent text-black"
-                  : "bg-[#666] text-black",
-              ]}
-            >
-              {t.status === "OPEN"
-                ? "REGISTRATION OPEN"
-                : "REGISTRATION CLOSED"}
-            </span>
-          </div>
-
-          {/* Info */}
-          <div class="mt-3 text-[12px] text-dim tracking-widest leading-loose">
-            <div>
-              FORMAT: <span class="text-[#ccc]">{t.format}</span>
-            </div>
-            <div>
-              DATE: <span class="text-[#ccc]">{formatEurDate(t.date)}</span>
-            </div>
-            {t.participants !== undefined && (
-              <div>
-                PARTICIPANTS:{" "}
-                <span class="text-[#ccc]">{t.participants}</span>
-              </div>
-            )}
-          </div>
-
-          {/* OPEN: form link + deadline */}
-          {t.status === "OPEN" && t.openUntil && (
-            <div class="mt-3">
-              <div
-                class="text-[12px] text-dim tracking-widest mb-2 open-until-wrap"
-                data-deadline={t.openUntil}
-              >
-                OPEN_UNTIL: <span class="open-until-value text-[#ccc]" />
-              </div>
-              <div class="flex items-center gap-4 flex-wrap">
-                {t.formLink && (
-                  <a
-                    href={t.formLink}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    class="register-btn inline-block bg-accent text-black px-5 py-2 text-[12px] font-bold font-mono tracking-[0.05em] no-underline hover:brightness-120 cursor-pointer"
-                    data-deadline={t.openUntil}
-                  >
-                    [REGISTER]
-                  </a>
-                )}
-                <div
-                  class="countdown font-mono text-[12px] tracking-widest text-accent flex items-center gap-1"
-                  data-deadline={t.openUntil}
-                >
-                  <span class="text-dim text-[10px] mr-1">T-</span>
-                  <span class="countdown-d cd-segment" />
-                  <span class="text-dim">:</span>
-                  <span class="countdown-h cd-segment" />
-                  <span class="text-dim">:</span>
-                  <span class="countdown-m cd-segment" />
-                  <span class="text-dim">:</span>
-                  <span class="countdown-s cd-segment" />
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Winner section */}
-          {t.status === "CLOSED" && t.winner && (
-            <div class="mt-5 pt-4 border-t border-faint">
-              <div class="flex gap-5 items-center flex-wrap">
-                {t.winnerImage && (
-                  <div class="winner-card">
-                    <div class="winner-img-wrap">
-                      <Image
-                        src={t.winnerImage}
-                        alt={`Winner: ${t.winner}`}
-                        width={240}
-                        format="webp"
-                        quality={80}
-                        loading="lazy"
-                        class="w-full h-full object-cover block"
-                      />
-                      <div class="winner-scanlines" />
-                    </div>
-                  </div>
-                )}
-                <div>
-                  <div class="text-[10px] text-dim tracking-[0.2em]">
-                    WINNER
-                  </div>
-                  <div class="text-[22px] text-accent tracking-widest leading-tight mt-1">
-                    {t.winner}
-                  </div>
-                  <div class="mt-1 text-[10px] text-dim tracking-[0.15em]">
-                    STATUS: <span class="text-accent">CHAMPION</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {t.status === "CLOSED" && !t.winner && (
-            <div class="mt-3 text-[11px] text-[#666]">NO WINNER RECORDED.</div>
-          )}
+  {
+    closed.length > 0 && (
+      <>
+        <Prompt command="cat ./tournaments/archive" comment="hall of fame" />
+        <div class="flex flex-col gap-6">
+          {closed.map(t => (
+            <TournamentCard tournament={t} />
+          ))}
         </div>
-      ))
-    }
-  </div>
+      </>
+    )
+  }
 </Layout>
-
-<style>
-  .cd-segment {
-    background: rgba(0, 255, 65, 0.08);
-    border: 1px solid rgba(0, 255, 65, 0.25);
-    padding: 0.15rem 0.35rem;
-    min-width: 1.8rem;
-    text-align: center;
-    font-variant-numeric: tabular-nums;
-  }
-
-  .countdown.expired {
-    opacity: 0.3;
-  }
-
-  .countdown.expired .cd-segment {
-    border-color: rgba(255, 68, 68, 0.3);
-    background: rgba(255, 68, 68, 0.06);
-    color: #ff4444;
-  }
-
-  .countdown.expired span {
-    color: #ff4444;
-  }
-
-  .winner-card {
-    width: 120px;
-    height: 120px;
-    flex-shrink: 0;
-    background: #111;
-    border: 2px solid #00ff41;
-    box-shadow: 3px 3px 0 #000;
-  }
-
-  .winner-img-wrap {
-    position: relative;
-    width: 100%;
-    height: 100%;
-    overflow: hidden;
-  }
-
-  .winner-img-wrap img {
-    filter: saturate(0.6) contrast(1.1) brightness(0.95);
-  }
-
-  .winner-scanlines {
-    position: absolute;
-    inset: 0;
-    pointer-events: none;
-    background: repeating-linear-gradient(
-      0deg,
-      transparent,
-      transparent 1px,
-      rgba(0, 0, 0, 0.15) 1px,
-      rgba(0, 0, 0, 0.15) 2px
-    );
-  }
-</style>
-
-<script>
-  import { formatDate } from "../lib/dates";
-
-  const pad2 = (n: number) => String(n).padStart(2, "0");
-
-  const formatLocalDeadline = (dt: Date) => {
-    const tzOffset = dt.getTimezoneOffset();
-    const tzHours = -Math.floor(tzOffset / 60);
-    const tzMins = Math.abs(tzOffset % 60);
-    const tzLabel =
-      "UTC" +
-      (tzHours >= 0 ? "+" : "") +
-      tzHours +
-      (tzMins > 0 ? ":" + pad2(tzMins) : "");
-
-    return `${formatDate(dt)} ${pad2(dt.getHours())}:${pad2(dt.getMinutes())} ${tzLabel}`;
-  };
-
-  const initDeadlines = () => {
-    const now = Date.now();
-
-    document
-      .querySelectorAll<HTMLElement>(".open-until-wrap")
-      .forEach((wrap) => {
-        const deadline = wrap.dataset.deadline;
-        if (!deadline) return;
-
-        const dt = new Date(deadline);
-        const expired = now >= dt.getTime();
-        const formatted = formatLocalDeadline(dt);
-
-        const valueEl = wrap.querySelector(".open-until-value");
-        if (valueEl) {
-          if (expired) {
-            valueEl.innerHTML = `<span style="color:#666;text-decoration:line-through">${formatted}</span> <span style="color:#ff4444">// TIMED OUT</span>`;
-          } else {
-            valueEl.textContent = formatted;
-          }
-        }
-
-        const btn =
-          wrap.parentElement?.querySelector<HTMLAnchorElement>(".register-btn");
-        if (btn && expired) {
-          btn.removeAttribute("href");
-          btn.style.opacity = "0.3";
-          btn.style.pointerEvents = "none";
-          btn.style.cursor = "not-allowed";
-          btn.textContent = "[REGISTRATION CLOSED]";
-        }
-      });
-  };
-
-  const tickCountdowns = () => {
-    document.querySelectorAll<HTMLElement>(".countdown").forEach((el) => {
-      const deadline = el.dataset.deadline;
-      if (!deadline) return;
-
-      const remaining = new Date(deadline).getTime() - Date.now();
-      const expired = remaining <= 0;
-
-      const dEl = el.querySelector<HTMLElement>(".countdown-d");
-      const hEl = el.querySelector<HTMLElement>(".countdown-h");
-      const mEl = el.querySelector<HTMLElement>(".countdown-m");
-      const sEl = el.querySelector<HTMLElement>(".countdown-s");
-      if (!dEl || !hEl || !mEl || !sEl) return;
-
-      if (expired) {
-        el.classList.add("expired");
-        dEl.textContent = "00";
-        hEl.textContent = "00";
-        mEl.textContent = "00";
-        sEl.textContent = "00";
-        return;
-      }
-
-      const totalSec = Math.floor(remaining / 1000);
-      const d = Math.floor(totalSec / 86400);
-      const h = Math.floor((totalSec % 86400) / 3600);
-      const m = Math.floor((totalSec % 3600) / 60);
-      const s = totalSec % 60;
-
-      dEl.textContent = pad2(d);
-      hEl.textContent = pad2(h);
-      mEl.textContent = pad2(m);
-      sEl.textContent = pad2(s);
-    });
-  };
-
-  initDeadlines();
-  tickCountdowns();
-  setInterval(tickCountdowns, 1000);
-</script>

@@ -1,0 +1,235 @@
+---
+interface Props {
+  text: string
+  class?: string
+}
+
+const { text, class: className } = Astro.props
+---
+
+<div
+  class:list={["ascii-banner relative w-full overflow-hidden", className]}
+  data-text={text.toUpperCase()}
+>
+  <canvas class="block h-full w-full" aria-label={text} role="img"></canvas>
+  <noscript>
+    <pre
+      class="absolute inset-0 m-0 flex items-center justify-center text-xs text-accent">{text.toUpperCase()}</pre>
+  </noscript>
+</div>
+
+<script>
+  // 5x7 bitmap font. "#" is a lit cell.
+  const GLYPHS: Record<string, string[]> = {
+    A: [".###.", "#...#", "#...#", "#####", "#...#", "#...#", "#...#"],
+    B: ["####.", "#...#", "#...#", "####.", "#...#", "#...#", "####."],
+    C: [".####", "#....", "#....", "#....", "#....", "#....", ".####"],
+    D: ["####.", "#...#", "#...#", "#...#", "#...#", "#...#", "####."],
+    E: ["#####", "#....", "#....", "####.", "#....", "#....", "#####"],
+    F: ["#####", "#....", "#....", "####.", "#....", "#....", "#...."],
+    G: [".####", "#....", "#....", "#.###", "#...#", "#...#", ".####"],
+    H: ["#...#", "#...#", "#...#", "#####", "#...#", "#...#", "#...#"],
+    I: ["#####", "..#..", "..#..", "..#..", "..#..", "..#..", "#####"],
+    J: ["#####", "...#.", "...#.", "...#.", "...#.", "#..#.", ".##.."],
+    K: ["#...#", "#..#.", "#.#..", "##...", "#.#..", "#..#.", "#...#"],
+    L: ["#....", "#....", "#....", "#....", "#....", "#....", "#####"],
+    M: ["#...#", "##.##", "#.#.#", "#.#.#", "#...#", "#...#", "#...#"],
+    N: ["#...#", "##..#", "#.#.#", "#..##", "#...#", "#...#", "#...#"],
+    O: [".###.", "#...#", "#...#", "#...#", "#...#", "#...#", ".###."],
+    P: ["####.", "#...#", "#...#", "####.", "#....", "#....", "#...."],
+    Q: [".###.", "#...#", "#...#", "#...#", "#.#.#", "#..#.", ".##.#"],
+    R: ["####.", "#...#", "#...#", "####.", "#.#..", "#..#.", "#...#"],
+    S: [".####", "#....", "#....", ".###.", "....#", "....#", "####."],
+    T: ["#####", "..#..", "..#..", "..#..", "..#..", "..#..", "..#.."],
+    U: ["#...#", "#...#", "#...#", "#...#", "#...#", "#...#", ".###."],
+    V: ["#...#", "#...#", "#...#", "#...#", "#...#", ".#.#.", "..#.."],
+    W: ["#...#", "#...#", "#...#", "#.#.#", "#.#.#", "##.##", "#...#"],
+    X: ["#...#", "#...#", ".#.#.", "..#..", ".#.#.", "#...#", "#...#"],
+    Y: ["#...#", "#...#", ".#.#.", "..#..", "..#..", "..#..", "..#.."],
+    Z: ["#####", "....#", "...#.", "..#..", ".#...", "#....", "#####"],
+    "0": [".###.", "#...#", "#..##", "#.#.#", "##..#", "#...#", ".###."],
+    "1": ["..#..", ".##..", "..#..", "..#..", "..#..", "..#..", ".###."],
+    "2": [".###.", "#...#", "....#", "...#.", "..#..", ".#...", "#####"],
+    "3": ["#####", "...#.", "..#..", "...#.", "....#", "#...#", ".###."],
+    "4": ["...#.", "..##.", ".#.#.", "#..#.", "#####", "...#.", "...#."],
+    "5": ["#####", "#....", "####.", "....#", "....#", "#...#", ".###."],
+    "6": ["..##.", ".#...", "#....", "####.", "#...#", "#...#", ".###."],
+    "7": ["#####", "....#", "...#.", "..#..", ".#...", ".#...", ".#..."],
+    "8": [".###.", "#...#", "#...#", ".###.", "#...#", "#...#", ".###."],
+    "9": [".###.", "#...#", "#...#", ".####", "....#", "...#.", ".##.."],
+    " ": [".....", ".....", ".....", ".....", ".....", ".....", "....."],
+  }
+  const GLYPH_W = 5
+  const GLYPH_H = 7
+  const GAP = 1
+  const LETTER_RAMP = ["░", "▒", "▓", "█"]
+  const NOISE_CHARS = [".", ":", "·", "'", "`"]
+  const FPS = 30
+  const MIN_FONT_PX = 8
+  const CHAR_ASPECT = 0.6
+
+  // Deterministic per-cell noise so the background does not flicker at random.
+  const hash = (x: number, y: number, seed: number) => {
+    const n = Math.sin(x * 127.1 + y * 311.7 + seed * 74.7) * 43758.5453
+    return n - Math.floor(n)
+  }
+
+  const buildMask = (text: string) => {
+    const cols = text.length * (GLYPH_W + GAP) - GAP
+    const rows = Array.from({ length: GLYPH_H }, (_, r) =>
+      Array.from(text)
+        .map(ch => (GLYPHS[ch] ?? GLYPHS[" "])[r])
+        .join(".".repeat(GAP)),
+    )
+    return { cols, rows }
+  }
+
+  const mount = (root: HTMLElement) => {
+    const canvas = root.querySelector("canvas")
+    const ctx = canvas?.getContext("2d")
+    const text = root.dataset.text ?? ""
+    if (!canvas || !ctx || !text) return
+
+    const mask = buildMask(text)
+    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches
+
+    let cols = 0
+    let rows = 0
+    let cellW = 0
+    let cellH = 0
+    let scaleX = 2
+    let scaleY = 1
+    let originC = 0
+    let originR = 0
+    let visible = true
+    let lastFrame = 0
+    let glitchRow = -1
+    let glitchShift = 0
+    let glitchUntil = 0
+
+    const layout = () => {
+      const w = root.clientWidth
+      const h = root.clientHeight
+      const dpr = Math.min(window.devicePixelRatio || 1, 2)
+      canvas.width = Math.floor(w * dpr)
+      canvas.height = Math.floor(h * dpr)
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+
+      // Pick the densest glyph scale that keeps characters readable.
+      const fit = (sy: number) => {
+        const sx = sy * 2
+        const byH = (0.62 * h) / (GLYPH_H * sy)
+        const byW = (0.92 * w) / (mask.cols * sx * CHAR_ASPECT)
+        return { sy, sx, font: Math.min(byH, byW) }
+      }
+      const chosen = [3, 2, 1].map(fit).find(f => f.font >= MIN_FONT_PX) ?? fit(1)
+      const font = Math.max(MIN_FONT_PX * 0.75, Math.floor(chosen.font))
+      scaleX = chosen.sx
+      scaleY = chosen.sy
+      cellW = font * CHAR_ASPECT
+      cellH = font
+      cols = Math.ceil(w / cellW)
+      rows = Math.ceil(h / cellH)
+      originC = Math.floor((cols - mask.cols * scaleX) / 2)
+      originR = Math.floor((rows - GLYPH_H * scaleY) / 2)
+
+      ctx.font = `${font}px "Courier New", Courier, monospace`
+      ctx.textBaseline = "top"
+    }
+
+    const inMask = (c: number, r: number) => {
+      const mc = Math.floor((c - originC) / scaleX)
+      const mr = Math.floor((r - originR) / scaleY)
+      if (mc < 0 || mr < 0 || mc >= mask.cols || mr >= GLYPH_H) return false
+      return mask.rows[mr][mc] === "#"
+    }
+
+    const draw = (t: number) => {
+      ctx.clearRect(0, 0, root.clientWidth, root.clientHeight)
+
+      const sweep = ((t * 0.35) % 1.6) * rows - rows * 0.3
+      const glitchActive = t < glitchUntil
+
+      for (let r = 0; r < rows; r++) {
+        const shift = glitchActive && r === glitchRow ? glitchShift : 0
+        const y = r * cellH
+        for (let c = 0; c < cols; c++) {
+          const x = c * cellW
+          const sweepBoost = Math.max(0, 1 - Math.abs(r - sweep) / 2.5) * 0.35
+
+          if (inMask(c - shift, r)) {
+            const wave = Math.sin(t * 1.8 + c * 0.11 + r * 0.32) * 0.5 + 0.5
+            const grain = hash(c, r, Math.floor(t * 4)) * 0.18
+            const level = Math.min(1, 0.32 + wave * 0.55 + grain + sweepBoost)
+            const ch = LETTER_RAMP[Math.min(3, Math.floor(level * 4))]
+            ctx.fillStyle = `rgba(0, 255, 65, ${0.35 + level * 0.65})`
+            ctx.fillText(ch, x, y)
+            continue
+          }
+
+          // Threshold 0.93 lights about 7% of background cells, enough texture without noise over the letters.
+          const slow = Math.floor(t * 0.6 + hash(c, r, 1) * 4)
+          const n = hash(c, r, slow)
+          if (n > 0.93) {
+            const alpha = 0.05 + (n - 0.93) * 1.6 + sweepBoost * 0.5
+            ctx.fillStyle = `rgba(0, 255, 65, ${alpha})`
+            ctx.fillText(NOISE_CHARS[Math.floor(hash(r, c, 7) * NOISE_CHARS.length)], x, y)
+          }
+        }
+      }
+    }
+
+    const frame = (now: number) => {
+      if (!visible) return
+      requestAnimationFrame(frame)
+      if (now - lastFrame < 1000 / FPS) return
+      lastFrame = now
+      const t = now / 1000
+
+      if (t > glitchUntil && Math.random() < 0.012) {
+        glitchRow = originR + Math.floor(Math.random() * GLYPH_H * scaleY)
+        glitchShift = (Math.random() < 0.5 ? -1 : 1) * (1 + Math.floor(Math.random() * 2))
+        glitchUntil = t + 0.08 + Math.random() * 0.1
+      }
+      draw(t)
+    }
+
+    const start = () => {
+      if (reduced) {
+        draw(1.2)
+        return
+      }
+      visible = true
+      lastFrame = 0
+      requestAnimationFrame(frame)
+    }
+
+    layout()
+    start()
+
+    const observer = new IntersectionObserver(entries => {
+      const shown = entries.at(-1)?.isIntersecting ?? visible
+      if (shown && !visible) start()
+      if (!shown) visible = false
+    })
+    observer.observe(root)
+
+    let resizeTimer = 0
+    window.addEventListener("resize", () => {
+      window.clearTimeout(resizeTimer)
+      resizeTimer = window.setTimeout(() => {
+        layout()
+        if (reduced) draw(1.2)
+      }, 120)
+    })
+
+    document.fonts?.ready.then(() => {
+      layout()
+      if (reduced) draw(1.2)
+    })
+  }
+
+  for (const el of document.querySelectorAll<HTMLElement>(".ascii-banner")) {
+    mount(el)
+  }
+</script>

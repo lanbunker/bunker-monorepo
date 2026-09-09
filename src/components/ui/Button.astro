@@ -1,0 +1,33 @@
+---
+type Variant = "primary" | "ghost"
+
+interface Props {
+  href: string
+  variant?: Variant
+  external?: boolean
+  class?: string
+}
+
+const { href, variant = "primary", external = false, class: className } = Astro.props
+
+const variantClass: Record<Variant, string> = {
+  primary: "bg-accent text-black hover:bg-bright",
+  ghost: "border border-border text-ink hover:border-accent hover:text-accent",
+}
+---
+
+<a
+  href={href}
+  target={external ? "_blank" : undefined}
+  rel={external ? "noopener noreferrer" : undefined}
+  class:list={[
+    "inline-flex items-center gap-2 px-4 py-1.5 text-xs font-bold tracking-wide no-underline",
+    variantClass[variant],
+    className,
+  ]}
+>
+  <span aria-hidden="true">[</span>
+  <span class="btn-label"><slot /></span>
+  {external && <span class="sr-only">(opens in new tab)</span>}
+  <span aria-hidden="true">]</span>
+</a>

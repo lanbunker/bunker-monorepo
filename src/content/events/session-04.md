@@ -2,5 +2,5 @@
 date: "24/10/2026"
 name: "BUNKER//SESSION 04 @theoffice"
 status: "OPEN"
-games: "CALL OF DUTY BO2, CALL OF DUTY MW2, HALO 3, MARIO KART, ARCADE & CASUAL GAMES"
+games: "Call of Duty BO2, Call of Duty MW2, Halo 3, Mario Kart, arcade & casual games"
 ---

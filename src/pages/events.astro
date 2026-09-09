@@ -1,45 +1,39 @@
 ---
-import Layout from "../layouts/Layout.astro";
-import { getCollection } from "astro:content";
-import EventCard from "../components/EventCard.astro";
-import { parseEurDate } from "../lib/dates";
+import { getCollection } from "astro:content"
+import EventCard from "../components/EventCard.astro"
+import Prompt from "../components/ui/Prompt.astro"
+import Layout from "../layouts/Layout.astro"
+import { parseEurDate } from "../lib/dates"
 
 const events = (await getCollection("events")).sort(
   (a, b) => parseEurDate(b.data.date) - parseEurDate(a.data.date),
-);
+)
 
-const upcoming = events.filter(
-  (e) => e.data.status === "OPEN" || e.data.status === "SOON",
-);
-const previous = events.filter((e) => e.data.status === "CLOSED");
+const upcoming = events.filter(e => e.data.status === "OPEN" || e.data.status === "SOON")
+const previous = events.filter(e => e.data.status === "CLOSED")
 ---
 
 <Layout title="EVENTS//LAN_BUNKER" active="events">
-  <h2 class="text-[14px] mt-8 mb-4 text-accent font-normal font-mono">
-    {">"} UPCOMING_EVENTS <span class="text-dim">// ls -la</span>
-  </h2>
+  <Prompt command="ls -la ./upcoming" comment={`${upcoming.length} entries`} />
 
   {
     upcoming.length > 0 ? (
-      <div class="flex flex-col gap-5">
-        {upcoming.map((ev) => (
+      <div class="flex flex-col gap-6">
+        {upcoming.map(ev => (
           <EventCard event={ev} />
         ))}
       </div>
     ) : (
-      <p class="text-dim text-[12px]">NO UPCOMING EVENTS.</p>
+      <p class="text-xs text-dim">no upcoming events.</p>
     )
   }
 
   {
     previous.length > 0 && (
       <>
-        <h2 class="text-[14px] mt-10 mb-4 text-accent font-normal font-mono">
-          {">"} PREVIOUS_EVENTS <span class="text-dim">// archive</span>
-        </h2>
-
-        <div class="flex flex-col gap-5">
-          {previous.map((ev) => (
+        <Prompt command="ls -la ./archive" comment={`${previous.length} entries`} />
+        <div class="flex flex-col gap-6">
+          {previous.map(ev => (
             <EventCard event={ev} />
           ))}
         </div>

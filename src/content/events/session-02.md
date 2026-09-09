@@ -2,6 +2,6 @@
 date: "28/10/2025"
 name: "BUNKER//SESSION 02 @theoffice"
 status: "CLOSED"
-games: "CALL OF DUTY BO2, MARIO KART 8, CASUAL GAMES"
+games: "Call of Duty BO2, Mario Kart 8, casual games"
 image: "../../assets/images/events/oct2025-cover.webp"
 ---

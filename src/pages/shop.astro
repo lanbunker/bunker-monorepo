@@ -1,17 +1,16 @@
 ---
-import Layout from "../layouts/Layout.astro";
+import Panel from "../components/ui/Panel.astro"
+import Prompt from "../components/ui/Prompt.astro"
+import Layout from "../layouts/Layout.astro"
 ---
 
 <Layout title="SHOP//LAN_BUNKER" active="shop">
-  <h2 class="text-[14px] mt-8 mb-4 text-accent font-normal font-mono">
-    {">"} SHOP <span class="text-dim">// MERCHANDISE</span>
-  </h2>
+  <Prompt command="ls ./shop" comment="merchandise" />
 
-  <div class="border border-border p-8 text-center">
-    <p class="text-dim text-[12px] tracking-[0.2em]">// COMING SOON</p>
-    <p class="text-[#555] text-[11px] mt-3">
-      SHOP IS CURRENTLY UNDER CONSTRUCTION. STAY TUNED FOR OFFICIAL LAN BUNKER
-      MERCHANDISE
+  <Panel tone="muted" class="text-center">
+    <p class="text-xs tracking-wider text-dim">{"// coming soon"}</p>
+    <p class="mt-2 text-2xs text-mute">
+      shop under construction. official LAN BUNKER merchandise arrives soon.
     </p>
-  </div>
+  </Panel>
 </Layout>

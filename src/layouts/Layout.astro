@@ -1,29 +1,37 @@
 ---
-import "../styles/global.css";
+import "../styles/global.css"
+import { getCollection } from "astro:content"
+import { formatEurDate, parseEurDate } from "../lib/dates"
+
+type Section = "home" | "events" | "tournaments" | "scores" | "media" | "shop" | "about"
 
 interface Props {
-  title?: string;
-  active:
-    | "home"
-    | "scores"
-    | "events"
-    | "tournaments"
-    | "media"
-    | "shop"
-    | "about";
+  title?: string
+  active: Section
 }
 
-const { title = "LAN BUNKER", active } = Astro.props;
+const { title = "LAN BUNKER", active } = Astro.props
+const description = "LAN BUNKER, a recurring local multiplayer event blending music and gaming."
 
-const nav = [
-  { key: "home", label: "[HOME]", href: "/" },
-  { key: "events", label: "[EVENTS]", href: "/events" },
-  { key: "tournaments", label: "[TOURNAMENTS]", href: "/tournaments" },
-  { key: "scores", label: "[SCORES]", href: "/scores" },
-  { key: "media", label: "[MEDIA]", href: "/media" },
-  { key: "shop", label: "[SHOP]", href: "/shop" },
-  { key: "about", label: "[ABOUT]", href: "/about" },
-] as const;
+const nav: { key: Section; label: string; href: string }[] = [
+  { key: "home", label: "HOME", href: "/" },
+  { key: "events", label: "EVENTS", href: "/events" },
+  { key: "tournaments", label: "TOURNAMENTS", href: "/tournaments" },
+  { key: "scores", label: "SCORES", href: "/scores" },
+  { key: "media", label: "MEDIA", href: "/media" },
+  { key: "shop", label: "SHOP", href: "/shop" },
+  { key: "about", label: "ABOUT", href: "/about" },
+]
+
+const events = (await getCollection("events")).sort(
+  (a, b) => parseEurDate(b.data.date) - parseEurDate(a.data.date),
+)
+// Events sort newest first, so the last upcoming entry is the soonest one.
+const nextEvent = events.findLast(e => e.data.status === "OPEN" || e.data.status === "SOON")
+const nextEventTs = nextEvent ? parseEurDate(nextEvent.data.date) : NaN
+const firstEvent = events.at(-1)
+const firstEventTs = firstEvent ? parseEurDate(firstEvent.data.date) : NaN
+const activeIndex = nav.findIndex(item => item.key === active)
 ---
 
 <!doctype html>
@@ -31,92 +39,154 @@ const nav = [
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width" />
-    <meta
-      name="description"
-      content="LAN BUNKER - recurring local multiplayer event blending music and gaming."
-    />
+    <meta name="description" content={description} />
+    <meta name="theme-color" content="#050505" />
+    <meta name="color-scheme" content="dark" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="LAN BUNKER" />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:url" content={Astro.url.href} />
+    <meta property="og:image" content={new URL("/web-app-manifest-512x512.png", Astro.url).href} />
+    <meta name="twitter:card" content="summary" />
     <link rel="icon" type="image/png" href="/favicon-96x96.png" sizes="96x96" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="shortcut icon" href="/favicon.ico" />
     <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
     <link rel="manifest" href="/site.webmanifest" />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600&display=swap"
-      rel="stylesheet"
-    />
     <title>{title}</title>
   </head>
-  <body
-    class="bg-black text-[#ccc] font-mono min-h-screen relative text-[14px]"
-  >
-    <!-- Scanline overlay -->
-    <div
-      class="fixed inset-0 pointer-events-none z-50"
-      style="background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(255,255,255,0.007) 2px, rgba(255,255,255,0.007) 4px);"
-    >
-    </div>
+  <body class="min-h-screen bg-bg pb-12 font-mono text-sm text-ink">
+    <div class="scanlines pointer-events-none fixed inset-0 z-50"></div>
+    <div class="vignette pointer-events-none fixed inset-0 z-40"></div>
 
-    <div
-      class="max-w-[960px] mx-auto px-7 py-6 max-[480px]:px-3.5 max-[480px]:py-4"
-    >
-      <!-- Header -->
-      <header
-        class="flex justify-between items-center pb-2.5 border-b-2 border-white text-[11px]"
-      >
-        <a
-          href="/"
-          class="text-white no-underline tracking-[0.2em] text-[15px]"
-        >
-          > LAN_BUNKER
+    <div class="mx-auto max-w-[60rem] px-6 pt-5 max-[30rem]:px-3.5 max-[30rem]:pt-3">
+      <header class="flex items-center justify-between gap-4 pb-2.5">
+        <a href="/" class="flex items-center gap-1.5 no-underline">
+          <span class="text-base font-bold tracking-wider text-bright">LAN_BUNKER</span>
+          <span
+            class="animate-blink inline-block h-[0.95em] w-[0.55em] bg-accent text-base"
+            aria-hidden="true"
+          ></span>
         </a>
-        <span id="clock" class="text-[#666] tabular-nums text-[12px]"></span>
+        {
+          Number.isFinite(firstEventTs) && (
+            <span class="text-2xs tracking-wider text-dim" data-since={firstEventTs}>
+              uptime <span id="uptime" class="text-ink tabular-nums" />
+            </span>
+          )
+        }
       </header>
 
-      <!-- Nav -->
       <nav
-        class="border-b-2 border-white py-3.5 flex gap-1 flex-wrap text-[14px] max-[480px]:gap-0 max-[480px]:text-[12px]"
+        aria-label="Sections"
+        class="flex flex-wrap gap-y-1 border-y border-border py-2 text-xs max-[30rem]:text-2xs"
       >
         {
-          nav.map((item) => (
+          nav.map((item, i) => (
             <a
               href={item.href}
+              data-nav-index={i + 1}
+              aria-current={active === item.key ? "page" : undefined}
               class:list={[
-                "font-mono text-[14px] max-[480px]:text-[12px] cursor-pointer px-2.5 py-1.5 max-[480px]:px-1.5 tracking-[0.05em] no-underline transition-colors duration-100",
+                "px-2.5 py-1 no-underline tracking-wide max-[30rem]:px-1.5",
                 active === item.key
-                  ? "bg-white text-black font-bold"
-                  : "text-[#999] hover:text-accent",
+                  ? "bg-accent font-bold text-black"
+                  : "text-ink hover:bg-faint hover:text-accent",
               ]}
             >
+              <span class:list={[active === item.key ? "text-black/60" : "text-dim"]}>
+                {i + 1}:
+              </span>
               {item.label}
             </a>
           ))
         }
       </nav>
 
-      <!-- Content -->
       <main>
         <slot />
       </main>
 
-      <!-- Footer -->
       <footer
-        class="mt-12 pt-4 border-t border-border text-[10px] text-[#666] flex justify-between flex-wrap gap-2 pb-8 tracking-[0.05em]"
+        class="mt-12 flex flex-wrap justify-between gap-2 border-t border-faint pt-4 pb-4 text-2xs tracking-wide text-mute"
       >
         <span>&copy; LAN BUNKER {new Date().getFullYear()}</span>
+        <span class="pointer-coarse:hidden">press 1-{nav.length} to switch section</span>
       </footer>
     </div>
 
-    <script>
-      const updateClock = () => {
-        const el = document.getElementById("clock");
-        if (el) {
-          el.textContent = new Date().toLocaleTimeString("en-GB");
+    <div
+      class="fixed inset-x-0 bottom-0 z-30 flex h-7 items-stretch justify-between border-t border-border bg-panel text-2xs tracking-wide text-dim"
+    >
+      <div class="flex items-stretch">
+        <span class="flex items-center bg-accent px-2.5 text-black">LAN_BUNKER</span>
+        <span class="flex items-center px-2.5">
+          [{activeIndex + 1}] <span class="ml-1 text-ink">{nav[activeIndex]?.label.toLowerCase()}</span>
+        </span>
+      </div>
+      <div class="flex items-stretch">
+        {
+          nextEvent && Number.isFinite(nextEventTs) && (
+            <a
+              href="/events"
+              class="hidden items-center gap-1.5 border-l border-faint px-2.5 no-underline text-dim hover:text-accent min-[35rem]:flex"
+              data-next-date={nextEvent.data.date}
+            >
+              next event
+              <span class="text-ink">{formatEurDate(nextEvent.data.date)}</span>
+              <span id="next-tminus" class="text-accent-soft tabular-nums" />
+            </a>
+          )
         }
-      };
-      updateClock();
-      setInterval(updateClock, 1000);
+        <span class="flex items-center gap-1.5 border-l border-faint px-2.5">
+          local time
+          <span id="clock" class="tabular-nums text-ink" />
+        </span>
+      </div>
+    </div>
+
+    <script>
+      const DAY = 86_400_000
+      const HOUR = 3_600_000
+      const clock = document.getElementById("clock")
+      const uptime = document.getElementById("uptime")
+      const tminus = document.getElementById("next-tminus")
+      const since = Number(uptime?.parentElement?.dataset.since)
+      const [nextDay, nextMonth, nextYear] = (tminus?.parentElement?.dataset.nextDate ?? "")
+        .split("/")
+        .map(Number)
+      // Local midnight of the event date, so the day count does not drift with the viewer's timezone.
+      const nextMidnight = nextYear ? new Date(nextYear, nextMonth - 1, nextDay).getTime() : NaN
+
+      const updateClock = () => {
+        const now = Date.now()
+        if (clock) clock.textContent = new Date(now).toLocaleTimeString("en-GB")
+        if (uptime && since) {
+          const elapsed = now - since
+          const days = Math.floor(elapsed / DAY)
+          const hours = Math.floor((elapsed % DAY) / HOUR)
+          uptime.textContent = `${days}d ${String(hours).padStart(2, "0")}h`
+        }
+        if (tminus && Number.isFinite(nextMidnight)) {
+          const today = new Date(now)
+          const todayMidnight = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime()
+          const days = Math.round((nextMidnight - todayMidnight) / DAY)
+          tminus.textContent = days > 0 ? `T-${days}d` : days === 0 ? "today" : ""
+        }
+      }
+      updateClock()
+      setInterval(updateClock, 1000)
+
+      // Number keys jump between sections, like tmux windows.
+      document.addEventListener("keydown", e => {
+        if (!/^[1-9]$/.test(e.key)) return
+        if (e.metaKey || e.ctrlKey || e.altKey || e.isComposing || e.repeat || e.defaultPrevented) return
+        if (e.target instanceof HTMLElement && e.target.closest("input, textarea, select, [contenteditable]")) return
+        if (document.querySelector(".pswp--open")) return
+        const link = document.querySelector<HTMLAnchorElement>(`[data-nav-index="${e.key}"]`)
+        if (link) window.location.assign(link.href)
+      })
     </script>
   </body>
 </html>
