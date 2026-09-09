@@ -1,0 +1,180 @@
+---
+// MOCK: UI preview only. Data is hardcoded, there is no backend and no login yet.
+import Glyph from "../../components/ui/Glyph.astro"
+import Kv from "../../components/ui/Kv.astro"
+import Panel from "../../components/ui/Panel.astro"
+import Prompt from "../../components/ui/Prompt.astro"
+import { findBadge } from "../../data/badges"
+import { findPlayer, players, totalKarma } from "../../data/mock-players"
+import Layout from "../../layouts/Layout.astro"
+import { formatEurDate, parseEurDate } from "../../lib/dates"
+import { meter, rankFor } from "../../lib/rank"
+
+const player = findPlayer(Astro.params.handle ?? "")
+if (!player) return Astro.rewrite("/404")
+
+const karma = totalKarma(player)
+const rank = rankFor(karma)
+const color = player.glyph.color
+const earned = player.badges.map(findBadge).filter(b => b !== undefined)
+const position = players
+  .map(totalKarma)
+  .sort((a, b) => b - a)
+  .indexOf(karma)
+const fmt = (n: number) => n.toLocaleString("en-US")
+
+const breakdown = [
+  ["scores", player.karma.scores],
+  ["tournaments", player.karma.tournaments],
+  ["attendance", player.karma.attendance],
+  ["crew", player.karma.crew],
+] as const
+---
+
+<Layout title={`${player.handle}//LAN_BUNKER`} active="scores" noindex>
+  <Prompt command={`cat /players/${player.handle}`} comment="mock data" />
+
+  <Panel>
+    <div class="flex flex-wrap gap-6" style={`--player:${color}`}>
+      <Glyph glyph={player.glyph} size="7.5rem" framed />
+      <div class="min-w-[16rem] flex-1">
+        <div class="flex flex-wrap items-baseline gap-3">
+          <h1 class="m-0 text-[1.75rem] leading-none text-(--player)">{player.handle}</h1>
+          <span class="text-xs text-dim">#{position + 1} of {players.length}</span>
+        </div>
+        <div class="mt-4 flex flex-col gap-1">
+          <Kv label="Rank" tone="accent">
+            [{rank.current.name}] <span class="text-dim">// lvl {rank.current.level}</span>
+          </Kv>
+          <Kv label="Karma">{fmt(karma)}</Kv>
+          <Kv label="Enlisted">
+            {player.enlistedAt} <span class="text-dim">· {formatEurDate(player.enlisted)}</span>
+          </Kv>
+          <Kv label="Badges">{earned.length}</Kv>
+          <Kv label="Tournaments">{player.tournaments.length}</Kv>
+          <Kv label="Seen">{player.lastSeen}</Kv>
+        </div>
+      </div>
+    </div>
+  </Panel>
+
+  <Prompt command={`cat /players/${player.handle}/badges`} comment={`${earned.length} earned`} />
+
+  <Panel>
+    {
+      earned.length > 0 ? (
+        <div class="flex flex-wrap gap-2">
+          {earned.map(b => (
+            <span
+              class="inline-flex items-center gap-1.5 border px-2 py-0.5 text-xs border-(--badge) text-(--badge)"
+              style={`--badge:${b.color}`}
+              title={b.description}
+            >
+              <span aria-hidden="true">{b.icon}</span>
+              {b.label}
+            </span>
+          ))}
+        </div>
+      ) : (
+        <p class="text-xs text-dim">no badges yet.</p>
+      )
+    }
+  </Panel>
+
+  <div class="mt-6 grid gap-6 min-[40rem]:grid-cols-2">
+    <Panel>
+      <div class="text-2xs tracking-wider text-dim">rank</div>
+      <div class="mt-2 text-sm text-accent">{meter(rank.progress)}</div>
+      {
+        rank.next ? (
+          <p class="mt-2 text-xs text-dim">
+            {fmt(karma)} → <span class="text-warn">[{rank.next.name}]</span> at {fmt(rank.next.min)}
+            <span class="block text-ink">{fmt(rank.toGo)} to go</span>
+          </p>
+        ) : (
+          <p class="mt-2 text-xs text-dim">top of the ladder.</p>
+        )
+      }
+    </Panel>
+
+    <Panel>
+      <div class="text-2xs tracking-wider text-dim">karma</div>
+      <div class="mt-2 flex flex-col gap-1">
+        {breakdown.map(([label, value]) => <Kv label={label}>{fmt(value)}</Kv>)}
+        <div class="mt-1 border-t border-faint pt-2">
+          <Kv label="total" tone="accent">{fmt(karma)}</Kv>
+        </div>
+      </div>
+    </Panel>
+  </div>
+
+  <Prompt command={`cat /players/${player.handle}/scores`} comment="best per game" />
+
+  <Panel>
+    <table class="w-full border-collapse text-xs">
+      <thead>
+        <tr class="text-left text-2xs tracking-wider text-dim">
+          <th class="w-[46%] pb-2 font-normal">game</th>
+          <th class="w-[24%] pb-2 text-right font-normal">score</th>
+          <th class="w-[15%] pb-2 text-right font-normal">pos</th>
+          <th class="w-[15%] pb-2 text-right font-normal">karma</th>
+        </tr>
+      </thead>
+      <tbody>
+        {
+          player.bestScores.map(s => (
+            <tr class="border-t border-faint">
+              <td class:list={["py-2", s.position === 1 ? "text-warn" : "text-ink"]}>{s.game}</td>
+              <td class="py-2 text-right tabular-nums text-ink">{fmt(s.score)}</td>
+              <td class:list={["py-2 text-right tabular-nums", s.position === 1 ? "text-warn" : "text-dim"]}>
+                #{s.position}
+              </td>
+              <td class="py-2 text-right tabular-nums text-accent">{s.karma}</td>
+            </tr>
+          ))
+        }
+      </tbody>
+    </table>
+    <p class="mt-4 text-2xs text-mute">captured from arcade cabinets · verified by crew</p>
+  </Panel>
+
+  <Prompt
+    command={`cat /players/${player.handle}/tournaments`}
+    comment={`${player.tournaments.length} played`}
+  />
+
+  <Panel>
+    {
+      player.tournaments.length > 0 ? (
+        <table class="w-full border-collapse text-xs">
+          <thead>
+            <tr class="text-left text-2xs tracking-wider text-dim">
+              <th class="w-[50%] pb-2 font-normal">tournament</th>
+              <th class="w-[25%] pb-2 text-right font-normal">date</th>
+              <th class="w-[25%] pb-2 text-right font-normal">finished</th>
+            </tr>
+          </thead>
+          <tbody>
+            {player.tournaments
+              .toSorted((a, b) => parseEurDate(b.date) - parseEurDate(a.date))
+              .map(t => (
+                <tr class="border-t border-faint">
+                  <td class:list={["py-2", t.position === 1 ? "text-warn" : "text-ink"]}>{t.name}</td>
+                  <td class="py-2 text-right text-dim">{formatEurDate(t.date)}</td>
+                  <td class:list={["py-2 text-right tabular-nums", t.position <= 3 ? "text-warn" : "text-ink"]}>
+                    #{t.position} <span class="text-dim">of {t.participants}</span>
+                  </td>
+                </tr>
+              ))}
+          </tbody>
+        </table>
+      ) : (
+        <p class="text-xs text-dim">no tournaments played yet.</p>
+      )
+    }
+  </Panel>
+
+  <p class="mt-6 text-2xs text-mute">
+    <a href="/players" class="text-dim no-underline hover:text-accent">← /players</a>
+  </p>
+</Layout>

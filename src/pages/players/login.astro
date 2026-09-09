@@ -1,0 +1,55 @@
+---
+// MOCK: UI preview only. Data is hardcoded, there is no backend and no login yet.
+import Panel from "../../components/ui/Panel.astro"
+import Prompt from "../../components/ui/Prompt.astro"
+import Layout from "../../layouts/Layout.astro"
+---
+
+<Layout title="LOGIN//LAN_BUNKER" active="scores" noindex>
+  <Prompt command="ssh bunker" comment="mock, no backend yet" />
+
+  <Panel class="max-w-[28rem]">
+    <form id="login" class="flex flex-col gap-3 text-xs" autocomplete="off">
+      <label class="flex items-baseline gap-2">
+        <span class="w-24 shrink-0 text-dim">login:</span>
+        <input
+          name="handle"
+          type="text"
+          required
+          class="w-full border-b border-border bg-transparent py-1 text-ink outline-none focus:border-accent"
+        />
+      </label>
+      <label class="flex items-baseline gap-2">
+        <span class="w-24 shrink-0 text-dim">password:</span>
+        <input
+          name="password"
+          type="password"
+          required
+          class="w-full border-b border-border bg-transparent py-1 text-ink outline-none focus:border-accent"
+        />
+      </label>
+      <div class="mt-2 flex items-center gap-4">
+        <button
+          type="submit"
+          class="inline-flex items-center gap-2 bg-accent px-4 py-1.5 text-xs font-bold tracking-wide text-black hover:bg-bright"
+        >
+          <span aria-hidden="true">[</span>LOGIN<span aria-hidden="true">]</span>
+        </button>
+        <a href="/players" class="text-2xs text-dim no-underline hover:text-accent">← /players</a>
+      </div>
+      <p id="login-output" class="mt-2 hidden text-xs text-alert" role="status"></p>
+    </form>
+  </Panel>
+</Layout>
+
+<script>
+  const form = document.getElementById("login")
+  const output = document.getElementById("login-output")
+
+  form?.addEventListener("submit", e => {
+    e.preventDefault()
+    if (!output) return
+    output.textContent = "ssh: connect to host bunker port 22: auth backend not connected"
+    output.classList.remove("hidden")
+  })
+</script>

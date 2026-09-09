@@ -8,9 +8,11 @@ type Section = "home" | "events" | "tournaments" | "scores" | "media" | "shop" |
 interface Props {
   title?: string
   active: Section
+  /** Hidden preview pages stay out of search engines. */
+  noindex?: boolean
 }
 
-const { title = "LAN BUNKER", active } = Astro.props
+const { title = "LAN BUNKER", active, noindex = false } = Astro.props
 const description = "LAN BUNKER, a recurring local multiplayer event blending music and gaming."
 
 const nav: { key: Section; label: string; href: string }[] = [
@@ -42,6 +44,7 @@ const activeIndex = nav.findIndex(item => item.key === active)
     <meta name="description" content={description} />
     <meta name="theme-color" content="#050505" />
     <meta name="color-scheme" content="dark" />
+    {noindex && <meta name="robots" content="noindex, nofollow" />}
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="LAN BUNKER" />
     <meta property="og:title" content={title} />

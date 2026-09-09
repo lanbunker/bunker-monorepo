@@ -1,0 +1,42 @@
+---
+// Renders a stored player glyph. Used by the MOCK profile preview for now.
+import { GLYPH_SIZE, bitsToCells } from "../../lib/glyph"
+import type { StoredGlyph } from "../../lib/glyph"
+
+interface Props {
+  glyph: StoredGlyph
+  /** CSS size such as "1em" or "7.5rem". Width and height are equal. */
+  size?: string
+  framed?: boolean
+  class?: string
+}
+
+const { glyph, size = "1em", framed = false, class: className } = Astro.props
+const cells = bitsToCells(glyph.bits)
+// The frame keeps 12% padding on each side, so the mark itself takes 76% of the box.
+const markSize = framed ? `calc(${size} * 0.76)` : size
+---
+
+<span
+  class:list={[
+    "inline-flex shrink-0 items-center justify-center align-[-0.15em]",
+    framed && "border",
+    className,
+  ]}
+  style={`width:${size};height:${size};color:${glyph.color};border-color:${glyph.color}`}
+  aria-hidden="true"
+>
+  <svg
+    viewBox={`0 0 ${GLYPH_SIZE} ${GLYPH_SIZE}`}
+    shape-rendering="crispEdges"
+    class="block"
+    style={`width:${markSize};height:${markSize}`}
+    fill="currentColor"
+  >
+    {
+      cells.map((lit, i) =>
+        lit ? <rect x={i % GLYPH_SIZE} y={Math.floor(i / GLYPH_SIZE)} width="1" height="1" /> : null,
+      )
+    }
+  </svg>
+</span>
