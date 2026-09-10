@@ -1,0 +1,1028 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "LAN BUNKER API",
+    "description": "The LAN BUNKER backend: players, glyphs and auth over SQLite",
+    "license": {
+      "name": "MIT",
+      "identifier": "MIT"
+    },
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/api/admin/players": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "list_players",
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 1,
+              "minimum": 1
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Paginated_Player"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/admin/players/{id}": {
+      "delete": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "delete_player",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/PlayerId"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not an admin, or the admin's own account",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      },
+      "patch": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "set_role",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/PlayerId"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RoleUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Player"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not an admin, or the admin's own account",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/admin/players/{id}/password-reset": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "reset_password",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/PlayerId"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TemporaryPassword"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/auth/login": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "operationId": "login",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TokenResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/signup": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "operationId": "signup",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SignupRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TokenResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me": {
+      "get": {
+        "tags": [
+          "players"
+        ],
+        "operationId": "me",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Account"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/me/password": {
+      "post": {
+        "tags": [
+          "players"
+        ],
+        "operationId": "change_password",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PasswordChange"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "A fresh token. Older tokens are refused from now on",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TokenResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/players": {
+      "get": {
+        "tags": [
+          "players"
+        ],
+        "operationId": "list_players",
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 1,
+              "minimum": 1
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Paginated_Player"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/players/{handle}": {
+      "get": {
+        "tags": [
+          "players"
+        ],
+        "operationId": "get_player",
+        "parameters": [
+          {
+            "name": "handle",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Handle"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Player"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/health/live": {
+      "get": {
+        "tags": [
+          "health"
+        ],
+        "operationId": "live",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Health"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/health/ready": {
+      "get": {
+        "tags": [
+          "health"
+        ],
+        "operationId": "ready",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Health"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Account": {
+        "type": "object",
+        "description": "What `/api/me` answers: the public player plus what only the owner sees.",
+        "required": [
+          "player",
+          "mustChangePassword"
+        ],
+        "properties": {
+          "mustChangePassword": {
+            "type": "boolean",
+            "description": "Set after an admin reset. The API only reports it: the site forces the\nchange before it shows any other page."
+          },
+          "player": {
+            "$ref": "#/components/schemas/Player"
+          }
+        }
+      },
+      "ApiErrorBody": {
+        "type": "object",
+        "description": "The one shape every failure has on the wire.",
+        "required": [
+          "code",
+          "message",
+          "status"
+        ],
+        "properties": {
+          "cause": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The chain of causes. It is absent if a user can see the response."
+          },
+          "code": {
+            "$ref": "#/components/schemas/ErrorCode"
+          },
+          "message": {
+            "type": "string"
+          },
+          "status": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          }
+        }
+      },
+      "ErrorCode": {
+        "type": "string",
+        "description": "Each error code the API can answer with. A client selects on these names, so\nthey are part of the contract.\n\nTwo steps make a response from an error: `ServiceError::public` below selects\nthe code, and `From<ErrorCode> for StatusCode` in `server.rs` selects the\nstatus.",
+        "enum": [
+          "GenericError",
+          "ServiceUnavailable",
+          "ItemNotFound",
+          "HandleTaken",
+          "InvalidCredentials",
+          "Unauthorized",
+          "Forbidden",
+          "WrongPassword",
+          "InvalidRequest",
+          "UnprocessableRequest",
+          "UnsupportedMediaType",
+          "PayloadTooLarge",
+          "RouteNotFound",
+          "MethodNotAllowed"
+        ]
+      },
+      "Glyph": {
+        "type": "object",
+        "description": "What the players table stores: the grid and the color. Generated one time at\nsignup and then read, never recomputed.",
+        "required": [
+          "bits",
+          "color"
+        ],
+        "properties": {
+          "bits": {
+            "$ref": "#/components/schemas/GlyphBits"
+          },
+          "color": {
+            "$ref": "#/components/schemas/GlyphColor"
+          }
+        }
+      },
+      "GlyphBits": {
+        "type": "integer",
+        "description": "Row-major 5x5 grid as one integer. Bit 0 is the top left cell.",
+        "maximum": 33554431,
+        "minimum": 0
+      },
+      "GlyphColor": {
+        "type": "string",
+        "description": "One of the twelve palette colors. It serializes as the hex string the web\nuses, so a stored value and a rendered value never disagree.",
+        "enum": [
+          "#ffb000",
+          "#4fd1e0",
+          "#b48cff",
+          "#ff6b57",
+          "#9dff57",
+          "#ff5cc8",
+          "#cfe7ff",
+          "#ffd75c",
+          "#2dd4bf",
+          "#ff8c42",
+          "#7cc4ff",
+          "#7ef5c0"
+        ]
+      },
+      "Handle": {
+        "type": "string",
+        "maxLength": 20,
+        "minLength": 3,
+        "pattern": "^[A-Za-z0-9_.-]+$"
+      },
+      "Health": {
+        "type": "object",
+        "required": [
+          "status",
+          "version"
+        ],
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          }
+        }
+      },
+      "LoginRequest": {
+        "type": "object",
+        "description": "Request body of `POST /api/auth/login`.",
+        "required": [
+          "handle",
+          "password"
+        ],
+        "properties": {
+          "handle": {
+            "$ref": "#/components/schemas/Handle"
+          },
+          "password": {
+            "$ref": "#/components/schemas/Password"
+          }
+        },
+        "additionalProperties": false
+      },
+      "Paginated_Player": {
+        "type": "object",
+        "description": "One page of results, and the totals a client needs for a pager.",
+        "required": [
+          "items",
+          "total",
+          "page",
+          "pageSize",
+          "totalPages"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "description": "A player, as the API shows it to anyone. It holds no credential.",
+              "required": [
+                "id",
+                "handle",
+                "glyph",
+                "role",
+                "createdAt"
+              ],
+              "properties": {
+                "createdAt": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "glyph": {
+                  "$ref": "#/components/schemas/Glyph"
+                },
+                "handle": {
+                  "$ref": "#/components/schemas/Handle"
+                },
+                "id": {
+                  "$ref": "#/components/schemas/PlayerId"
+                },
+                "role": {
+                  "$ref": "#/components/schemas/Role"
+                }
+              }
+            }
+          },
+          "page": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 1
+          },
+          "pageSize": {
+            "type": "integer",
+            "format": "int32",
+            "maximum": 100,
+            "minimum": 1
+          },
+          "total": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Every row that matches, ignoring the window.",
+            "minimum": 0
+          },
+          "totalPages": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          }
+        }
+      },
+      "Password": {
+        "type": "string",
+        "format": "password",
+        "maxLength": 128,
+        "minLength": 8
+      },
+      "PasswordChange": {
+        "type": "object",
+        "description": "Request body of `POST /api/me/password`.",
+        "required": [
+          "currentPassword",
+          "newPassword"
+        ],
+        "properties": {
+          "currentPassword": {
+            "$ref": "#/components/schemas/Password"
+          },
+          "newPassword": {
+            "$ref": "#/components/schemas/Password"
+          }
+        },
+        "additionalProperties": false
+      },
+      "Player": {
+        "type": "object",
+        "description": "A player, as the API shows it to anyone. It holds no credential.",
+        "required": [
+          "id",
+          "handle",
+          "glyph",
+          "role",
+          "createdAt"
+        ],
+        "properties": {
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "glyph": {
+            "$ref": "#/components/schemas/Glyph"
+          },
+          "handle": {
+            "$ref": "#/components/schemas/Handle"
+          },
+          "id": {
+            "$ref": "#/components/schemas/PlayerId"
+          },
+          "role": {
+            "$ref": "#/components/schemas/Role"
+          }
+        }
+      },
+      "PlayerId": {
+        "type": "string",
+        "format": "uuid"
+      },
+      "Role": {
+        "type": "string",
+        "description": "What a player may do. Admins reach the backoffice and manage players.",
+        "enum": [
+          "user",
+          "admin"
+        ]
+      },
+      "RoleUpdate": {
+        "type": "object",
+        "description": "Request body of `PATCH /api/admin/players/{id}`.",
+        "required": [
+          "role"
+        ],
+        "properties": {
+          "role": {
+            "$ref": "#/components/schemas/Role"
+          }
+        },
+        "additionalProperties": false
+      },
+      "SignupRequest": {
+        "type": "object",
+        "description": "Request body of `POST /api/auth/signup`.",
+        "required": [
+          "handle",
+          "password"
+        ],
+        "properties": {
+          "handle": {
+            "$ref": "#/components/schemas/Handle"
+          },
+          "password": {
+            "$ref": "#/components/schemas/Password"
+          }
+        },
+        "additionalProperties": false
+      },
+      "TemporaryPassword": {
+        "type": "object",
+        "description": "The answer to an admin password reset. Shown once, never stored in clear, and\nnever printed: `Debug` redacts it like [`Password`].",
+        "required": [
+          "temporaryPassword"
+        ],
+        "properties": {
+          "temporaryPassword": {
+            "type": "string"
+          }
+        }
+      },
+      "TokenResponse": {
+        "type": "object",
+        "description": "The answer to a signup or a login. The token is a bearer JWT.",
+        "required": [
+          "token",
+          "expiresAt"
+        ],
+        "properties": {
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "token": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "securitySchemes": {
+      "bearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "auth",
+      "description": "Signup and login"
+    },
+    {
+      "name": "players",
+      "description": "Public player data"
+    },
+    {
+      "name": "admin",
+      "description": "Backoffice, admins only"
+    },
+    {
+      "name": "health",
+      "description": "Liveness and readiness"
+    }
+  ]
+}

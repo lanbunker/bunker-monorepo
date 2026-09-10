@@ -14,8 +14,8 @@ use bunker_models::{GLYPH_CELLS, GLYPH_SIZE, Glyph, GlyphBits, GlyphColor, gener
 #[test]
 fn known_handles_produce_the_same_marks_as_the_web_renderer() {
     let cases = [
-        ("dave", 4_554_623, GlyphColor::Gold),
-        ("ziopera", 18_404_923, GlyphColor::Coral),
+        ("dave", 4_554_623, GlyphColor::Coral),
+        ("ziopera", 18_404_923, GlyphColor::Gold),
         ("mortadella", 32_516_768, GlyphColor::Amber),
     ];
 
@@ -103,7 +103,7 @@ fn a_glyph_serializes_with_the_hex_color_the_web_uses() {
     let json = serde_json::to_value(generate_glyph("dave")).unwrap();
 
     assert_eq!(json["bits"], 4_554_623);
-    assert_eq!(json["color"], "#ffd75c");
+    assert_eq!(json["color"], "#ff6b57");
 
     let parsed: Glyph = serde_json::from_value(json).unwrap();
     assert_eq!(parsed, generate_glyph("dave"));
@@ -115,4 +115,22 @@ fn every_color_round_trips_through_its_hex_value() {
         assert_eq!(GlyphColor::from_hex(color.hex()), Some(color));
     }
     assert_eq!(GlyphColor::from_hex("#000000"), None);
+}
+
+/// Similar handles must not all land on one color. The low bits of the grid hash
+/// did that, so the color has its own hash.
+#[test]
+fn similar_handles_spread_over_the_palette() {
+    let colors: std::collections::BTreeSet<_> = [
+        "test", "test1", "test2", "test3", "root", "dave", "luca", "anna",
+    ]
+    .iter()
+    .map(|h| generate_glyph(h).color.hex())
+    .collect();
+
+    assert!(
+        colors.len() >= 4,
+        "only {} colors for eight handles",
+        colors.len()
+    );
 }

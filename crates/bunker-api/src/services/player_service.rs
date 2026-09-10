@@ -1,4 +1,4 @@
-use bunker_models::{Handle, Player, PlayerId};
+use bunker_models::{Handle, PageQuery, Paginated, Player, PlayerId, Role};
 
 use crate::storage::PlayerStorage;
 
@@ -21,15 +21,35 @@ impl PlayerService {
             .ok_or_else(|| ServiceError::PlayerNotFound(handle.clone()))
     }
 
-    pub async fn get_by_id(&self, id: PlayerId) -> Result<Player, ServiceError> {
+    pub async fn list(&self, query: PageQuery) -> Result<Paginated<Player>, ServiceError> {
+        Ok(self.storage.list(query).await?)
+    }
+
+    /// `actor` is the admin doing it. Nobody changes their own role, so the last
+    /// admin cannot lock the crew out by accident.
+    pub async fn set_role(
+        &self,
+        actor: PlayerId,
+        id: PlayerId,
+        role: Role,
+    ) -> Result<Player, ServiceError> {
+        if actor == id {
+            return Err(ServiceError::SelfAction);
+        }
         self.storage
-            .get_by_id(id)
+            .set_role(id, role)
             .await?
             .ok_or(ServiceError::PlayerIdNotFound(id))
     }
 
-    pub async fn list(&self) -> Result<Vec<Player>, ServiceError> {
-        Ok(self.storage.list().await?)
+    /// Idempotent. A delete of a player that is already absent is a success.
+    pub async fn delete(&self, actor: PlayerId, id: PlayerId) -> Result<(), ServiceError> {
+        if actor == id {
+            return Err(ServiceError::SelfAction);
+        }
+        self.storage.delete(id).await?;
+
+        Ok(())
     }
 
     pub async fn check_ready(&self) -> Result<(), ServiceError> {

@@ -6,6 +6,7 @@ use axum::http::StatusCode;
 use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
 use serde::Serialize;
+use utoipa::ToSchema;
 
 use crate::services::{ErrorCode, ServiceError};
 
@@ -21,8 +22,9 @@ pub struct ApiError {
     cause: Option<String>,
 }
 
-#[derive(Debug, Serialize)]
-struct ApiErrorBody<'error> {
+/// The one shape every failure has on the wire.
+#[derive(Debug, Serialize, ToSchema)]
+pub struct ApiErrorBody<'error> {
     code: ErrorCode,
     message: &'error str,
     status: u16,

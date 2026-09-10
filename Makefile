@@ -1,4 +1,4 @@
-.PHONY: help install-cli db db-reset migration migrate schema dev run test lint fmt checklist web-dev web-build web-check
+.PHONY: help install-cli db db-reset migration migrate schema admin openapi api-types dev run test lint fmt checklist web-dev web-build web-check web-e2e
 
 # `.env` is the one place the URL lives. The sqlx macros compile each query
 # against this database, so `test` and `lint` make sure it exists first.
@@ -14,9 +14,9 @@ DB_FILE := $(firstword $(subst ?, ,$(patsubst sqlite://%,%,$(DATABASE_URL))))
 SQLX := DATABASE_URL="$(DATABASE_URL)" sqlx
 
 help:
-	@grep -E '^[a-z-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-14s %s\n", $$1, $$2}'
+	@grep -hE '^[a-z-]+:.*?## .*$$' $(firstword $(MAKEFILE_LIST)) | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-14s %s\n", $$1, $$2}'
 
-install-cli: ## Install the sqlx CLI with SQLite support (needed for migrations and prepare)
+install-cli: ## Install the sqlx CLI with SQLite support (needed for migrations)
 	cargo install sqlx-cli --no-default-features --features sqlite,rustls
 
 db: ## Create the local database and apply every migration
@@ -47,6 +47,19 @@ schema: ## Write crates/bunker-api/schema.sql from the local database
 		"select sql || ';' || char(10) from sqlite_master where sql is not null and name not like 'sqlite_%' and name != '_sqlx_migrations' order by name" \
 		>> $(SCHEMA)
 
+admin: $(DB_FILE) ## Promote a player to admin: make admin handle=dave
+	@test -n "$(handle)" || (echo "usage: make admin handle=dave" && exit 1)
+	sqlite3 -cmd ".parameter set :handle '$(handle)'" $(DB_FILE) "update players set role = 'admin' where handle = :handle collate nocase; select changes() || ' player(s) promoted';"
+
+OPENAPI := $(API_DIR)/openapi.json
+
+openapi: $(DB_FILE) ## Write crates/bunker-api/openapi.json from the route annotations
+	cargo run -q -p bunker-api -- openapi > $(OPENAPI)
+
+api-types: openapi ## Generate web/src/lib/api-types.d.ts from openapi.json
+	pnpm -C web exec openapi-typescript ../$(OPENAPI) -o src/lib/api-types.d.ts
+	pnpm -C web exec oxfmt src/lib/api-types.d.ts
+
 dev: ## Build and restart the API after each save (needs cargo install cargo-watch)
 	cargo watch --why --clear --exec 'run -p bunker-api'
 
@@ -76,6 +89,11 @@ web-dev: ## Start the Astro dev server
 web-build: ## Build the Astro site
 	pnpm -C web build
 
-web-check: ## Format check and build for the site
+web-check: ## Format check, lint, type check and build for the site
 	pnpm -C web exec oxfmt --check
+	pnpm -C web lint
+	pnpm -C web exec astro check
 	pnpm -C web build
+
+web-e2e: $(DB_FILE) ## Playwright end to end tests against a fresh API and the dev site
+	pnpm -C web exec playwright test

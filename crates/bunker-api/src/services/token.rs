@@ -16,6 +16,14 @@ pub struct TokenIssuer {
     ttl: Duration,
 }
 
+/// A token that passed the signature and expiry checks.
+#[derive(Debug, Clone, Copy)]
+pub struct VerifiedToken {
+    pub player: PlayerId,
+    /// Unix seconds. Compared with the last password change.
+    pub issued_at: i64,
+}
+
 /// `sub` is the player id, `exp` and `iat` are Unix seconds.
 #[derive(Debug, Serialize, Deserialize)]
 struct Claims {
@@ -55,7 +63,7 @@ impl TokenIssuer {
     /// A token from another issuer, an altered token and an expired token all
     /// fail here. The message is one message, so a caller learns nothing about
     /// which check failed.
-    pub fn verify(&self, token: &str) -> Result<PlayerId, ServiceError> {
+    pub fn verify(&self, token: &str) -> Result<VerifiedToken, ServiceError> {
         let mut validation = Validation::new(Algorithm::HS256);
         validation.set_required_spec_claims(&["exp", "sub"]);
         // The default gives a client one minute after `exp`. A token is valid
@@ -65,7 +73,10 @@ impl TokenIssuer {
         let data = jsonwebtoken::decode::<Claims>(token, &self.decoding, &validation)
             .map_err(ServiceError::invalid_token)?;
 
-        Ok(data.claims.sub)
+        Ok(VerifiedToken {
+            player: data.claims.sub,
+            issued_at: data.claims.iat,
+        })
     }
 }
 

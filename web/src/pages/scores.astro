@@ -1,14 +1,4 @@
 ---
-import Panel from "../components/ui/Panel.astro"
-import Prompt from "../components/ui/Prompt.astro"
-import Layout from "../layouts/Layout.astro"
+// The section was renamed. Old links keep working.
+return Astro.redirect("/players", 301)
 ---
-
-<Layout title="SCORES//LAN_BUNKER" active="scores">
-  <Prompt command="cat ./scores.db" comment="all time" />
-
-  <Panel tone="muted" class="text-center">
-    <p class="text-xs tracking-wider text-dim">{"// coming soon"}</p>
-    <p class="mt-2 text-2xs text-mute">player profiles, karma and all-time rankings.</p>
-  </Panel>
-</Layout>

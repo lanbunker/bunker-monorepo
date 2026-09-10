@@ -1,76 +1,71 @@
 ---
-// MOCK: UI preview only. Data is hardcoded, there is no backend and no login yet.
-import Badge from "../../components/ui/Badge.astro"
-import Button from "../../components/ui/Button.astro"
 import Glyph from "../../components/ui/Glyph.astro"
 import Panel from "../../components/ui/Panel.astro"
 import Prompt from "../../components/ui/Prompt.astro"
-import { players, totalKarma } from "../../data/mock-players"
 import Layout from "../../layouts/Layout.astro"
-import { rankFor } from "../../lib/rank"
+import Pager from "../../components/ui/Pager.astro"
+import { apiClient } from "../../lib/api"
+import { formatDate } from "../../lib/dates"
+import { PAGE_SIZE, pageFrom } from "../../lib/paging"
 
-const roster = players
-  .map(p => ({ player: p, karma: totalKarma(p), rank: rankFor(totalKarma(p)).current }))
-  .sort((a, b) => b.karma - a.karma)
+const page = pageFrom(Astro.url)
+const { data, error } = await apiClient()
+  .GET("/api/players", { params: { query: { page, pageSize: PAGE_SIZE } } })
+  .catch(() => ({ data: undefined, error: undefined }))
+if (data && page > data.totalPages && data.totalPages > 0) {
+  return Astro.redirect(`/players?page=${data.totalPages}`)
+}
+const players = data?.items
+const offset = (page - 1) * PAGE_SIZE
 ---
 
-<Layout title="PLAYERS//LAN_BUNKER" active="scores" noindex>
-  <Prompt command="ls /players" comment={`${roster.length} enlisted · mock data`} />
+<Layout title="PLAYERS//LAN_BUNKER" active="players">
+  <Prompt command="ls /players" comment={data ? `${data.total} enlisted` : "offline"} />
 
   <Panel>
-    <table class="w-full border-collapse text-xs">
-      <thead>
-        <tr class="text-left text-2xs tracking-wider text-dim">
-          <th class="w-[8%] pb-2 font-normal">#</th>
-          <th class="w-[47%] pb-2 font-normal">player</th>
-          <th class="w-[25%] pb-2 font-normal">rank</th>
-          <th class="w-[20%] pb-2 text-right font-normal">karma</th>
-        </tr>
-      </thead>
-      <tbody>
-        {
-          roster.map(({ player, karma, rank }, i) => (
-            <tr class="border-t border-faint hover:bg-faint/40">
-              <td class="py-2 text-mute tabular-nums">{String(i + 1).padStart(2, "0")}</td>
-              <td class="py-2">
-                <a
-                  href={`/players/${player.handle}`}
-                  class="inline-flex items-center gap-2 no-underline text-bright hover:text-accent"
-                >
-                  <Glyph glyph={player.glyph} size="1.1em" />
-                  {player.handle}
-                </a>
-              </td>
-              <td class="py-2 text-dim">[{rank.name}]</td>
-              <td class="py-2 text-right text-accent tabular-nums">{karma.toLocaleString("en-US")}</td>
+    {
+      !players ? (
+        <p class="text-xs text-alert">{error?.message ?? "the player database is unreachable."}</p>
+      ) : data.total === 0 ? (
+        <p class="text-xs text-dim">no players yet. <a href="/signup" class="text-accent">be the first →</a></p>
+      ) : (
+        <table class="w-full border-collapse text-xs">
+          <thead>
+            <tr class="text-left text-2xs tracking-wider text-dim">
+              <th class="w-[8%] pb-2 font-normal">#</th>
+              <th class="w-[52%] pb-2 font-normal">player</th>
+              <th class="w-[15%] pb-2 font-normal">role</th>
+              <th class="w-[25%] pb-2 text-right font-normal">enlisted</th>
             </tr>
-          ))
-        }
-      </tbody>
-    </table>
+          </thead>
+          <tbody>
+            {players.map((player, i) => (
+              <tr class="border-t border-faint hover:bg-faint/40">
+                <td class="py-2 text-mute tabular-nums">{String(offset + i + 1).padStart(2, "0")}</td>
+                <td class="py-2">
+                  <a
+                    href={`/players/${player.handle}`}
+                    class="inline-flex items-center gap-2 no-underline text-bright hover:text-accent"
+                  >
+                    <Glyph glyph={player.glyph} size="1.1em" />
+                    {player.handle}
+                  </a>
+                </td>
+                <td class:list={["py-2", player.role === "admin" ? "text-warn" : "text-dim"]}>{player.role}</td>
+                <td class="py-2 text-right text-dim">{formatDate(new Date(player.createdAt))}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )
+    }
+    {data && <Pager page={page} totalPages={data.totalPages} total={data.total} href="/players" noun="player" />}
   </Panel>
 
-  <Prompt command="cat /players/glyphs" comment="the same mark at every size" />
+  <Prompt command="cat ./scores.db" comment="all time" />
 
-  <Panel>
-    <div class="flex flex-wrap items-end gap-6">
-      {
-        players.map(p => (
-          <div class="flex flex-col items-center gap-2">
-            <Glyph glyph={p.glyph} size="4rem" framed />
-            <Glyph glyph={p.glyph} size="1.5rem" />
-            <span class="text-xs text-ink">
-              <Glyph glyph={p.glyph} /> {p.handle}
-            </span>
-          </div>
-        ))
-      }
-    </div>
+  <Panel tone="muted" class="text-center">
+    <p class="text-xs tracking-wider text-dim">{"// coming soon"}</p>
+    <p class="mt-2 text-2xs text-mute">records, tournaments and all-time rankings.</p>
   </Panel>
-
-  <div class="mt-6 flex flex-wrap items-center gap-3">
-    <Button href="/players/login" variant="ghost">LOGIN</Button>
-    <Badge tone="warn">preview</Badge>
-    <span class="text-2xs text-mute">hidden page. not linked from the nav.</span>
-  </div>
 </Layout>

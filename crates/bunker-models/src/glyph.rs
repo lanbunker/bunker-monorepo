@@ -1,5 +1,6 @@
 use nutype::nutype;
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 
 pub const GLYPH_SIZE: usize = 5;
 
@@ -9,12 +10,15 @@ const HALF_COLUMNS: usize = 3;
 const CENTER_COLUMN: usize = 2;
 const MIN_LIT_CELLS: usize = 7;
 const CORNERS: [usize; 4] = [0, 4, 20, 24];
-const COLOR_COUNT: u32 = 8;
+const COLOR_COUNT: u32 = 12;
+/// Salt for the color hash. The low bits of the grid hash cluster for similar
+/// handles, so the color comes from its own hash.
+const COLOR_SALT: &str = "/color";
 const _: () = assert!(GLYPH_COLORS.len() == COLOR_COUNT as usize);
 
 /// Player colors. Each one reads on the dark background at small and large sizes.
 /// The order is part of the algorithm: the hash selects by index.
-pub const GLYPH_COLORS: [GlyphColor; 8] = [
+pub const GLYPH_COLORS: [GlyphColor; 12] = [
     GlyphColor::Amber,
     GlyphColor::Cyan,
     GlyphColor::Violet,
@@ -23,6 +27,10 @@ pub const GLYPH_COLORS: [GlyphColor; 8] = [
     GlyphColor::Magenta,
     GlyphColor::Ice,
     GlyphColor::Gold,
+    GlyphColor::Teal,
+    GlyphColor::Orange,
+    GlyphColor::Sky,
+    GlyphColor::Mint,
 ];
 
 /// The row-major grid as one integer. Bit `i` is cell `i`, and bit 0 is the top
@@ -44,9 +52,9 @@ pub const GLYPH_COLORS: [GlyphColor; 8] = [
 )]
 pub struct GlyphBits(u32);
 
-/// One of the eight palette colors. It serializes as the hex string the web
+/// One of the twelve palette colors. It serializes as the hex string the web
 /// uses, so a stored value and a rendered value never disagree.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, ToSchema)]
 pub enum GlyphColor {
     #[serde(rename = "#ffb000")]
     Amber,
@@ -64,6 +72,14 @@ pub enum GlyphColor {
     Ice,
     #[serde(rename = "#ffd75c")]
     Gold,
+    #[serde(rename = "#2dd4bf")]
+    Teal,
+    #[serde(rename = "#ff8c42")]
+    Orange,
+    #[serde(rename = "#7cc4ff")]
+    Sky,
+    #[serde(rename = "#7ef5c0")]
+    Mint,
 }
 
 impl GlyphColor {
@@ -77,6 +93,10 @@ impl GlyphColor {
             Self::Magenta => "#ff5cc8",
             Self::Ice => "#cfe7ff",
             Self::Gold => "#ffd75c",
+            Self::Teal => "#2dd4bf",
+            Self::Orange => "#ff8c42",
+            Self::Sky => "#7cc4ff",
+            Self::Mint => "#7ef5c0",
         }
     }
 
@@ -88,7 +108,7 @@ impl GlyphColor {
 
 /// What the players table stores: the grid and the color. Generated one time at
 /// signup and then read, never recomputed.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, ToSchema)]
 pub struct Glyph {
     pub bits: GlyphBits,
     pub color: GlyphColor,
@@ -175,8 +195,9 @@ pub fn generate_glyph(seed: &str) -> Glyph {
     // 25 cells never exceed the 25 bit limit, so the validation cannot fail. The
     // default keeps the function total without a panic.
     let bits = GlyphBits::try_new(raw).unwrap_or_default();
+    let color_hash = fnv1a(&format!("{seed}{COLOR_SALT}"));
     let color = GLYPH_COLORS
-        .get(usize::try_from(hash % COLOR_COUNT).unwrap_or_default())
+        .get(usize::try_from(color_hash % COLOR_COUNT).unwrap_or_default())
         .copied()
         .unwrap_or(GlyphColor::Amber);
 

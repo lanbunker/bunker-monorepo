@@ -1,25 +1,29 @@
 ---
 import "../styles/global.css"
 import { getCollection } from "astro:content"
+import Button from "../components/ui/Button.astro"
+import Glyph from "../components/ui/Glyph.astro"
 import { formatEurDate, parseEurDate } from "../lib/dates"
 
-type Section = "home" | "events" | "tournaments" | "scores" | "media" | "shop" | "about"
+type Section = "home" | "events" | "tournaments" | "players" | "media" | "shop" | "about"
 
 interface Props {
   title?: string
-  active: Section
+  /** The nav item to highlight. Account and player pages highlight none. */
+  active?: Section
   /** Hidden preview pages stay out of search engines. */
   noindex?: boolean
 }
 
 const { title = "LAN BUNKER", active, noindex = false } = Astro.props
+const player = Astro.locals.player
 const description = "LAN BUNKER, a recurring local multiplayer event blending music and gaming."
 
 const nav: { key: Section; label: string; href: string }[] = [
   { key: "home", label: "HOME", href: "/" },
   { key: "events", label: "EVENTS", href: "/events" },
   { key: "tournaments", label: "TOURNAMENTS", href: "/tournaments" },
-  { key: "scores", label: "SCORES", href: "/scores" },
+  { key: "players", label: "PLAYERS", href: "/players" },
   { key: "media", label: "MEDIA", href: "/media" },
   { key: "shop", label: "SHOP", href: "/shop" },
   { key: "about", label: "ABOUT", href: "/about" },
@@ -72,13 +76,30 @@ const activeIndex = nav.findIndex(item => item.key === active)
             aria-hidden="true"
           ></span>
         </a>
-        {
-          Number.isFinite(firstEventTs) && (
-            <span class="text-2xs tracking-wider text-dim" data-since={firstEventTs}>
-              uptime <span id="uptime" class="text-ink tabular-nums" />
-            </span>
-          )
-        }
+        <div class="flex items-center gap-4 text-2xs tracking-wider text-dim">
+          {
+            Number.isFinite(firstEventTs) && (
+              <span data-since={firstEventTs} class="hidden min-[35rem]:inline">
+                uptime <span id="uptime" class="text-ink tabular-nums" />
+              </span>
+            )
+          }
+          {
+            player ? (
+              <a
+                href="/profile"
+                class="inline-flex items-center gap-2 border px-2 py-0.5 text-xs no-underline hover:bg-faint"
+                style={`border-color:${player.glyph.color};color:${player.glyph.color}`}
+                title="your profile"
+              >
+                <Glyph glyph={player.glyph} size="1.2em" />
+                {player.handle}
+              </a>
+            ) : (
+              <Button href="/login" variant="ghost" size="sm">LOGIN</Button>
+            )
+          }
+        </div>
       </header>
 
       <nav
@@ -125,7 +146,8 @@ const activeIndex = nav.findIndex(item => item.key === active)
       <div class="flex items-stretch">
         <span class="flex items-center bg-accent px-2.5 text-black">LAN_BUNKER</span>
         <span class="flex items-center px-2.5">
-          [{activeIndex + 1}] <span class="ml-1 text-ink">{nav[activeIndex]?.label.toLowerCase()}</span>
+          {activeIndex >= 0 ? `[${activeIndex + 1}]` : "[~]"}
+          <span class="ml-1 text-ink">{nav[activeIndex]?.label.toLowerCase() ?? title.split("//")[0]?.toLowerCase()}</span>
         </span>
       </div>
       <div class="flex items-stretch">
@@ -181,11 +203,14 @@ const activeIndex = nav.findIndex(item => item.key === active)
       updateClock()
       setInterval(updateClock, 1000)
 
-      // Number keys jump between sections, like tmux windows.
+      // Number keys jump between sections, like tmux windows. Only when nothing
+      // has focus: a digit typed into any field, button or link stays there.
       document.addEventListener("keydown", e => {
         if (!/^[1-9]$/.test(e.key)) return
-        if (e.metaKey || e.ctrlKey || e.altKey || e.isComposing || e.repeat || e.defaultPrevented) return
-        if (e.target instanceof HTMLElement && e.target.closest("input, textarea, select, [contenteditable]")) return
+        if (e.metaKey || e.ctrlKey || e.altKey || e.shiftKey || e.isComposing || e.repeat) return
+        if (e.defaultPrevented) return
+        const focused = document.activeElement
+        if (focused && focused !== document.body && focused !== document.documentElement) return
         if (document.querySelector(".pswp--open")) return
         const link = document.querySelector<HTMLAnchorElement>(`[data-nav-index="${e.key}"]`)
         if (link) window.location.assign(link.href)

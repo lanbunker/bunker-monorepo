@@ -1,0 +1,77 @@
+---
+import { actions } from "astro:actions"
+import Button from "../components/ui/Button.astro"
+import Panel from "../components/ui/Panel.astro"
+import Prompt from "../components/ui/Prompt.astro"
+import Layout from "../layouts/Layout.astro"
+
+if (Astro.locals.player) return Astro.redirect("/profile")
+
+const result = Astro.getActionResult(actions.signup)
+if (result && !result.error) return Astro.redirect("/profile")
+---
+
+<Layout title="SIGNUP//LAN_BUNKER">
+  <Prompt command="useradd --create-home" comment="enlist in the bunker" />
+
+  <Panel class="max-w-[28rem]">
+    <form method="POST" action={actions.signup} class="flex flex-col gap-3 text-xs" autocomplete="on">
+      <label class="flex items-baseline gap-2">
+        <span class="w-24 shrink-0 text-dim">handle:</span>
+        <input
+          name="handle"
+          type="text"
+          required
+          minlength="3"
+          maxlength="20"
+          pattern="[A-Za-z0-9_.\-]+"
+          title="3 to 20 characters: letters, digits, _ . -"
+          autocomplete="username"
+          class="w-full border-b border-border bg-transparent py-1 text-ink outline-none focus:border-accent"
+        />
+      </label>
+      <label class="flex items-baseline gap-2">
+        <span class="w-24 shrink-0 text-dim">password:</span>
+        <input
+          name="password"
+          type="password"
+          required
+          minlength="8"
+          maxlength="128"
+          autocomplete="new-password"
+          class="w-full border-b border-border bg-transparent py-1 text-ink outline-none focus:border-accent"
+        />
+      </label>
+      <label class="flex items-baseline gap-2">
+        <span class="w-24 shrink-0 text-dim">repeat:</span>
+        <input
+          name="confirmPassword"
+          type="password"
+          required
+          minlength="8"
+          maxlength="128"
+          autocomplete="new-password"
+          class="w-full border-b border-border bg-transparent py-1 text-ink outline-none focus:border-accent"
+        />
+      </label>
+      <p class="text-2xs text-mute">
+        your glyph and color are generated from the handle. they never change.
+      </p>
+      {
+        result?.error && (
+          <p class="text-xs text-alert" role="alert">
+            {result.error.message}
+          </p>
+        )
+      }
+      <div class="mt-2 flex items-center gap-4">
+        <Button>ENLIST</Button>
+        <a href="/login" class="text-2xs text-dim no-underline hover:text-accent">have an account? login →</a>
+      </div>
+    </form>
+  </Panel>
+
+  <div class="mt-8">
+    <Button href="/" variant="ghost" size="sm">← HOME</Button>
+  </div>
+</Layout>

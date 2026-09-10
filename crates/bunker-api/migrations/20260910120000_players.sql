@@ -13,7 +13,8 @@ create table players (
     glyph_color   text not null
                   check (glyph_color in (
                       '#ffb000', '#4fd1e0', '#b48cff', '#ff6b57',
-                      '#9dff57', '#ff5cc8', '#cfe7ff', '#ffd75c'
+                      '#9dff57', '#ff5cc8', '#cfe7ff', '#ffd75c',
+                      '#2dd4bf', '#ff8c42', '#7cc4ff', '#7ef5c0'
                   )),
     -- Unix time in microseconds. An integer sorts correctly, a formatted text
     -- with a trimmed fraction does not.

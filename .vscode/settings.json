@@ -1,0 +1,20 @@
+{
+    // oxfmt formats the web code with web/.oxfmtrc.json, the same as `pnpm fmt`.
+    // oxlint runs on save with its default rules. The Astro extension formats
+    // .astro files, which oxfmt does not cover yet.
+    "oxc.fmt.enable": true,
+    "oxc.fmt.configPath": "web/.oxfmtrc.json",
+    "oxc.lint.run": "onSave",
+    "editor.formatOnSave": true,
+    "[typescript]": { "editor.defaultFormatter": "oxc.oxc-vscode" },
+    "[javascript]": { "editor.defaultFormatter": "oxc.oxc-vscode" },
+    "[json]": { "editor.defaultFormatter": "oxc.oxc-vscode" },
+    "[jsonc]": { "editor.defaultFormatter": "oxc.oxc-vscode" },
+    "[css]": { "editor.defaultFormatter": "oxc.oxc-vscode" },
+    "[astro]": { "editor.defaultFormatter": "astro-build.astro-vscode" },
+    "[rust]": { "editor.defaultFormatter": "rust-lang.rust-analyzer" },
+    "rust-analyzer.check.command": "clippy",
+    "rust-analyzer.check.extraArgs": ["--all-targets"],
+    "rust-analyzer.cargo.extraEnv": { "SQLX_OFFLINE": "false" },
+    "files.exclude": { "**/target": true, "**/.dev": true }
+}

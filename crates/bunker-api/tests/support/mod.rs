@@ -29,7 +29,7 @@ use axum::response::Response;
 use bunker_api::config::{AppEnv, DbConfig, JwtSecret, MaxConnections, resolve_app_config};
 use bunker_api::server::{Secrets, build_router};
 use bunker_api::storage::{connect, run_pending_migrations};
-use bunker_models::{Player, TokenResponse};
+use bunker_models::{Account, Player, Role, TokenResponse};
 use http_body_util::BodyExt as _;
 use serde::de::DeserializeOwned;
 use serde_json::{Value, json};
@@ -46,6 +46,7 @@ pub const PASSWORD: &str = "correct-horse-battery";
 /// A router, and the helpers that send requests to it.
 pub struct TestApi {
     router: Router,
+    pool: Option<bunker_api::storage::DbPool>,
     /// Removes the database file when the test ends.
     _dir: Option<TempDir>,
 }
@@ -66,6 +67,7 @@ impl TestApi {
 
         Self {
             router: build_router(pool, config, &test_secrets()),
+            pool: None,
             _dir: None,
         }
     }
@@ -84,7 +86,12 @@ impl TestApi {
         run_pending_migrations(&pool).await.unwrap();
 
         Self {
-            router: build_router(pool, resolve_app_config(AppEnv::Test), &test_secrets()),
+            router: build_router(
+                pool.clone(),
+                resolve_app_config(AppEnv::Test),
+                &test_secrets(),
+            ),
+            pool: Some(pool),
             _dir: Some(dir),
         }
     }
@@ -112,7 +119,39 @@ impl TestApi {
         let response = self.get_as("/api/me", &token.token).await;
         assert_eq!(response.status(), StatusCode::OK);
 
-        read_json(response).await
+        read_json::<Account>(response).await.player
+    }
+
+    pub async fn post_as(&self, path: &str, body: &Value, token: &str) -> Response {
+        let mut request = json_request(Method::POST, path, body);
+        request.headers_mut().insert(
+            header::AUTHORIZATION,
+            format!("Bearer {token}").parse().unwrap(),
+        );
+        self.send(request).await
+    }
+
+    /// Signs a player up and promotes them with SQL, the way `make admin` does.
+    /// Returns the bearer token.
+    pub async fn signup_admin(&self, handle: &str) -> String {
+        let token = self.signup(handle).await;
+        sqlx::query("update players set role = ?1 where handle = ?2 collate nocase")
+            .bind(Role::Admin.as_str())
+            .bind(handle)
+            .execute(self.pool.as_ref().expect("an admin needs a database"))
+            .await
+            .unwrap();
+
+        token.token
+    }
+
+    pub async fn patch_as(&self, path: &str, body: &Value, token: &str) -> Response {
+        let mut request = json_request(Method::PATCH, path, body);
+        request.headers_mut().insert(
+            header::AUTHORIZATION,
+            format!("Bearer {token}").parse().unwrap(),
+        );
+        self.send(request).await
     }
 
     pub async fn get(&self, path: &str) -> Response {

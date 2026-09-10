@@ -15,6 +15,12 @@
     --color-warn: #ffb000;
     --color-alert: #ff3b3b;
 
+    /* The backoffice palette. Amber on near black, so it never looks like the site. */
+    --color-admin-bg: #0a0800;
+    --color-admin-ink: #e8dcc0;
+    --color-admin-dim: #a89c80;
+    --color-admin-mute: #5e5644;
+
     --font-mono: "Courier New", Courier, "Lucida Console", monospace;
 
     /* Type scale in rem. Courier is light at small sizes, so 2xs = 11px, xs = 13px, sm = 15px. */
@@ -79,6 +85,13 @@ html {
 }
 ::-webkit-scrollbar-thumb:hover {
     background: var(--color-accent);
+}
+
+/* Preflight resets the cursor on buttons. A clickable control shows a hand. */
+button:not(:disabled),
+[role="button"]:not([aria-disabled="true"]),
+summary {
+    cursor: pointer;
 }
 
 /* Focus ring in brand color for keyboard users. */

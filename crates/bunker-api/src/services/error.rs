@@ -2,6 +2,7 @@ use std::error::Error as StdError;
 
 use bunker_models::Handle;
 use serde::Serialize;
+use utoipa::ToSchema;
 
 use crate::storage::StorageError;
 
@@ -11,7 +12,7 @@ use crate::storage::StorageError;
 /// Two steps make a response from an error: `ServiceError::public` below selects
 /// the code, and `From<ErrorCode> for StatusCode` in `server.rs` selects the
 /// status.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, ToSchema)]
 pub enum ErrorCode {
     GenericError,
     ServiceUnavailable,
@@ -20,6 +21,10 @@ pub enum ErrorCode {
     InvalidCredentials,
     /// The request had no valid bearer token.
     Unauthorized,
+    /// The caller is logged in and may not do this.
+    Forbidden,
+    /// The current password given for a change is wrong.
+    WrongPassword,
     /// The request did not reach a handler. The HTTP layer raises this code, but
     /// the code is here with the rest of the vocabulary.
     InvalidRequest,
@@ -48,6 +53,12 @@ pub enum ServiceError {
     #[error("the handle or the password is wrong")]
     InvalidCredentials,
 
+    #[error("the current password is wrong")]
+    WrongPassword,
+
+    #[error("an admin cannot change their own role or delete themself")]
+    SelfAction,
+
     #[error("the token is missing, expired or not signed by this server")]
     InvalidToken(#[source] Box<dyn StdError + Send + Sync>),
 
@@ -74,6 +85,11 @@ impl ServiceError {
             Self::InvalidCredentials => (
                 ErrorCode::InvalidCredentials,
                 Some("The handle or the password is wrong"),
+            ),
+            Self::SelfAction => (ErrorCode::Forbidden, None),
+            Self::WrongPassword => (
+                ErrorCode::WrongPassword,
+                Some("The current password is wrong"),
             ),
             Self::InvalidToken(_) => (
                 ErrorCode::Unauthorized,

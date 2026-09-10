@@ -1,0 +1,32 @@
+---
+import AdminLayout from "../../layouts/AdminLayout.astro"
+import { apiClient } from "../../lib/api"
+
+const player = Astro.locals.player
+if (player?.role !== "admin" || !Astro.locals.token) return Astro.rewrite("/404")
+
+// One row is enough: the total rides along with any page.
+const { data } = await apiClient(Astro.locals.token)
+  .GET("/api/admin/players", { params: { query: { page: 1, pageSize: 1 } } })
+  .catch(() => ({ data: undefined }))
+---
+
+<AdminLayout title="BACKOFFICE//overview" active="overview">
+  <h1 class="m-0 text-sm tracking-wider text-warn">root@bunker:~# status</h1>
+
+  <div class="mt-4 grid gap-4 min-[40rem]:grid-cols-2">
+    <div class="border border-warn/40 p-4">
+      <div class="text-2xs tracking-wider text-admin-dim">players</div>
+      <div class="mt-1 text-[1.75rem] leading-none text-warn">{data?.total ?? "?"}</div>
+    </div>
+    <div class="border border-warn/40 p-4">
+      <div class="text-2xs tracking-wider text-admin-dim">api</div>
+      <div class="mt-1 text-[1.75rem] leading-none text-warn">{data ? "up" : "down"}</div>
+    </div>
+  </div>
+
+  <p class="mt-6 text-xs text-admin-dim">
+    manage players under <a href="/admin/players" class="text-warn">players</a>. events, tournaments and
+    scores open as the backend grows.
+  </p>
+</AdminLayout>

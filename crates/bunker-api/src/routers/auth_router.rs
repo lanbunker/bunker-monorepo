@@ -4,7 +4,7 @@ use axum::routing::post;
 use axum::{Json, Router};
 use bunker_models::{LoginRequest, SignupRequest, TokenResponse};
 
-use crate::internal::http::{ApiError, ValidJson};
+use crate::internal::http::{ApiError, ApiErrorBody, ValidJson};
 use crate::services::AuthService;
 
 use super::AppState;
@@ -15,7 +15,18 @@ pub fn auth_router() -> Router<AppState> {
         .route("/api/auth/login", post(login))
 }
 
-async fn signup(
+#[utoipa::path(
+    post,
+    path = "/api/auth/signup",
+    tag = "auth",
+    request_body = SignupRequest,
+    responses(
+        (status = 201, body = TokenResponse),
+        (status = 409, body = ApiErrorBody),
+        (status = 422, body = ApiErrorBody),
+    )
+)]
+pub(super) async fn signup(
     State(auth): State<AuthService>,
     ValidJson(request): ValidJson<SignupRequest>,
 ) -> Result<(StatusCode, Json<TokenResponse>), ApiError> {
@@ -24,7 +35,18 @@ async fn signup(
     Ok((StatusCode::CREATED, Json(token)))
 }
 
-async fn login(
+#[utoipa::path(
+    post,
+    path = "/api/auth/login",
+    tag = "auth",
+    request_body = LoginRequest,
+    responses(
+        (status = 200, body = TokenResponse),
+        (status = 401, body = ApiErrorBody),
+        (status = 422, body = ApiErrorBody),
+    )
+)]
+pub(super) async fn login(
     State(auth): State<AuthService>,
     ValidJson(request): ValidJson<LoginRequest>,
 ) -> Result<Json<TokenResponse>, ApiError> {

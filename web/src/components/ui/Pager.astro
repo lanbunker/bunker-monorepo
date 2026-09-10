@@ -1,0 +1,37 @@
+---
+import Button from "./Button.astro"
+
+interface Props {
+  page: number
+  totalPages: number
+  total: number
+  /** The path the page links point at. The `page` query parameter is added. */
+  href: string
+  /** Singular noun for the count, such as "player". */
+  noun: string
+}
+
+const { page, totalPages, total, href, noun } = Astro.props
+const link = (to: number) => (to === 1 ? href : `${href}?page=${to}`)
+---
+
+{
+  totalPages > 1 && (
+    <nav aria-label="Pages" class="mt-4 flex flex-wrap items-center justify-between gap-3 text-2xs text-dim">
+      <span>
+        page <span class="text-ink">{page}</span> of <span class="text-ink">{totalPages}</span>
+        <span class="ml-2">
+          {total} {noun}{total === 1 ? "" : "s"}
+        </span>
+      </span>
+      <div class="flex items-center gap-2">
+        <Button href={link(page - 1)} variant="ghost" size="sm" disabled={page <= 1}>
+          ← PREV
+        </Button>
+        <Button href={link(page + 1)} variant="ghost" size="sm" disabled={page >= totalPages}>
+          NEXT →
+        </Button>
+      </div>
+    </nav>
+  )
+}

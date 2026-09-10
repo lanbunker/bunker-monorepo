@@ -14,11 +14,15 @@ CREATE TABLE players (
     glyph_color   text not null
                   check (glyph_color in (
                       '#ffb000', '#4fd1e0', '#b48cff', '#ff6b57',
-                      '#9dff57', '#ff5cc8', '#cfe7ff', '#ffd75c'
+                      '#9dff57', '#ff5cc8', '#cfe7ff', '#ffd75c',
+                      '#2dd4bf', '#ff8c42', '#7cc4ff', '#7ef5c0'
                   )),
     -- Unix time in microseconds. An integer sorts correctly, a formatted text
     -- with a trimmed fraction does not.
     created_at    integer not null
                   check (created_at > 0)
-) strict;
+, role text not null default 'user'
+    check (role in ('user', 'admin')), must_change_password integer not null default 0
+    check (must_change_password in (0, 1)), credentials_changed_at integer not null default 0
+    check (credentials_changed_at >= 0)) strict;
 

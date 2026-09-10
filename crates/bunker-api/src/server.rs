@@ -18,7 +18,9 @@ use crate::internal::http::{
     route_not_found, set_request_id, trace_requests,
 };
 use crate::internal::init_tracing;
-use crate::routers::{AppState, auth_router, health_router, player_router};
+use crate::routers::{
+    AppState, admin_router, auth_router, health_router, openapi_router, player_router,
+};
 use crate::services::{AuthService, ErrorCode, PasswordHasher, PlayerService, TokenIssuer};
 use crate::storage::{DbPool, PlayerStorage, connect, run_pending_migrations};
 
@@ -59,7 +61,9 @@ pub fn build_router(pool: DbPool, config: AppConfig, secrets: &Secrets) -> Route
     Router::new()
         .merge(auth_router())
         .merge(player_router())
+        .merge(admin_router())
         .merge(health_router())
+        .merge(openapi_router())
         .fallback(route_not_found)
         .method_not_allowed_fallback(method_not_allowed)
         // Innermost first. `propagate_request_id` is above the three layers that
@@ -92,6 +96,8 @@ impl From<ErrorCode> for StatusCode {
             ErrorCode::ItemNotFound | ErrorCode::RouteNotFound => Self::NOT_FOUND,
             ErrorCode::HandleTaken => Self::CONFLICT,
             ErrorCode::InvalidCredentials | ErrorCode::Unauthorized => Self::UNAUTHORIZED,
+            ErrorCode::Forbidden => Self::FORBIDDEN,
+            ErrorCode::WrongPassword => Self::BAD_REQUEST,
             ErrorCode::InvalidRequest => Self::BAD_REQUEST,
             ErrorCode::UnprocessableRequest => Self::UNPROCESSABLE_ENTITY,
             ErrorCode::UnsupportedMediaType => Self::UNSUPPORTED_MEDIA_TYPE,

@@ -1,5 +1,9 @@
-use bunker_models::{LoginRequest, PlayerId, SignupRequest, TokenResponse, generate_glyph};
+use bunker_models::{
+    Account, LoginRequest, Password, PasswordChange, PlayerId, SignupRequest, TemporaryPassword,
+    TokenResponse, generate_glyph,
+};
 use time::OffsetDateTime;
+use uuid::Uuid;
 
 use crate::storage::{Created, NewPlayer, PlayerStorage};
 
@@ -68,9 +72,82 @@ impl AuthService {
         }
     }
 
-    /// Checks the signature and the expiry. No database read: a deleted player
-    /// keeps a valid token until it expires, which the TTL bounds.
-    pub fn verify_token(&self, token: &str) -> Result<PlayerId, ServiceError> {
-        self.tokens.verify(token)
+    /// The current password must match. The new hash clears any pending reset and
+    /// kills every older token, so the caller gets a fresh one back.
+    pub async fn change_password(
+        &self,
+        id: PlayerId,
+        change: PasswordChange,
+    ) -> Result<TokenResponse, ServiceError> {
+        let credentials = self
+            .players
+            .credentials_by_id(id)
+            .await?
+            .ok_or(ServiceError::PlayerIdNotFound(id))?;
+
+        let valid = self
+            .hasher
+            .verify(change.current_password, credentials.password_hash)
+            .await?;
+        if !valid {
+            return Err(ServiceError::WrongPassword);
+        }
+
+        let hash = self.hasher.hash(change.new_password).await?;
+        if !self
+            .players
+            .set_password(id, &hash, false, OffsetDateTime::now_utc())
+            .await?
+        {
+            return Err(ServiceError::PlayerIdNotFound(id));
+        }
+
+        self.tokens.issue(id)
     }
+
+    /// Replaces the password with a random one and marks the account, so the
+    /// next login must change it. The clear text goes to the admin once.
+    pub async fn reset_password(&self, id: PlayerId) -> Result<TemporaryPassword, ServiceError> {
+        let temporary = Uuid::new_v4().simple().to_string();
+        let password = Password::try_new(temporary.clone()).map_err(ServiceError::crypto)?;
+        let hash = self.hasher.hash(password).await?;
+
+        if !self
+            .players
+            .set_password(id, &hash, true, OffsetDateTime::now_utc())
+            .await?
+        {
+            return Err(ServiceError::PlayerIdNotFound(id));
+        }
+
+        Ok(TemporaryPassword {
+            temporary_password: temporary,
+        })
+    }
+
+    /// Signature, expiry, then the account: a deleted player and a token issued
+    /// before the last password change are both refused as unauthorized.
+    pub async fn authenticate(&self, token: &str) -> Result<Account, ServiceError> {
+        let verified = self.tokens.verify(token)?;
+        let stored = self
+            .players
+            .get_by_id(verified.player)
+            .await?
+            .ok_or_else(|| ServiceError::invalid_token(StaleToken::UnknownPlayer))?;
+
+        if verified.issued_at < stored.credentials_changed_at {
+            return Err(ServiceError::invalid_token(StaleToken::PasswordChanged));
+        }
+
+        Ok(stored.account)
+    }
+}
+
+/// Why a well-formed token is refused. It goes to the log, never to the client.
+#[derive(Debug, thiserror::Error)]
+enum StaleToken {
+    #[error("the player no longer exists")]
+    UnknownPlayer,
+    #[error("the password changed after the token was issued")]
+    PasswordChanged,
 }

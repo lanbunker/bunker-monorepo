@@ -8,19 +8,30 @@
         "preview": "astro preview",
         "astro": "astro",
         "fmt": "oxfmt",
-        "optimize:imgs": "node scripts/optimize-imgs.mjs"
+        "optimize:imgs": "node scripts/optimize-imgs.mjs",
+        "check": "astro check",
+        "e2e": "playwright test",
+        "lint": "oxlint src e2e playwright.config.ts"
     },
     "dependencies": {
         "@astrojs/cloudflare": "^13.1.10",
         "@tailwindcss/vite": "^4.2.2",
         "astro": "^6.1.7",
+        "openapi-fetch": "^0.17.0",
         "photoswipe": "^5.4.4",
         "tailwindcss": "^4.2.2",
-        "wrangler": "^4.83.0"
+        "wrangler": "^4.83.0",
+        "zod": "^4.6.1"
     },
     "devDependencies": {
+        "@astrojs/check": "^0.9.10",
+        "@playwright/test": "^1.63.0",
+        "@types/node": "^22.20.2",
+        "openapi-typescript": "^7.13.0",
         "oxfmt": "^0.45.0",
-        "sharp": "^0.34.5"
+        "oxlint": "^1.82.0",
+        "sharp": "^0.34.5",
+        "typescript": "^5.9.3"
     },
     "engines": {
         "node": ">=22.12.0"

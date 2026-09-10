@@ -2,7 +2,7 @@ name: ci
 
 on:
     push:
-        branches: [main]
+        branches: [main, dev]
     pull_request:
 
 env:
@@ -69,4 +69,51 @@ jobs:
 
             - run: pnpm exec oxfmt --check
 
+            - run: pnpm lint
+
+            - run: pnpm exec astro check
+
             - run: pnpm build
+
+            # The TypeScript API types are generated from openapi.json and committed.
+            - name: Check the generated API types are current
+              run: |
+                  pnpm exec openapi-typescript ../crates/bunker-api/openapi.json -o /tmp/api-types.d.ts
+                  pnpm exec oxfmt /tmp/api-types.d.ts
+                  diff -u src/lib/api-types.d.ts /tmp/api-types.d.ts
+
+    e2e:
+        runs-on: ubuntu-latest
+        needs: [rust, web]
+        steps:
+            - uses: actions/checkout@v4
+
+            - uses: dtolnay/rust-toolchain@stable
+
+            - uses: Swatinem/rust-cache@v2
+
+            - uses: pnpm/action-setup@v4
+              with:
+                  package_json_file: web/package.json
+
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: 22
+                  cache: pnpm
+                  cache-dependency-path: web/pnpm-lock.yaml
+
+            # The API compiles against a migrated database, as in the rust job.
+            - name: Migrate a scratch database
+              run: |
+                  mkdir -p .dev
+                  for file in crates/bunker-api/migrations/*.sql; do sqlite3 .dev/bunker.db < "$file"; done
+
+            - run: pnpm install --frozen-lockfile
+              working-directory: web
+
+            - run: pnpm exec playwright install --with-deps chromium
+              working-directory: web
+
+            # Playwright builds and starts the API on its own database, then the site.
+            - run: pnpm exec playwright test
+              working-directory: web

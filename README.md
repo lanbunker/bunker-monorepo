@@ -13,6 +13,10 @@ crates/bunker-api      axum + sqlx + SQLite backend
 crates/bunker-cabd     Cabinet daemon for RetroPie boxes (empty for now)
 ```
 
+The site has signup and login, a public roster and player pages, a profile page,
+and a hidden `/admin` backoffice for admins. Players get a generated glyph and a
+color from their handle, stored at signup.
+
 The Rust side is one Cargo workspace. The site is a pnpm project inside `web/`
 with its own README. They meet over HTTP: the site calls the API server side, and
 the browser never talks to the API.
@@ -26,8 +30,16 @@ the database and run migrations.
 cp .env.template .env
 make install-cli
 make db
-make run
+make dev          # the API on :3000, restarts on save
+make web-dev      # the site on :4321, talks to :3000
+make admin handle=dave   # promote a player after signup
 ```
+
+An admin can reset a password from the backoffice. The player logs in with the
+temporary password and must choose a new one before any other page opens.
+
+The database is `.dev/bunker.db`, ignored by git and kept between runs. Delete it
+with `make db-reset`.
 
 ```bash
 curl -s localhost:3000/api/auth/signup -H 'content-type: application/json' \
@@ -90,11 +102,32 @@ or `test`.
 | --- | --- | --- | --- |
 | POST | `/api/auth/signup` | none | 201, token |
 | POST | `/api/auth/login` | none | 200, token |
-| GET | `/api/me` | bearer | the caller |
-| GET | `/api/players` | none | roster, newest first |
+| GET | `/api/me` | bearer | the caller and whether a password change is due |
+| POST | `/api/me/password` | bearer | change the password, current one required. Answers a fresh token, every older token dies |
+| GET | `/api/players` | none | roster, newest first. `?page=1&pageSize=20`, pageSize up to 100 |
 | GET | `/api/players/{handle}` | none | one player |
+| GET | `/api/admin/players` | admin | every player, same paging as `/api/players` |
+| PATCH | `/api/admin/players/{id}` | admin | set the role |
+| POST | `/api/admin/players/{id}/password-reset` | admin | temporary password, forces a change at login |
+| DELETE | `/api/admin/players/{id}` | admin | remove a player |
+| GET | `/api/openapi.json` | none | the contract |
 | GET | `/health/live` | none | process is up, version |
 | GET | `/health/ready` | none | database answers |
+
+## End to end types
+
+The API describes itself with utoipa. `make api-types` writes
+`crates/bunker-api/openapi.json` from the route annotations and generates
+`web/src/lib/api-types.d.ts` from it. The site calls the API through
+`openapi-fetch`, so every path, body and response is typed from the same source.
+A Rust test fails when the committed document is stale, and CI fails when the
+generated types are stale.
+
+## Tests
+
+`make checklist` runs the Rust suite. `make web-check` type checks and builds the
+site. `make web-e2e` runs Playwright against a fresh API on `.dev/e2e.db` and the
+dev site: signup, login, roster, profile, 404 and the backoffice.
 
 ## Change the schema
 

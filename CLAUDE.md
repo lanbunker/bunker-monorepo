@@ -19,7 +19,9 @@ crates/bunker-cabd    The cabinet daemon. Empty for now.
 ```
 
 The Rust side is a Cargo workspace. The site is a pnpm project inside `web/`.
-The two meet over HTTP: the site calls the API server side.
+The two meet over HTTP: the site calls the API server side through a client
+generated from `crates/bunker-api/openapi.json`. The browser never talks to the
+API. The session is a cookie the site sets, holding the API bearer token.
 
 ## Critical rules
 
@@ -40,8 +42,8 @@ The two meet over HTTP: the site calls the API server side.
 4. **ALWAYS** grep for each caller and each reference before you change an item.
    Do the full audit on the first pass.
 5. **ALWAYS** connect a feature from end to end: route, handler, service, storage,
-   migration, `schema.sql`. Never filter, sort or paginate in a handler if the
-   query can do it.
+   migration, `schema.sql`, `openapi.json`, `web/src/lib/api-types.d.ts`. Never
+   filter, sort or paginate in a handler if the query can do it.
 6. **NEVER** edit a migration that is applied, and never edit `schema.sql` by
    hand. See *Change the schema*.
 7. **NEVER** write a query outside `storage/`, and never build SQL from a value a
@@ -68,7 +70,9 @@ creates it with `make db` when it is missing. The tests need no Docker and no
 service. Each test creates its own SQLite file in a temporary directory and
 migrates it.
 
-For a change under `web/`, follow `web/CLAUDE.md` and run `make web-check`.
+For a change under `web/`, follow `web/CLAUDE.md` and run `make web-check`. A
+change to a user flow also needs `make web-e2e`, which runs Playwright against a
+fresh API.
 
 ## Layers in `bunker-api`
 
@@ -185,10 +189,15 @@ not compile until you classify it.
 5. **Router.** Write a handler that takes `ValidJson`, `ValidQuery`, `ValidPath` or
    `Authenticated`. Never use the axum `Query` or `Path`, because `clippy.toml`
    rejects them. Ask for the service through `State<…>`.
-6. **Tests.** Put a boundary rejection in `tests/http_contract_test.rs`, and put
+6. **Document.** Put `#[utoipa::path]` on the handler and list it in
+   `routers/openapi.rs`. A new wire type derives `ToSchema`, or gets an impl in
+   `bunker-models/src/schema.rs` when it is a `nutype` newtype.
+7. **Tests.** Put a boundary rejection in `tests/http_contract_test.rs`, and put
    behaviour in the `tests/<feature>_api_test.rs` file. Use `support::TestApi`
    for both, and assert the status and the `code` together with
    `support::assert_error`.
+8. **Generate.** Run `make api-types` and commit `openapi.json` and
+   `api-types.d.ts`. A test and CI fail when either is stale.
 
 ## Configuration
 

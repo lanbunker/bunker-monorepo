@@ -6,6 +6,10 @@
     "observability": {
         "enabled": true,
     },
+    // Where the Rust API answers. The production value comes with the tunnel.
+    "vars": {
+        "API_URL": "http://127.0.0.1:3000",
+    },
 
     // Uncomment when ready for D1
     // "d1_databases": [

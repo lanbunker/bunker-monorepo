@@ -1,33 +1,74 @@
 ---
-type Variant = "primary" | "ghost"
+type Variant = "primary" | "ghost" | "danger" | "warn"
+type Size = "md" | "sm"
 
 interface Props {
-  href: string
+  /** With `href` this renders a link. Without it, a `<button type="submit">`. */
+  href?: string
   variant?: Variant
+  size?: Size
   external?: boolean
+  disabled?: boolean
+  title?: string
   class?: string
 }
 
-const { href, variant = "primary", external = false, class: className } = Astro.props
+const {
+  href,
+  variant = "primary",
+  size = "md",
+  external = false,
+  disabled = false,
+  title,
+  class: className,
+} = Astro.props
 
 const variantClass: Record<Variant, string> = {
   primary: "bg-accent text-black hover:bg-bright",
   ghost: "border border-border text-ink hover:border-accent hover:text-accent",
+  danger: "border border-alert/60 text-alert hover:bg-alert hover:text-black",
+  warn: "border border-warn/60 text-warn hover:bg-warn hover:text-black",
 }
+
+const sizeClass: Record<Size, string> = {
+  md: "px-4 py-1.5 text-xs",
+  sm: "px-2 py-0.5 text-2xs",
+}
+
+const classes = [
+  "inline-flex cursor-pointer items-center gap-2 font-bold tracking-wide no-underline",
+  "disabled:cursor-not-allowed disabled:opacity-30 aria-disabled:cursor-not-allowed aria-disabled:opacity-30",
+  variantClass[variant],
+  sizeClass[size],
+  className,
+]
 ---
 
-<a
-  href={href}
-  target={external ? "_blank" : undefined}
-  rel={external ? "noopener noreferrer" : undefined}
-  class:list={[
-    "inline-flex items-center gap-2 px-4 py-1.5 text-xs font-bold tracking-wide no-underline",
-    variantClass[variant],
-    className,
-  ]}
->
-  <span aria-hidden="true">[</span>
-  <span class="btn-label"><slot /></span>
-  {external && <span class="sr-only">(opens in new tab)</span>}
-  <span aria-hidden="true">]</span>
-</a>
+{
+  href && disabled ? (
+    <span aria-disabled="true" title={title} class:list={classes}>
+      <span aria-hidden="true">[</span>
+      <span class="btn-label"><slot /></span>
+      <span aria-hidden="true">]</span>
+    </span>
+  ) : href ? (
+    <a
+      href={href}
+      target={external ? "_blank" : undefined}
+      rel={external ? "noopener noreferrer" : undefined}
+      title={title}
+      class:list={classes}
+    >
+      <span aria-hidden="true">[</span>
+      <span class="btn-label"><slot /></span>
+      {external && <span class="sr-only">(opens in new tab)</span>}
+      <span aria-hidden="true">]</span>
+    </a>
+  ) : (
+    <button type="submit" disabled={disabled} title={title} class:list={classes}>
+      <span aria-hidden="true">[</span>
+      <span class="btn-label"><slot /></span>
+      <span aria-hidden="true">]</span>
+    </button>
+  )
+}

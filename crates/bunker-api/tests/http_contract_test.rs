@@ -154,6 +154,38 @@ async fn a_path_that_is_not_a_handle_is_rejected() {
 }
 
 #[tokio::test]
+async fn page_zero_is_rejected() {
+    let response = TestApi::without_database()
+        .await
+        .get("/api/players?page=0")
+        .await;
+
+    assert_error(response, StatusCode::BAD_REQUEST, "InvalidRequest").await;
+}
+
+#[tokio::test]
+async fn a_page_size_past_the_maximum_is_rejected() {
+    let response = TestApi::without_database()
+        .await
+        .get("/api/players?pageSize=101")
+        .await;
+
+    assert_error(response, StatusCode::BAD_REQUEST, "InvalidRequest").await;
+}
+
+/// A server that accepts the key and ignores it answers page 1 of 20, and the
+/// answer looks correct.
+#[tokio::test]
+async fn a_misspelled_query_key_is_rejected_rather_than_ignored() {
+    let response = TestApi::without_database()
+        .await
+        .get("/api/players?page_size=50")
+        .await;
+
+    assert_error(response, StatusCode::BAD_REQUEST, "InvalidRequest").await;
+}
+
+#[tokio::test]
 async fn a_protected_route_without_a_token_is_unauthorized() {
     let response = TestApi::without_database().await.get("/api/me").await;
 

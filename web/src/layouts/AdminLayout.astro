@@ -1,0 +1,91 @@
+---
+import "../styles/global.css"
+
+type Section = "overview" | "players" | "events" | "tournaments" | "scores"
+
+interface Props {
+  title: string
+  active: Section
+}
+
+const { title, active } = Astro.props
+const player = Astro.locals.player
+
+const sections: { key: Section; label: string; href: string; ready: boolean }[] = [
+  { key: "overview", label: "overview", href: "/admin", ready: true },
+  { key: "players", label: "players", href: "/admin/players", ready: true },
+  { key: "events", label: "events", href: "/admin/events", ready: false },
+  { key: "tournaments", label: "tournaments", href: "/admin/tournaments", ready: false },
+  { key: "scores", label: "scores", href: "/admin/scores", ready: false },
+]
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width" />
+    <meta name="robots" content="noindex, nofollow" />
+    <meta name="color-scheme" content="dark" />
+    <meta name="theme-color" content="#0a0800" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <title>{title}</title>
+  </head>
+  <body class="min-h-screen bg-admin-bg font-mono text-sm text-admin-ink">
+    <div class="hazard h-1.5 w-full"></div>
+
+    <div class="mx-auto max-w-[72rem] px-6 pt-4 pb-12 max-[30rem]:px-3.5">
+      <header class="flex flex-wrap items-center justify-between gap-4 border-b border-warn/40 pb-3">
+        <a href="/admin" class="flex items-center gap-2 no-underline">
+          <span class="bg-warn px-2 py-0.5 text-2xs font-bold tracking-wider text-black">BACKOFFICE</span>
+          <span class="text-base tracking-wider text-warn">root@bunker</span>
+        </a>
+        <div class="flex items-center gap-4 text-2xs tracking-wider text-admin-dim">
+          {player && <span>operator <span class="text-admin-ink">{player.handle}</span></span>}
+          <a href="/" class="border border-warn/40 px-2 py-0.5 no-underline text-warn hover:bg-warn hover:text-black">← site</a>
+        </div>
+      </header>
+
+      <div class="mt-4 grid gap-6 min-[45rem]:grid-cols-[12rem_1fr]">
+        <nav aria-label="Backoffice sections" class="flex flex-col gap-1 text-xs">
+          {
+            sections.map(section => (
+              <a
+                href={section.ready ? section.href : undefined}
+                aria-current={active === section.key ? "page" : undefined}
+                aria-disabled={section.ready ? undefined : "true"}
+                class:list={[
+                  "flex items-center justify-between px-3 py-1.5 no-underline tracking-wide",
+                  active === section.key
+                    ? "bg-warn font-bold text-black"
+                    : section.ready
+                      ? "text-admin-ink hover:bg-warn/15 hover:text-warn"
+                      : "cursor-not-allowed text-admin-mute",
+                ]}
+              >
+                <span>{section.label}</span>
+                {!section.ready && <span class="text-2xs">soon</span>}
+              </a>
+            ))
+          }
+        </nav>
+
+        <main class="min-w-0">
+          <slot />
+        </main>
+      </div>
+    </div>
+
+    <div class="hazard fixed inset-x-0 bottom-0 h-1.5"></div>
+  </body>
+</html>
+
+<style>
+  .hazard {
+    background: repeating-linear-gradient(
+      -45deg,
+      var(--color-warn) 0 0.75rem,
+      var(--color-admin-bg) 0.75rem 1.5rem
+    );
+  }
+</style>

@@ -1,0 +1,136 @@
+---
+import { actions } from "astro:actions"
+import Button from "../../components/ui/Button.astro"
+import Glyph from "../../components/ui/Glyph.astro"
+import AdminLayout from "../../layouts/AdminLayout.astro"
+import Pager from "../../components/ui/Pager.astro"
+import { apiClient } from "../../lib/api"
+import { formatDate } from "../../lib/dates"
+import { PAGE_SIZE, pageFrom } from "../../lib/paging"
+
+const me = Astro.locals.player
+if (me?.role !== "admin" || !Astro.locals.token) return Astro.rewrite("/404")
+
+// Role and delete redirect after success, so a refresh cannot repeat them. The
+// temporary password shows once, so that one renders on the POST and is never cached.
+const roleResult = Astro.getActionResult(actions.setRole)
+if (roleResult?.data) {
+  const params = new URLSearchParams({ done: `${roleResult.data.handle} is now ${roleResult.data.role}` })
+  return Astro.redirect(`/admin/players?${params}`)
+}
+const deleteResult = Astro.getActionResult(actions.deletePlayer)
+if (deleteResult?.data) return Astro.redirect("/admin/players?done=player+deleted")
+const resetResult = Astro.getActionResult(actions.resetPassword)
+Astro.response.headers.set("Cache-Control", "no-store")
+
+const failure = roleResult?.error ?? deleteResult?.error ?? resetResult?.error
+const notice = Astro.url.searchParams.get("done") ?? undefined
+const temporaryPassword = resetResult?.data?.temporaryPassword
+
+const page = pageFrom(Astro.url)
+const { data } = await apiClient(Astro.locals.token)
+  .GET("/api/admin/players", { params: { query: { page, pageSize: PAGE_SIZE } } })
+  .catch(() => ({ data: undefined }))
+if (data && page > data.totalPages && data.totalPages > 0) {
+  return Astro.redirect(`/admin/players?page=${data.totalPages}`)
+}
+const players = data?.items
+---
+
+<AdminLayout title="BACKOFFICE//players" active="players">
+  <h1 class="m-0 text-sm tracking-wider text-warn">
+    root@bunker:~# players <span class="text-admin-dim"># {data?.total ?? "?"} rows</span>
+  </h1>
+
+  {notice && <p class="mt-3 text-xs text-warn" role="status">{notice}</p>}
+  {
+    temporaryPassword && (
+      <div class="mt-3 border border-warn bg-warn/10 p-3 text-xs" role="status">
+        <p class="m-0 text-warn">temporary password, shown once. hand it over in person.</p>
+        <p class="m-0 mt-1 text-base tracking-wider text-admin-ink select-all">{temporaryPassword}</p>
+        <p class="m-0 mt-1 text-2xs text-admin-dim">the player must change it at the next login.</p>
+      </div>
+    )
+  }
+  {failure && <p class="mt-3 text-xs text-alert" role="alert">{failure.message}</p>}
+
+  <div class="mt-4 overflow-x-auto border border-warn/40">
+    {
+      !players ? (
+        <p class="p-4 text-xs text-alert">the api is unreachable.</p>
+      ) : (
+        <table class="w-full border-collapse text-xs">
+          <thead>
+            <tr class="bg-warn/10 text-left text-2xs tracking-wider text-admin-dim">
+              <th class="w-[25%] px-3 py-2 font-normal">player</th>
+              <th class="w-[10%] px-3 py-2 font-normal">role</th>
+              <th class="w-[15%] px-3 py-2 font-normal">enlisted</th>
+              <th class="w-[50%] px-3 py-2 text-right font-normal">actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {players.map(player => (
+              <tr class="border-t border-warn/20">
+                <td class="px-3 py-2">
+                  <a
+                    href={`/players/${player.handle}`}
+                    class="inline-flex items-center gap-2 no-underline text-admin-ink hover:text-warn"
+                  >
+                    <Glyph glyph={player.glyph} size="1.1em" />
+                    {player.handle}
+                  </a>
+                </td>
+                <td class:list={["px-3 py-2", player.role === "admin" ? "text-warn" : "text-admin-dim"]}>
+                  {player.role}
+                </td>
+                <td class="px-3 py-2 text-admin-dim">{formatDate(new Date(player.createdAt))}</td>
+                <td class="px-3 py-2">
+                  {player.id === me.id ? (
+                    <span class="text-2xs text-admin-dim">this is you</span>
+                  ) : (
+                    <div class="flex flex-wrap justify-end gap-2">
+                      <form method="POST" action={actions.setRole}>
+                        <input type="hidden" name="id" value={player.id} />
+                        <input type="hidden" name="role" value={player.role === "admin" ? "user" : "admin"} />
+                        <Button variant="warn" size="sm">
+                          {player.role === "admin" ? "demote" : "promote"}
+                        </Button>
+                      </form>
+                      <form
+                        method="POST"
+                        action={actions.resetPassword}
+                        data-confirm={`reset the password of ${player.handle}? the current one stops working.`}
+                      >
+                        <input type="hidden" name="id" value={player.id} />
+                        <Button variant="warn" size="sm">reset password</Button>
+                      </form>
+                      <form
+                        method="POST"
+                        action={actions.deletePlayer}
+                        data-confirm={`delete ${player.handle}? this cannot be undone.`}
+                      >
+                        <input type="hidden" name="id" value={player.id} />
+                        <Button variant="danger" size="sm">delete</Button>
+                      </form>
+                    </div>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )
+    }
+  </div>
+  {data && <Pager page={page} totalPages={data.totalPages} total={data.total} href="/admin/players" noun="player" />}
+</AdminLayout>
+
+<script>
+  // One listener for every destructive form. The text lives in a data attribute,
+  // so a handle never lands inside a JavaScript string.
+  for (const form of document.querySelectorAll<HTMLFormElement>("form[data-confirm]")) {
+    form.addEventListener("submit", event => {
+      if (!window.confirm(form.dataset.confirm ?? "are you sure?")) event.preventDefault()
+    })
+  }
+</script>

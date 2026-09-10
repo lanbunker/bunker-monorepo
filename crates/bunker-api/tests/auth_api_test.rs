@@ -15,7 +15,7 @@ use std::time::Duration;
 use axum::http::StatusCode;
 use bunker_api::server::Secrets;
 use bunker_api::services::TokenIssuer;
-use bunker_models::{Player, PlayerId, TokenResponse, generate_glyph};
+use bunker_models::{Account, PlayerId, TokenResponse, generate_glyph};
 use serde_json::json;
 use support::{PASSWORD, TestApi, assert_error, read_json};
 use time::OffsetDateTime;
@@ -36,8 +36,9 @@ async fn signup_returns_a_token_that_opens_the_profile() {
 
     let me = api.get_as("/api/me", &token.token).await;
     assert_eq!(me.status(), StatusCode::OK);
-    let player: Player = read_json(me).await;
-    assert_eq!(player.handle.as_ref(), "dave");
+    let account: Account = read_json(me).await;
+    assert_eq!(account.player.handle.as_ref(), "dave");
+    assert!(!account.must_change_password);
 }
 
 /// The glyph is generated from the handle and stored. It must be the same mark the
@@ -264,9 +265,9 @@ fn signed(claims: &serde_json::Value, algorithm: jsonwebtoken::Algorithm) -> Str
 }
 
 /// A signed token for a player that never existed passes the signature check and
-/// fails the lookup. The route must not answer 500 for it.
+/// fails the lookup. It is refused like any other bad token.
 #[tokio::test]
-async fn a_valid_token_for_a_missing_player_is_not_found() {
+async fn a_valid_token_for_a_missing_player_is_unauthorized() {
     let api = TestApi::with_database().await;
 
     let ghost = TokenIssuer::new(
@@ -278,7 +279,7 @@ async fn a_valid_token_for_a_missing_player_is_not_found() {
 
     let response = api.get_as("/api/me", &ghost.token).await;
 
-    assert_error(response, StatusCode::NOT_FOUND, "ItemNotFound").await;
+    assert_error(response, StatusCode::UNAUTHORIZED, "Unauthorized").await;
 }
 
 /// The password never appears in a response, not even on the profile.

@@ -66,12 +66,13 @@ async fn the_database_refuses_rows_the_domain_refuses() {
     let pool = connect(&config).unwrap();
     run_pending_migrations(&pool).await.unwrap();
 
-    let bad_rows: [(&str, &str, i64, &str, i64); 5] = [
+    let bad_rows: [(&str, &str, i64, &str, &str, i64); 6] = [
         (
             "00000000-0000-0000-0000-000000000001",
             "da ve",
             1,
             "#ffb000",
+            "user",
             1,
         ),
         (
@@ -79,6 +80,7 @@ async fn the_database_refuses_rows_the_domain_refuses() {
             "ab",
             1,
             "#ffb000",
+            "user",
             1,
         ),
         (
@@ -86,6 +88,7 @@ async fn the_database_refuses_rows_the_domain_refuses() {
             "dave",
             1 << 25,
             "#ffb000",
+            "user",
             1,
         ),
         (
@@ -93,6 +96,7 @@ async fn the_database_refuses_rows_the_domain_refuses() {
             "dave",
             1,
             "#000000",
+            "user",
             1,
         ),
         (
@@ -100,26 +104,36 @@ async fn the_database_refuses_rows_the_domain_refuses() {
             "dave",
             1,
             "#ffb000",
+            "user",
             0,
+        ),
+        (
+            "00000000-0000-0000-0000-000000000006",
+            "dave",
+            1,
+            "#ffb000",
+            "root",
+            1,
         ),
     ];
 
-    for (id, handle, bits, color, created_at) in bad_rows {
+    for (id, handle, bits, color, role, created_at) in bad_rows {
         let result = sqlx::query(
-            "insert into players (id, handle, password_hash, glyph_bits, glyph_color, created_at)
-             values (?1, ?2, 'x', ?3, ?4, ?5)",
+            "insert into players (id, handle, password_hash, glyph_bits, glyph_color, role, created_at)
+             values (?1, ?2, 'x', ?3, ?4, ?5, ?6)",
         )
         .bind(id)
         .bind(handle)
         .bind(bits)
         .bind(color)
+        .bind(role)
         .bind(created_at)
         .execute(&pool)
         .await;
 
         assert!(
             result.is_err(),
-            "the database accepted handle {handle:?}, bits {bits}, color {color}, created_at {created_at}"
+            "the database accepted handle {handle:?}, bits {bits}, color {color}, role {role}, created_at {created_at}"
         );
     }
 }

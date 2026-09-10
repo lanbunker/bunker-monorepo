@@ -3,6 +3,7 @@ use std::fmt;
 use nutype::nutype;
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
+use utoipa::ToSchema;
 
 use super::handle::Handle;
 
@@ -27,7 +28,7 @@ impl fmt::Debug for Password {
 }
 
 /// Request body of `POST /api/auth/signup`.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct SignupRequest {
     pub handle: Handle,
@@ -35,18 +36,41 @@ pub struct SignupRequest {
 }
 
 /// Request body of `POST /api/auth/login`.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct LoginRequest {
     pub handle: Handle,
     pub password: Password,
 }
 
+/// Request body of `POST /api/me/password`.
+#[derive(Debug, Clone, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct PasswordChange {
+    pub current_password: Password,
+    pub new_password: Password,
+}
+
+/// The answer to an admin password reset. Shown once, never stored in clear, and
+/// never printed: `Debug` redacts it like [`Password`].
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct TemporaryPassword {
+    pub temporary_password: String,
+}
+
+impl fmt::Debug for TemporaryPassword {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("TemporaryPassword(<redacted>)")
+    }
+}
+
 /// The answer to a signup or a login. The token is a bearer JWT.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct TokenResponse {
     pub token: String,
     #[serde(with = "time::serde::rfc3339")]
+    #[schema(value_type = String, format = DateTime)]
     pub expires_at: OffsetDateTime,
 }
