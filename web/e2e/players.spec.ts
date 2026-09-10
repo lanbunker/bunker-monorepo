@@ -243,6 +243,8 @@ test("an admin reset forces the player to set a new password before anything els
 
     await page.goto("/players")
     await expect(page).toHaveURL(/\/password$/)
+    await page.goto("/handle")
+    await expect(page).toHaveURL(/\/password$/)
 
     await page.getByLabel("current:").fill(temporary)
     await page.getByLabel("new:", { exact: true }).fill("my-own-long-passphrase")
@@ -303,4 +305,75 @@ test("a page past the end goes to the last page", async ({ page }) => {
     await page.goto("/players?page=999")
     await expect(page).toHaveURL(/\/players\?page=\d+$/)
     await expect(page).not.toHaveURL(/page=999/)
+})
+
+test("the homepage reports the bunkernet uplink and invites a visitor to enlist", async ({
+    page,
+}) => {
+    await page.goto("/")
+    await expect(page.locator("#boot-log")).toContainText("[  OK ] bunkernet uplink")
+    await expect(page.getByText(/\d+ players? enlisted/)).toBeVisible()
+    await expect(page.getByRole("link", { name: "ENTER BUNKERNET" })).toBeVisible()
+
+    await signup(page, handle("hom"))
+    await page.goto("/")
+    await expect(page.getByRole("link", { name: "ENTER BUNKERNET" })).toHaveCount(0)
+})
+
+test("a player renames themself and keeps the glyph", async ({ page }) => {
+    const name = handle("old")
+    const renamed = handle("new")
+    await signup(page, name)
+    const glyph = await page.locator("[data-glyph-bits]").textContent()
+
+    await page.getByRole("link", { name: "CHANGE HANDLE" }).click()
+    await page.getByLabel("new handle:").fill(renamed)
+    await page.getByRole("button", { name: "RENAME" }).click()
+
+    await expect(page).toHaveURL(/\/profile\?changed=handle$/)
+    await expect(page.getByRole("status")).toContainText("handle changed")
+    await expect(
+        page.getByRole("heading", { level: 1, name: renamed, exact: true }),
+    ).toBeVisible()
+    await expect(page.locator("[data-glyph-bits]")).toHaveText(glyph ?? "")
+
+    const gone = await page.goto(`/players/${name}`)
+    expect(gone?.status()).toBe(404)
+    await page.goto(`/players/${renamed}`)
+    await expect(
+        page.getByRole("heading", { level: 1, name: renamed, exact: true }),
+    ).toBeVisible()
+})
+
+test("a taken handle is refused at rename", async ({ page }) => {
+    const taken = handle("tkn")
+    await signup(page, taken)
+    await logout(page)
+    await signup(page, handle("me"))
+
+    await page.goto("/handle")
+    await page.getByLabel("new handle:").fill(taken.toUpperCase())
+    await page.getByRole("button", { name: "RENAME" }).click()
+
+    await expect(page).toHaveURL(/\/handle(\?|$)/)
+    await expect(page.getByRole("alert")).toContainText(/taken/i)
+})
+
+test("an admin renames a player from the backoffice", async ({ page }) => {
+    const user = handle("usr")
+    await signup(page, user)
+    await logout(page)
+    const admin = handle("adm")
+    await signup(page, admin)
+    promote(admin)
+
+    await page.goto("/admin/players")
+    const row = page.getByRole("row", { name: new RegExp(user) })
+    const renamed = handle("ren")
+    await row.getByLabel(`new handle for ${user}`).fill(renamed)
+    await row.getByRole("button", { name: "rename" }).click()
+
+    await expect(page.getByRole("status")).toContainText(`renamed to ${renamed}`)
+    await expect(page.getByRole("row", { name: new RegExp(renamed) })).toBeVisible()
+    await expect(page.getByRole("row", { name: new RegExp(user) })).toHaveCount(0)
 })

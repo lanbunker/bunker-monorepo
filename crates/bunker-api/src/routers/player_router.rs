@@ -1,7 +1,9 @@
 use axum::extract::State;
-use axum::routing::{get, post};
+use axum::routing::{get, post, put};
 use axum::{Json, Router};
-use bunker_models::{Account, Handle, PageQuery, Paginated, PasswordChange, Player, TokenResponse};
+use bunker_models::{
+    Account, Handle, HandleChange, PageQuery, Paginated, PasswordChange, Player, TokenResponse,
+};
 use serde::Deserialize;
 
 use crate::internal::http::{
@@ -15,6 +17,7 @@ pub fn player_router() -> Router<AppState> {
     Router::new()
         .route("/api/me", get(me))
         .route("/api/me/password", post(change_password))
+        .route("/api/me/handle", put(change_handle))
         .route("/api/players", get(list_players))
         .route("/api/players/{handle}", get(get_player))
 }
@@ -54,6 +57,30 @@ pub(super) async fn change_password(
     ValidJson(change): ValidJson<PasswordChange>,
 ) -> Result<Json<TokenResponse>, ApiError> {
     Ok(Json(auth.change_password(account.player.id, change).await?))
+}
+
+#[utoipa::path(
+    put,
+    path = "/api/me/handle",
+    tag = "players",
+    security(("bearer" = [])),
+    request_body = HandleChange,
+    responses(
+        (status = 200, body = Player, description = "The player with the new handle. The glyph does not change"),
+        (status = 400, body = ApiErrorBody),
+        (status = 401, body = ApiErrorBody),
+        (status = 409, body = ApiErrorBody),
+        (status = 422, body = ApiErrorBody),
+    )
+)]
+pub(super) async fn change_handle(
+    State(players): State<PlayerService>,
+    Authenticated(account): Authenticated,
+    ValidJson(change): ValidJson<HandleChange>,
+) -> Result<Json<Player>, ApiError> {
+    Ok(Json(
+        players.rename(account.player.id, change.handle).await?,
+    ))
 }
 
 #[utoipa::path(

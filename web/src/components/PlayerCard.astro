@@ -29,7 +29,7 @@ const { player, own = false } = Astro.props
       <div class="mt-5 flex flex-col gap-1">
         <Kv label="Enlisted">{formatDate(new Date(player.createdAt))}</Kv>
         <Kv label="Glyph">
-          <span class="text-dim">bits</span> {player.glyph.bits}
+          <span class="text-dim">bits</span> <span data-glyph-bits>{player.glyph.bits}</span>
           <span class="ml-2 text-dim">color</span> {player.glyph.color}
         </Kv>
       </div>

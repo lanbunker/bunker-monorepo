@@ -16,14 +16,19 @@ if (me?.role !== "admin" || !Astro.locals.token) return Astro.rewrite("/404")
 const roleResult = Astro.getActionResult(actions.setRole)
 if (roleResult?.data) {
   const params = new URLSearchParams({ done: `${roleResult.data.handle} is now ${roleResult.data.role}` })
-  return Astro.redirect(`/admin/players?${params}`)
+  return Astro.redirect(`/admin/players?${params.toString()}`)
 }
 const deleteResult = Astro.getActionResult(actions.deletePlayer)
 if (deleteResult?.data) return Astro.redirect("/admin/players?done=player+deleted")
+const renameResult = Astro.getActionResult(actions.renamePlayer)
+if (renameResult?.data) {
+  const params = new URLSearchParams({ done: `renamed to ${renameResult.data.handle}` })
+  return Astro.redirect(`/admin/players?${params.toString()}`)
+}
 const resetResult = Astro.getActionResult(actions.resetPassword)
 Astro.response.headers.set("Cache-Control", "no-store")
 
-const failure = roleResult?.error ?? deleteResult?.error ?? resetResult?.error
+const failure = roleResult?.error ?? deleteResult?.error ?? renameResult?.error ?? resetResult?.error
 const notice = Astro.url.searchParams.get("done") ?? undefined
 const temporaryPassword = resetResult?.data?.temporaryPassword
 
@@ -95,6 +100,21 @@ const players = data?.items
                         <Button variant="warn" size="sm">
                           {player.role === "admin" ? "demote" : "promote"}
                         </Button>
+                      </form>
+                      <form method="POST" action={actions.renamePlayer} class="flex items-center gap-1">
+                        <input type="hidden" name="id" value={player.id} />
+                        <input
+                          name="handle"
+                          type="text"
+                          required
+                          minlength="3"
+                          maxlength="20"
+                          pattern="[A-Za-z0-9_.\-]+"
+                          placeholder={player.handle}
+                          aria-label={`new handle for ${player.handle}`}
+                          class="w-24 border-b border-warn/40 bg-transparent px-1 py-0.5 text-2xs text-admin-ink outline-none focus:border-warn"
+                        />
+                        <Button variant="warn" size="sm">rename</Button>
                       </form>
                       <form
                         method="POST"

@@ -1,8 +1,10 @@
 use axum::extract::State;
 use axum::http::StatusCode;
-use axum::routing::{get, post};
+use axum::routing::{get, post, put};
 use axum::{Json, Router};
-use bunker_models::{PageQuery, Paginated, Player, PlayerId, RoleUpdate, TemporaryPassword};
+use bunker_models::{
+    HandleChange, PageQuery, Paginated, Player, PlayerId, RoleUpdate, TemporaryPassword,
+};
 use serde::Deserialize;
 
 use crate::internal::http::{AdminOnly, ApiError, ApiErrorBody, ValidJson, ValidPath, ValidQuery};
@@ -23,6 +25,7 @@ pub fn admin_router() -> Router<AppState> {
             "/api/admin/players/{id}/password-reset",
             post(reset_password),
         )
+        .route("/api/admin/players/{id}/handle", put(rename_player))
 }
 
 #[derive(Debug, Deserialize, utoipa::IntoParams)]
@@ -78,6 +81,32 @@ async fn set_role(
             .set_role(admin.player.id, path.id, update.role)
             .await?,
     ))
+}
+
+#[utoipa::path(
+    put,
+    path = "/api/admin/players/{id}/handle",
+    tag = "admin",
+    security(("bearer" = [])),
+    params(PlayerIdPath),
+    request_body = HandleChange,
+    responses(
+        (status = 200, body = Player),
+        (status = 400, body = ApiErrorBody),
+        (status = 401, body = ApiErrorBody),
+        (status = 403, body = ApiErrorBody),
+        (status = 404, body = ApiErrorBody),
+        (status = 409, body = ApiErrorBody),
+        (status = 422, body = ApiErrorBody),
+    )
+)]
+pub(super) async fn rename_player(
+    State(players): State<PlayerService>,
+    AdminOnly(_admin): AdminOnly,
+    ValidPath(path): ValidPath<PlayerIdPath>,
+    ValidJson(change): ValidJson<HandleChange>,
+) -> Result<Json<Player>, ApiError> {
+    Ok(Json(players.rename(path.id, change.handle).await?))
 }
 
 #[utoipa::path(

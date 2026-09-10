@@ -6,6 +6,7 @@ import Kv from "../components/ui/Kv.astro"
 import Panel from "../components/ui/Panel.astro"
 import { isRegistrationOpen, upcomingTournament } from "../data/tournaments"
 import Layout from "../layouts/Layout.astro"
+import { apiClient } from "../lib/api"
 import { formatEurDate, parseEurDate } from "../lib/dates"
 
 const events = (await getCollection("events")).sort(
@@ -16,10 +17,16 @@ const events = (await getCollection("events")).sort(
 const nextEvent = events.findLast(e => e.data.status === "OPEN" || e.data.status === "SOON")
 const prevEvent = events.find(e => e.data.status === "CLOSED")
 const canRegister = upcomingTournament ? isRegistrationOpen(upcomingTournament) : false
+
+// One row is enough: the answer proves the API is up and carries the head count.
+const { data: net } = await apiClient()
+  .GET("/api/players", { params: { query: { page: 1, pageSize: 1 } } })
+  .catch(() => ({ data: undefined }))
+const netOnline = net !== undefined
 ---
 
 <Layout title="LAN BUNKER" active="home">
-  <AsciiBanner text="BUNKER" class="h-48 max-[30rem]:h-36 min-[62.5rem]:h-72" />
+  <AsciiBanner text="BUNKERNET" hollow="NET" class="h-40 max-[30rem]:h-28 min-[62.5rem]:h-60" />
 
   <div class="-mt-2 text-center text-2xs tracking-wider text-dim">
     ── local area network party ──
@@ -30,7 +37,12 @@ const canRegister = upcomingTournament ? isRegistrationOpen(upcomingTournament) 
       <span class="text-dim">bunker@office:~$</span>
       <span class="text-accent-soft">./enter.sh</span>
     </div>
-    <ol id="boot-log" class="m-0 mt-2 list-none p-0 text-xs text-dim" aria-live="polite"></ol>
+    <ol
+      id="boot-log"
+      data-net-online={netOnline ? "1" : "0"}
+      class="m-0 mt-2 list-none p-0 text-xs text-dim"
+      aria-live="polite"
+    ></ol>
     <p id="tagline" class="mt-2 hidden text-base text-bright">
       Enter the bunker. LAN party reimagined for the modern age.<span
         class="animate-blink text-accent"
@@ -41,7 +53,18 @@ const canRegister = upcomingTournament ? isRegistrationOpen(upcomingTournament) 
     <div id="status-block" class="mt-6 hidden">
       <Panel>
         <div class="flex flex-col gap-1">
-          <Kv label="System" tone="accent">■ online</Kv>
+          <Kv label="System" tone={netOnline ? "accent" : "alert"}>{netOnline ? "■ online" : "■ degraded"}</Kv>
+          <Kv label="Bunkernet" tone={netOnline ? "default" : "alert"}>
+            {
+              net ? (
+                <a href="/players" class="text-bright no-underline hover:text-accent">
+                  {net.total} {net.total === 1 ? "player" : "players"} enlisted
+                </a>
+              ) : (
+                "api offline"
+              )
+            }
+          </Kv>
           <Kv label="Next event">
             {
               nextEvent ? (
@@ -76,26 +99,49 @@ const canRegister = upcomingTournament ? isRegistrationOpen(upcomingTournament) 
           {canRegister && <Button href="/tournaments">REGISTER</Button>}
         </div>
       </Panel>
+
+      {
+        netOnline && !Astro.locals.player && (
+          <Panel tone="accent" class="mt-4">
+            <div class="flex flex-wrap items-center justify-between gap-4">
+              <div>
+                <div class="text-xs tracking-wider text-accent">bunkernet // player network</div>
+                <p class="m-0 mt-1 text-xs text-dim">
+                  one handle for the roster, the cabinets and every tournament.
+                </p>
+              </div>
+              <div class="flex items-center gap-4">
+                <Button href="/signup">ENTER BUNKERNET</Button>
+                <a href="/login" class="text-2xs text-dim no-underline hover:text-accent">login →</a>
+              </div>
+            </div>
+          </Panel>
+        )
+      }
     </div>
   </div>
 
   <script>
+    const log = document.getElementById("boot-log")
+    const netOnline = log?.dataset.netOnline === "1"
     const BOOT_LINES = [
-      "mounting /dev/bunker",
-      "loading events",
-      "checking tournaments",
-      "uplink established",
+      { text: "mounting /dev/bunker", ok: true },
+      { text: "loading events", ok: true },
+      { text: "checking tournaments", ok: true },
+      { text: "bunkernet uplink", ok: netOnline },
     ]
     const STEP_MS = 110
 
-    const log = document.getElementById("boot-log")
     const tagline = document.getElementById("tagline")
     const statusBlock = document.getElementById("status-block")
     const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches
 
-    const printLine = (text: string) => {
+    const printLine = (line: { text: string; ok: boolean }) => {
       const li = document.createElement("li")
-      li.innerHTML = `<span class="text-accent">[ OK ]</span> ${text}`
+      const tag = document.createElement("span")
+      tag.className = line.ok ? "text-accent" : "text-alert"
+      tag.textContent = line.ok ? "[  OK ]" : "[ERROR]"
+      li.append(tag, ` ${line.text}`)
       log?.append(li)
     }
 

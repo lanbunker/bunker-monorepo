@@ -145,6 +145,19 @@ impl TestApi {
         token.token
     }
 
+    pub async fn put(&self, path: &str, body: &Value) -> Response {
+        self.send(json_request(Method::PUT, path, body)).await
+    }
+
+    pub async fn put_as(&self, path: &str, body: &Value, token: &str) -> Response {
+        let mut request = json_request(Method::PUT, path, body);
+        request.headers_mut().insert(
+            header::AUTHORIZATION,
+            format!("Bearer {token}").parse().unwrap(),
+        );
+        self.send(request).await
+    }
+
     pub async fn patch_as(&self, path: &str, body: &Value, token: &str) -> Response {
         let mut request = json_request(Method::PATCH, path, body);
         request.headers_mut().insert(

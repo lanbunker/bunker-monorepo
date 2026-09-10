@@ -104,10 +104,12 @@ or `test`.
 | POST | `/api/auth/login` | none | 200, token |
 | GET | `/api/me` | bearer | the caller and whether a password change is due |
 | POST | `/api/me/password` | bearer | change the password, current one required. Answers a fresh token, every older token dies |
+| PUT | `/api/me/handle` | bearer | change the handle. The glyph stays |
 | GET | `/api/players` | none | roster, newest first. `?page=1&pageSize=20`, pageSize up to 100 |
 | GET | `/api/players/{handle}` | none | one player |
 | GET | `/api/admin/players` | admin | every player, same paging as `/api/players` |
 | PATCH | `/api/admin/players/{id}` | admin | set the role |
+| PUT | `/api/admin/players/{id}/handle` | admin | rename a player |
 | POST | `/api/admin/players/{id}/password-reset` | admin | temporary password, forces a change at login |
 | DELETE | `/api/admin/players/{id}` | admin | remove a player |
 | GET | `/api/openapi.json` | none | the contract |

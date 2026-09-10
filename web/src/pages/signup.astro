@@ -1,77 +1,153 @@
 ---
 import { actions } from "astro:actions"
+import AsciiBanner from "../components/AsciiBanner.astro"
 import Button from "../components/ui/Button.astro"
 import Panel from "../components/ui/Panel.astro"
-import Prompt from "../components/ui/Prompt.astro"
 import Layout from "../layouts/Layout.astro"
 
 if (Astro.locals.player) return Astro.redirect("/profile")
 
+// A success renders the boot sequence on the POST itself, then a script moves to
+// the profile. The response must never be cached: it belongs to one signup.
 const result = Astro.getActionResult(actions.signup)
-if (result && !result.error) return Astro.redirect("/profile")
+const created = result?.data?.handle
+if (created) Astro.response.headers.set("Cache-Control", "no-store")
 ---
 
-<Layout title="SIGNUP//LAN_BUNKER">
-  <Prompt command="useradd --create-home" comment="enlist in the bunker" />
+<Layout title="ENLIST//BUNKERNET" bare>
+  <div class="mx-auto w-full max-w-[34rem]">
+    <AsciiBanner text="BUNKERNET" hollow="NET" class="h-32 max-[30rem]:h-24" />
+    <div class="-mt-1 text-center text-2xs tracking-wider text-dim">
+      {created ? "── new player ──" : "── player network ──"}
+    </div>
 
-  <Panel class="max-w-[28rem]">
-    <form method="POST" action={actions.signup} class="flex flex-col gap-3 text-xs" autocomplete="on">
-      <label class="flex items-baseline gap-2">
-        <span class="w-24 shrink-0 text-dim">handle:</span>
-        <input
-          name="handle"
-          type="text"
-          required
-          minlength="3"
-          maxlength="20"
-          pattern="[A-Za-z0-9_.\-]+"
-          title="3 to 20 characters: letters, digits, _ . -"
-          autocomplete="username"
-          class="w-full border-b border-border bg-transparent py-1 text-ink outline-none focus:border-accent"
-        />
-      </label>
-      <label class="flex items-baseline gap-2">
-        <span class="w-24 shrink-0 text-dim">password:</span>
-        <input
-          name="password"
-          type="password"
-          required
-          minlength="8"
-          maxlength="128"
-          autocomplete="new-password"
-          class="w-full border-b border-border bg-transparent py-1 text-ink outline-none focus:border-accent"
-        />
-      </label>
-      <label class="flex items-baseline gap-2">
-        <span class="w-24 shrink-0 text-dim">repeat:</span>
-        <input
-          name="confirmPassword"
-          type="password"
-          required
-          minlength="8"
-          maxlength="128"
-          autocomplete="new-password"
-          class="w-full border-b border-border bg-transparent py-1 text-ink outline-none focus:border-accent"
-        />
-      </label>
-      <p class="text-2xs text-mute">
-        your glyph and color are generated from the handle. they never change.
-      </p>
-      {
-        result?.error && (
-          <p class="text-xs text-alert" role="alert">
-            {result.error.message}
-          </p>
-        )
-      }
-      <div class="mt-2 flex items-center gap-4">
-        <Button>ENLIST</Button>
-        <a href="/login" class="text-2xs text-dim no-underline hover:text-accent">have an account? login →</a>
-      </div>
-    </form>
-  </Panel>
-
-  <div class="mt-8">
-    <Button href="/" variant="ghost" size="sm">← HOME</Button>
+    {
+      created ? (
+        <div class="mt-8">
+          <div class="flex flex-wrap items-baseline gap-x-2 text-sm">
+            <span class="text-dim">bunkernet:~$</span>
+            <span class="text-accent-soft">useradd {created}</span>
+          </div>
+          <ol
+            id="enlist-log"
+            data-handle={created}
+            class="m-0 mt-2 list-none p-0 text-xs text-dim"
+            aria-live="polite"
+          ></ol>
+          <noscript>
+            <meta http-equiv="refresh" content="0;url=/profile" />
+            <p class="mt-2 text-xs text-bright">
+              welcome, {created}. <a href="/profile" class="text-accent">open your profile →</a>
+            </p>
+          </noscript>
+        </div>
+      ) : (
+        <div class="mt-8">
+          <div class="mb-4 flex flex-wrap items-baseline gap-x-2 text-sm">
+            <span class="text-dim">bunkernet:~$</span>
+            <span class="text-accent-soft">useradd --create-home</span>
+          </div>
+          <Panel>
+            <form method="POST" action={actions.signup} class="flex flex-col gap-3 text-xs" autocomplete="on">
+              <label class="flex items-baseline gap-2">
+                <span class="w-24 shrink-0 text-dim">handle:</span>
+                <input
+                  name="handle"
+                  type="text"
+                  required
+                  minlength="3"
+                  maxlength="20"
+                  pattern="[A-Za-z0-9_.\-]+"
+                  title="3 to 20 characters: letters, digits, _ . -"
+                  autocomplete="username"
+                  autofocus
+                  class="w-full border-b border-border bg-transparent py-1 text-ink outline-none focus:border-accent"
+                />
+              </label>
+              <p class="m-0 -mt-1 pl-26 text-2xs text-mute">
+                your name everywhere in bunkernet: roster, cabinets, tournaments. you can change it later from your
+                profile.
+              </p>
+              <label class="flex items-baseline gap-2">
+                <span class="w-24 shrink-0 text-dim">password:</span>
+                <input
+                  name="password"
+                  type="password"
+                  required
+                  minlength="8"
+                  maxlength="128"
+                  autocomplete="new-password"
+                  class="w-full border-b border-border bg-transparent py-1 text-ink outline-none focus:border-accent"
+                />
+              </label>
+              <label class="flex items-baseline gap-2">
+                <span class="w-24 shrink-0 text-dim">repeat:</span>
+                <input
+                  name="confirmPassword"
+                  type="password"
+                  required
+                  minlength="8"
+                  maxlength="128"
+                  autocomplete="new-password"
+                  class="w-full border-b border-border bg-transparent py-1 text-ink outline-none focus:border-accent"
+                />
+              </label>
+              {
+                result?.error && (
+                  <p class="text-xs text-alert" role="alert">
+                    {result.error.message}
+                  </p>
+                )
+              }
+              <div class="mt-2 flex items-center gap-4">
+                <Button>ENLIST</Button>
+                <a href="/login" class="text-2xs text-dim no-underline hover:text-accent">have an account? login →</a>
+              </div>
+            </form>
+          </Panel>
+          <div class="mt-6 text-center">
+            <a href="/" class="text-2xs text-mute no-underline hover:text-accent">← back to the bunker</a>
+          </div>
+        </div>
+      )
+    }
   </div>
+
+  <script>
+    const log = document.getElementById("enlist-log")
+    const handle = log?.dataset.handle
+    if (log && handle) {
+      const LINES = [
+        `creating home /players/${handle}`,
+        "generating glyph",
+        "issuing session token",
+        "joining bunkernet",
+      ]
+      const STEP_MS = 140
+      const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches
+
+      const printLine = (text: string) => {
+        const li = document.createElement("li")
+        const tag = document.createElement("span")
+        tag.className = "text-accent"
+        tag.textContent = "[  OK ]"
+        li.append(tag, ` ${text}`)
+        log.append(li)
+      }
+      const finish = () => {
+        const li = document.createElement("li")
+        li.className = "mt-2 text-bright"
+        li.textContent = `welcome, ${handle}.`
+        log.append(li)
+        window.setTimeout(() => window.location.replace("/profile"), reduced ? 0 : 600)
+      }
+
+      if (reduced) {
+        finish()
+      } else {
+        LINES.map((line, i) => window.setTimeout(() => printLine(line), STEP_MS * (i + 1)))
+        window.setTimeout(finish, STEP_MS * (LINES.length + 1))
+      }
+    }
+  </script>
 </Layout>

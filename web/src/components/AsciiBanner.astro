@@ -1,15 +1,21 @@
 ---
 interface Props {
   text: string
+  /** A suffix of `text` drawn in inverse video: dark letters cut out of a lit block. */
+  hollow?: string
   class?: string
 }
 
-const { text, class: className } = Astro.props
+const { text, hollow = "", class: className } = Astro.props
+if (hollow && !text.toUpperCase().endsWith(hollow.toUpperCase())) {
+  throw new Error(`hollow "${hollow}" is not the end of "${text}"`)
+}
 ---
 
 <div
   class:list={["ascii-banner relative w-full overflow-hidden", className]}
   data-text={text.toUpperCase()}
+  data-hollow={hollow.toUpperCase()}
 >
   <canvas class="block h-full w-full" aria-label={text} role="img"></canvas>
   <noscript>
@@ -74,13 +80,27 @@ const { text, class: className } = Astro.props
     return n - Math.floor(n)
   }
 
-  const buildMask = (text: string) => {
-    const cols = text.length * (GLYPH_W + GAP) - GAP
-    const rows = Array.from({ length: GLYPH_H }, (_, r) =>
-      Array.from(text)
-        .map(ch => (GLYPHS[ch] ?? GLYPHS[" "])[r])
-        .join(".".repeat(GAP)),
-    )
+  // "#" is a lit cell, "." is dark. The hollow letters sit inside a lit block
+  // with one cell of padding: their strokes are dark ("o") and the block around
+  // them is lit ("b"). The block starts one column after the last solid letter.
+  const buildMask = (text: string, hollowFrom: number) => {
+    const letters = Array.from(text)
+    const hasBlock = hollowFrom < letters.length
+    const pad = hasBlock ? 1 : 0
+    const line = (r: number) =>
+      letters
+        .map((ch, i) => {
+          const inBlock = i >= hollowFrom
+          const row = r < 0 || r >= GLYPH_H ? ".".repeat(GLYPH_W) : (GLYPHS[ch] ?? GLYPHS[" "])[r]
+          const body = inBlock ? row.replaceAll("#", "o").replaceAll(".", "b") : row
+          const gap = i === letters.length - 1 ? "" : (inBlock ? "b" : ".").repeat(GAP)
+          const lead = i === hollowFrom ? "b" : ""
+          const trail = inBlock && i === letters.length - 1 ? "b" : ""
+          return lead + body + trail + gap
+        })
+        .join("")
+    const rows = Array.from({ length: GLYPH_H + 2 * pad }, (_, r) => line(r - pad))
+    const cols = rows[0].length
     return { cols, rows }
   }
 
@@ -88,9 +108,10 @@ const { text, class: className } = Astro.props
     const canvas = root.querySelector("canvas")
     const ctx = canvas?.getContext("2d")
     const text = root.dataset.text ?? ""
+    const hollow = root.dataset.hollow ?? ""
     if (!canvas || !ctx || !text) return
 
-    const mask = buildMask(text)
+    const mask = buildMask(text, text.length - hollow.length)
     const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches
 
     let cols = 0
@@ -118,7 +139,7 @@ const { text, class: className } = Astro.props
       // Pick the densest glyph scale that keeps characters readable.
       const fit = (sy: number) => {
         const sx = sy * 2
-        const byH = (0.62 * h) / (GLYPH_H * sy)
+        const byH = (0.62 * h) / (mask.rows.length * sy)
         const byW = (0.92 * w) / (mask.cols * sx * CHAR_ASPECT)
         return { sy, sx, font: Math.min(byH, byW) }
       }
@@ -131,17 +152,17 @@ const { text, class: className } = Astro.props
       cols = Math.ceil(w / cellW)
       rows = Math.ceil(h / cellH)
       originC = Math.floor((cols - mask.cols * scaleX) / 2)
-      originR = Math.floor((rows - GLYPH_H * scaleY) / 2)
+      originR = Math.floor((rows - mask.rows.length * scaleY) / 2)
 
       ctx.font = `${font}px "Courier New", Courier, monospace`
       ctx.textBaseline = "top"
     }
 
-    const inMask = (c: number, r: number) => {
+    const cellKind = (c: number, r: number) => {
       const mc = Math.floor((c - originC) / scaleX)
       const mr = Math.floor((r - originR) / scaleY)
-      if (mc < 0 || mr < 0 || mc >= mask.cols || mr >= GLYPH_H) return false
-      return mask.rows[mr][mc] === "#"
+      if (mc < 0 || mr < 0 || mc >= mask.cols || mr >= mask.rows.length) return "."
+      return mask.rows[mr][mc]
     }
 
     const draw = (t: number) => {
@@ -157,7 +178,10 @@ const { text, class: className } = Astro.props
           const x = c * cellW
           const sweepBoost = Math.max(0, 1 - Math.abs(r - sweep) / 2.5) * 0.35
 
-          if (inMask(c - shift, r)) {
+          const kind = cellKind(c - shift, r)
+          // A cut-out stroke stays dark. Not even background noise lands on it.
+          if (kind === "o") continue
+          if (kind !== ".") {
             const wave = Math.sin(t * 1.8 + c * 0.11 + r * 0.32) * 0.5 + 0.5
             const grain = hash(c, r, Math.floor(t * 4)) * 0.18
             const level = Math.min(1, 0.32 + wave * 0.55 + grain + sweepBoost)
@@ -187,7 +211,7 @@ const { text, class: className } = Astro.props
       const t = now / 1000
 
       if (t > glitchUntil && Math.random() < 0.012) {
-        glitchRow = originR + Math.floor(Math.random() * GLYPH_H * scaleY)
+        glitchRow = originR + Math.floor(Math.random() * mask.rows.length * scaleY)
         glitchShift = (Math.random() < 0.5 ? -1 : 1) * (1 + Math.floor(Math.random() * 2))
         glitchUntil = t + 0.08 + Math.random() * 0.1
       }

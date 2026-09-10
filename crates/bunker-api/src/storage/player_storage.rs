@@ -30,6 +30,14 @@ pub enum Created {
     HandleTaken,
 }
 
+/// What a handle update did. Two outcomes are results, not failures.
+#[derive(Debug)]
+pub enum Renamed {
+    Player(Player),
+    HandleTaken,
+    NotFound,
+}
+
 /// An account with the fact that tokens need to check.
 #[derive(Debug, Clone)]
 pub struct StoredAccount {
@@ -85,14 +93,7 @@ impl PlayerStorage {
                 role: Role::User,
                 created_at: player.created_at,
             })),
-            Err(error) => match StorageError::from_query(error) {
-                StorageError::UniqueViolation { constraint, .. }
-                    if constraint == HANDLE_CONSTRAINT =>
-                {
-                    Ok(Created::HandleTaken)
-                }
-                other => Err(other),
-            },
+            Err(error) => handle_taken(error).map(|()| Created::HandleTaken),
         }
     }
 
@@ -254,6 +255,26 @@ impl PlayerStorage {
         row.map(TryInto::try_into).transpose()
     }
 
+    pub async fn rename(&self, id: PlayerId, handle: &Handle) -> Result<Renamed, StorageError> {
+        let id = id.into_inner().to_string();
+        let handle = handle.as_ref();
+        let updated = sqlx::query_as!(
+            PlayerRow,
+            "update players set handle = ?1 where id = ?2
+             returning id, handle, glyph_bits, glyph_color, role, created_at",
+            handle,
+            id,
+        )
+        .fetch_optional(&self.pool)
+        .await;
+
+        match updated {
+            Ok(Some(row)) => Ok(Renamed::Player(row.try_into()?)),
+            Ok(None) => Ok(Renamed::NotFound),
+            Err(error) => handle_taken(error).map(|()| Renamed::HandleTaken),
+        }
+    }
+
     /// `true` when a row was removed.
     pub async fn delete(&self, id: PlayerId) -> Result<bool, StorageError> {
         let id = id.into_inner().to_string();
@@ -370,3 +391,14 @@ impl TryFrom<AccountRow> for StoredAccount {
 #[derive(Debug, thiserror::Error)]
 #[error("column `{0}` holds a value outside the domain")]
 struct MalformedField(&'static str);
+
+/// `Ok` when the write hit the case-insensitive unique index on the handle, so
+/// the caller can turn it into a result. Any other failure stays a failure.
+fn handle_taken(error: sqlx::Error) -> Result<(), StorageError> {
+    match StorageError::from_query(error) {
+        StorageError::UniqueViolation { constraint, .. } if constraint == HANDLE_CONSTRAINT => {
+            Ok(())
+        }
+        other => Err(other),
+    }
+}

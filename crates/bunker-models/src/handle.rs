@@ -1,4 +1,6 @@
 use nutype::nutype;
+use serde::Deserialize;
+use utoipa::ToSchema;
 
 pub const HANDLE_MIN_LEN: usize = 3;
 
@@ -25,4 +27,12 @@ fn is_handle_charset(value: &str) -> bool {
     value
         .chars()
         .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '.' | '-'))
+}
+
+/// Request body of `PUT /api/me/handle` and `PUT /api/admin/players/{id}/handle`.
+/// The glyph stays with the player. Only the name changes.
+#[derive(Debug, Clone, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct HandleChange {
+    pub handle: Handle,
 }

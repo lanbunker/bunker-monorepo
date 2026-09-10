@@ -21,7 +21,7 @@ pub use glyph::{
     GLYPH_CELLS, GLYPH_COLORS, GLYPH_SIZE, Glyph, GlyphBits, GlyphBitsError, GlyphColor,
     generate_glyph,
 };
-pub use handle::{HANDLE_MAX_LEN, HANDLE_MIN_LEN, Handle, HandleError};
+pub use handle::{HANDLE_MAX_LEN, HANDLE_MIN_LEN, Handle, HandleChange, HandleError};
 pub use pagination::{
     PAGE_SIZE_MAX, PageNumber, PageNumberError, PageQuery, PageSize, PageSizeError, Paginated,
 };

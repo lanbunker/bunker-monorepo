@@ -144,6 +144,29 @@ async fn a_body_without_a_json_content_type_is_unsupported_media_type() {
 }
 
 #[tokio::test]
+async fn a_rename_without_a_token_is_unauthorized() {
+    let response = TestApi::without_database()
+        .await
+        .put("/api/me/handle", &json!({ "handle": "david" }))
+        .await;
+
+    assert_error(response, StatusCode::UNAUTHORIZED, "Unauthorized").await;
+}
+
+#[tokio::test]
+async fn an_admin_rename_without_a_token_is_unauthorized() {
+    let response = TestApi::without_database()
+        .await
+        .put(
+            &format!("/api/admin/players/{}/handle", uuid::Uuid::new_v4()),
+            &json!({ "handle": "david" }),
+        )
+        .await;
+
+    assert_error(response, StatusCode::UNAUTHORIZED, "Unauthorized").await;
+}
+
+#[tokio::test]
 async fn a_path_that_is_not_a_handle_is_rejected() {
     let response = TestApi::without_database()
         .await

@@ -1,6 +1,6 @@
 use bunker_models::{Handle, PageQuery, Paginated, Player, PlayerId, Role};
 
-use crate::storage::PlayerStorage;
+use crate::storage::{PlayerStorage, Renamed};
 
 use super::error::ServiceError;
 
@@ -40,6 +40,15 @@ impl PlayerService {
             .set_role(id, role)
             .await?
             .ok_or(ServiceError::PlayerIdNotFound(id))
+    }
+
+    /// The glyph stays. A handle that another player holds, in any letter case, is refused.
+    pub async fn rename(&self, id: PlayerId, handle: Handle) -> Result<Player, ServiceError> {
+        match self.storage.rename(id, &handle).await? {
+            Renamed::Player(player) => Ok(player),
+            Renamed::HandleTaken => Err(ServiceError::HandleTaken(handle)),
+            Renamed::NotFound => Err(ServiceError::PlayerIdNotFound(id)),
+        }
     }
 
     /// Idempotent. A delete of a player that is already absent is a success.

@@ -36,6 +36,22 @@ export interface paths {
         patch: operations["set_role"]
         trace?: never
     }
+    "/api/admin/players/{id}/handle": {
+        parameters: {
+            query?: never
+            header?: never
+            path?: never
+            cookie?: never
+        }
+        get?: never
+        put: operations["rename_player"]
+        post?: never
+        delete?: never
+        options?: never
+        head?: never
+        patch?: never
+        trace?: never
+    }
     "/api/admin/players/{id}/password-reset": {
         parameters: {
             query?: never
@@ -93,6 +109,22 @@ export interface paths {
         }
         get: operations["me"]
         put?: never
+        post?: never
+        delete?: never
+        options?: never
+        head?: never
+        patch?: never
+        trace?: never
+    }
+    "/api/me/handle": {
+        parameters: {
+            query?: never
+            header?: never
+            path?: never
+            cookie?: never
+        }
+        get?: never
+        put: operations["change_handle"]
         post?: never
         delete?: never
         options?: never
@@ -255,6 +287,13 @@ export interface components {
             | "#7cc4ff"
             | "#7ef5c0"
         Handle: string
+        /**
+         * @description Request body of `PUT /api/me/handle` and `PUT /api/admin/players/{id}/handle`.
+         *     The glyph stays with the player. Only the name changes.
+         */
+        HandleChange: {
+            handle: components["schemas"]["Handle"]
+        }
         Health: {
             status: string
             version: string
@@ -496,6 +535,79 @@ export interface operations {
             }
         }
     }
+    rename_player: {
+        parameters: {
+            query?: never
+            header?: never
+            path: {
+                id: components["schemas"]["PlayerId"]
+            }
+            cookie?: never
+        }
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HandleChange"]
+            }
+        }
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["Player"]
+                }
+            }
+            400: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            401: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            403: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            404: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            409: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            422: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+        }
+    }
     reset_password: {
         parameters: {
             query?: never
@@ -645,6 +757,62 @@ export interface operations {
                 }
             }
             401: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+        }
+    }
+    change_handle: {
+        parameters: {
+            query?: never
+            header?: never
+            path?: never
+            cookie?: never
+        }
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HandleChange"]
+            }
+        }
+        responses: {
+            /** @description The player with the new handle. The glyph does not change */
+            200: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["Player"]
+                }
+            }
+            400: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            401: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            409: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            422: {
                 headers: {
                     [name: string]: unknown
                 }

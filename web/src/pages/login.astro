@@ -12,7 +12,7 @@ if (result && !result.error) return Astro.redirect("/profile")
 ---
 
 <Layout title="LOGIN//LAN_BUNKER">
-  <Prompt command="ssh bunker" />
+  <Prompt command="ssh bunkernet" />
 
   <Panel class="max-w-[28rem]">
     <form method="POST" action={actions.login} class="flex flex-col gap-3 text-xs" autocomplete="on">

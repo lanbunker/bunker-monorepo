@@ -13,9 +13,11 @@ interface Props {
   active?: Section
   /** Hidden preview pages stay out of search engines. */
   noindex?: boolean
+  /** No header, nav, footer or status bar. The page fills the screen. */
+  bare?: boolean
 }
 
-const { title = "LAN BUNKER", active, noindex = false } = Astro.props
+const { title = "LAN BUNKER", active, noindex = false, bare = false } = Astro.props
 const player = Astro.locals.player
 const description = "LAN BUNKER, a recurring local multiplayer event blending music and gaming."
 
@@ -63,11 +65,17 @@ const activeIndex = nav.findIndex(item => item.key === active)
     <link rel="manifest" href="/site.webmanifest" />
     <title>{title}</title>
   </head>
-  <body class="min-h-screen bg-bg pb-12 font-mono text-sm text-ink">
+  <body class:list={["min-h-screen bg-bg font-mono text-sm text-ink", !bare && "pb-12"]}>
     <div class="scanlines pointer-events-none fixed inset-0 z-50"></div>
     <div class="vignette pointer-events-none fixed inset-0 z-40"></div>
 
-    <div class="mx-auto max-w-[60rem] px-6 pt-5 max-[30rem]:px-3.5 max-[30rem]:pt-3">
+    <div
+      class:list={[
+        "mx-auto max-w-[60rem] px-6 max-[30rem]:px-3.5",
+        bare ? "flex min-h-screen flex-col items-center justify-center py-8" : "pt-5 max-[30rem]:pt-3",
+      ]}
+    >
+      {!bare && (
       <header class="flex items-center justify-between gap-4 pb-2.5">
         <a href="/" class="flex items-center gap-1.5 no-underline">
           <span class="text-base font-bold tracking-wider text-bright">LAN_BUNKER</span>
@@ -101,7 +109,9 @@ const activeIndex = nav.findIndex(item => item.key === active)
           }
         </div>
       </header>
+      )}
 
+      {!bare && (
       <nav
         aria-label="Sections"
         class="flex flex-wrap gap-y-1 border-y border-border py-2 text-xs max-[30rem]:text-2xs"
@@ -127,19 +137,23 @@ const activeIndex = nav.findIndex(item => item.key === active)
           ))
         }
       </nav>
+      )}
 
-      <main>
+      <main class:list={[bare && "w-full"]}>
         <slot />
       </main>
 
+      {!bare && (
       <footer
         class="mt-12 flex flex-wrap justify-between gap-2 border-t border-faint pt-4 pb-4 text-2xs tracking-wide text-mute"
       >
         <span>&copy; LAN BUNKER {new Date().getFullYear()}</span>
         <span class="pointer-coarse:hidden">press 1-{nav.length} to switch section</span>
       </footer>
+      )}
     </div>
 
+    {!bare && (
     <div
       class="fixed inset-x-0 bottom-0 z-30 flex h-7 items-stretch justify-between border-t border-border bg-panel text-2xs tracking-wide text-dim"
     >
@@ -170,6 +184,7 @@ const activeIndex = nav.findIndex(item => item.key === active)
         </span>
       </div>
     </div>
+    )}
 
     <script>
       const DAY = 86_400_000

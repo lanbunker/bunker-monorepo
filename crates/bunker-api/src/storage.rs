@@ -7,4 +7,4 @@ mod player_storage;
 
 pub use db::{DbPool, connect, run_pending_migrations};
 pub use error::StorageError;
-pub use player_storage::{Created, Credentials, NewPlayer, PlayerStorage, StoredAccount};
+pub use player_storage::{Created, Credentials, NewPlayer, PlayerStorage, Renamed, StoredAccount};

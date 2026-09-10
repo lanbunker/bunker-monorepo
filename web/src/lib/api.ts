@@ -5,7 +5,7 @@ import type { components, paths } from "./api-types"
 
 export type Player = components["schemas"]["Player"]
 export type Glyph = components["schemas"]["Glyph"]
-type ApiErrorBody = components["schemas"]["ApiErrorBody"]
+export type ApiErrorBody = components["schemas"]["ApiErrorBody"]
 
 /** The cookie that holds the bearer token. HttpOnly, so scripts never see it. */
 export const SESSION_COOKIE = "bunker_session"

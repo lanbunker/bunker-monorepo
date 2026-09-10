@@ -1,7 +1,7 @@
 use axum::routing::get;
 use axum::{Json, Router};
 use bunker_models::{
-    Account, Glyph, GlyphBits, GlyphColor, Handle, LoginRequest, Paginated, Password,
+    Account, Glyph, GlyphBits, GlyphColor, Handle, HandleChange, LoginRequest, Paginated, Password,
     PasswordChange, Player, PlayerId, Role, RoleUpdate, SignupRequest, TemporaryPassword,
     TokenResponse,
 };
@@ -23,10 +23,12 @@ use super::{AppState, admin_router, auth_router, health_router, player_router};
         auth_router::login,
         player_router::me,
         player_router::change_password,
+        player_router::change_handle,
         player_router::list_players,
         player_router::get_player,
         admin_router::list_players,
         admin_router::set_role,
+        admin_router::rename_player,
         admin_router::reset_password,
         admin_router::delete_player,
         health_router::live,
@@ -40,6 +42,7 @@ use super::{AppState, admin_router, auth_router, health_router, player_router};
         GlyphBits,
         GlyphColor,
         Handle,
+        HandleChange,
         LoginRequest,
         Paginated<Player>,
         Password,
