@@ -1,0 +1,72 @@
+name: ci
+
+on:
+    push:
+        branches: [main]
+    pull_request:
+
+env:
+    CARGO_TERM_COLOR: always
+    DATABASE_URL: sqlite://.dev/bunker.db?mode=rwc
+
+jobs:
+    rust:
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v4
+
+            - uses: dtolnay/rust-toolchain@stable
+              with:
+                  components: rustfmt, clippy
+
+            - uses: Swatinem/rust-cache@v2
+
+            # The sqlx macros check each query against a real schema at compile
+            # time. The runner has sqlite3, so the migrations build that schema.
+            - name: Migrate a scratch database
+              run: |
+                  mkdir -p .dev
+                  for file in crates/bunker-api/migrations/*.sql; do sqlite3 .dev/bunker.db < "$file"; done
+
+            - name: Format
+              run: cargo fmt --all --check
+
+            - name: Lint
+              run: cargo clippy --workspace --all-targets -- -D warnings
+
+            # Each test creates its own SQLite file, so no service is needed.
+            - name: Test
+              run: cargo test --workspace
+
+            - name: Check nothing is ignored
+              run: |
+                  ignored=$(cargo test --workspace -- --ignored --list 2>/dev/null | grep -c ': test' || true)
+                  if [ "$ignored" -ne 0 ]; then
+                    echo "expected no ignored tests, found $ignored"
+                    cargo test --workspace -- --ignored --list
+                    exit 1
+                  fi
+
+    web:
+        runs-on: ubuntu-latest
+        defaults:
+            run:
+                working-directory: web
+        steps:
+            - uses: actions/checkout@v4
+
+            - uses: pnpm/action-setup@v4
+              with:
+                  package_json_file: web/package.json
+
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: 22
+                  cache: pnpm
+                  cache-dependency-path: web/pnpm-lock.yaml
+
+            - run: pnpm install --frozen-lockfile
+
+            - run: pnpm exec oxfmt --check
+
+            - run: pnpm build

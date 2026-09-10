@@ -4,8 +4,14 @@
         {
             "name": "astro-dev",
             "runtimeExecutable": "pnpm",
-            "runtimeArgs": ["dev", "--port", "4321"],
+            "runtimeArgs": ["-C", "web", "dev", "--port", "4321"],
             "port": 4321
+        },
+        {
+            "name": "api-dev",
+            "runtimeExecutable": "cargo",
+            "runtimeArgs": ["run", "-p", "bunker-api"],
+            "port": 3000
         }
     ]
 }

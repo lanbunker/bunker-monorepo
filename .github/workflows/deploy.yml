@@ -13,15 +13,21 @@ jobs:
             contents: read
             deployments: write
             pull-requests: write
+        defaults:
+            run:
+                working-directory: web
         steps:
             - uses: actions/checkout@v4
 
             - uses: pnpm/action-setup@v4
+              with:
+                  package_json_file: web/package.json
 
             - uses: actions/setup-node@v4
               with:
                   node-version: 22
                   cache: pnpm
+                  cache-dependency-path: web/pnpm-lock.yaml
 
             - run: pnpm install --frozen-lockfile
 
@@ -31,3 +37,4 @@ jobs:
               with:
                   apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
                   accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+                  workingDirectory: web

@@ -1,0 +1,9 @@
+# The `Valid*` extractors keep each rejection inside the documented error body. The
+# axum extractors compile, but they answer with plain text instead, so this file
+# bans them.
+#
+# `axum::Json` is not in the list, because it is the correct response type.
+disallowed-types = [
+    { path = "axum::extract::Query", reason = "use internal::http::ValidQuery so rejections use the error body" },
+    { path = "axum::extract::Path", reason = "use internal::http::ValidPath so rejections use the error body" },
+]

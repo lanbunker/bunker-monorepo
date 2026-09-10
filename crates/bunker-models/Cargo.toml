@@ -1,0 +1,20 @@
+[package]
+name = "bunker-models"
+description = "Domain types shared by every Rust crate: identifiers, handles, glyphs and wire shapes"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+nutype.workspace = true
+serde.workspace = true
+thiserror.workspace = true
+time.workspace = true
+uuid.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true
+
+[lints]
+workspace = true

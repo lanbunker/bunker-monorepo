@@ -1,0 +1,82 @@
+#:schema https://www.schemastore.org/cargo.json
+
+[workspace]
+resolver = "3"
+members = ["crates/*"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+repository = "https://github.com/paologaleotti/lanbunker-website"
+
+# Every external dependency lives here with one version. A crate pulls only what
+# it needs through `dep.workspace = true`.
+[workspace.dependencies]
+bunker-models = { path = "crates/bunker-models" }
+
+anyhow = "1"
+argon2 = "0.6"
+axum = { version = "0.8", default-features = false, features = [
+    "http1",
+    "json",
+    "query",
+    "tokio",
+] }
+dotenvy = "0.15"
+jsonwebtoken = { version = "11", default-features = false, features = ["rust_crypto"] }
+nutype = { version = "0.7", features = ["serde"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sqlx = { version = "0.9", default-features = false, features = [
+    "runtime-tokio",
+    "sqlite",
+    "macros",
+    "migrate",
+] }
+thiserror = "2"
+time = { version = "0.3", features = ["serde", "formatting", "parsing"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "signal", "time"] }
+tower-http = { version = "0.7", default-features = false, features = [
+    "catch-panic",
+    "cors",
+    "request-id",
+    "trace",
+] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", default-features = false, features = [
+    "fmt",
+    "json",
+    "env-filter",
+    "ansi",
+] }
+uuid = { version = "1", features = ["v4", "serde"] }
+
+# Test only.
+http-body-util = "0.1"
+tempfile = "3"
+tower = { version = "0.5", default-features = false, features = ["util"] }
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+unreachable_pub = "warn"
+missing_debug_implementations = "warn"
+
+[workspace.lints.clippy]
+all = { level = "deny", priority = -1 }
+# A panic is a bug, and not error handling. Each fallible function returns `Result`.
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+todo = "deny"
+dbg_macro = "deny"
+unreachable = "deny"
+indexing_slicing = "deny"
+cast_possible_truncation = "deny"
+cast_sign_loss = "deny"
+cast_possible_wrap = "deny"
+
+[profile.release]
+lto = "fat"
+codegen-units = 1
+strip = true
