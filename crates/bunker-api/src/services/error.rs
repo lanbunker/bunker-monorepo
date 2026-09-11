@@ -1,6 +1,6 @@
 use std::error::Error as StdError;
 
-use bunker_models::Handle;
+use bunker_models::{BracketError, EntrantId, Handle, MatchId, TournamentId, TournamentStatus};
 use serde::Serialize;
 use utoipa::ToSchema;
 
@@ -25,6 +25,13 @@ pub enum ErrorCode {
     Forbidden,
     /// The current password given for a change is wrong.
     WrongPassword,
+    /// Registration is not open, or the deadline passed.
+    RegistrationClosed,
+    /// The tournament or its bracket is in a state that refuses this action.
+    InvalidState,
+    /// An id in the body is not an entrant of this tournament, or not a side of
+    /// this match.
+    NotAnEntrant,
     /// The request did not reach a handler. The HTTP layer raises this code, but
     /// the code is here with the rest of the vocabulary.
     InvalidRequest,
@@ -59,6 +66,60 @@ pub enum ServiceError {
     #[error("an admin cannot change their own role or delete themself")]
     SelfAction,
 
+    #[error("tournament {0} not found")]
+    TournamentNotFound(TournamentId),
+
+    #[error("match {0} not found in this tournament")]
+    MatchNotFound(MatchId),
+
+    #[error("registration is closed")]
+    RegistrationClosed,
+
+    #[error("a {} tournament cannot become {}", from.as_str(), to.as_str())]
+    InvalidTransition {
+        from: TournamentStatus,
+        to: TournamentStatus,
+    },
+
+    #[error("the tournament is concluded and takes no more changes")]
+    TournamentConcluded,
+
+    #[error("the bracket must be generated after the tournament goes live")]
+    NotLive,
+
+    #[error("remove the bracket before you change the entrants")]
+    BracketExists,
+
+    #[error("the tournament has no bracket")]
+    BracketMissing,
+
+    #[error("results were entered, remove them before you change the bracket")]
+    BracketLocked,
+
+    #[error("the final has no winner yet")]
+    BracketIncomplete,
+
+    #[error("a bracket needs at least two entrants, there are {0}")]
+    TooFewEntrants(usize),
+
+    #[error("the match does not have both entrants yet")]
+    MatchNotReady,
+
+    #[error("the next match already has a result")]
+    NextMatchDecided,
+
+    #[error("a winner is accepted only when a tournament without a bracket concludes")]
+    UnexpectedWinner,
+
+    #[error("the winner cannot leave the tournament")]
+    WinnerCannotLeave,
+
+    #[error("entrant {0} is not part of this tournament or this match")]
+    NotAnEntrant(EntrantId),
+
+    #[error("the seed order must list each entrant exactly once")]
+    SeedOrderMismatch,
+
     #[error("the token is missing, expired or not signed by this server")]
     InvalidToken(#[source] Box<dyn StdError + Send + Sync>),
 
@@ -80,7 +141,28 @@ impl ServiceError {
     /// database is safe to name, but the client can only try again.
     pub const fn public(&self) -> (ErrorCode, Option<&'static str>) {
         match self {
-            Self::PlayerNotFound(_) | Self::PlayerIdNotFound(_) => (ErrorCode::ItemNotFound, None),
+            Self::PlayerNotFound(_)
+            | Self::PlayerIdNotFound(_)
+            | Self::TournamentNotFound(_)
+            | Self::MatchNotFound(_) => (ErrorCode::ItemNotFound, None),
+            Self::RegistrationClosed => (
+                ErrorCode::RegistrationClosed,
+                Some("Registration is closed"),
+            ),
+            Self::InvalidTransition { .. }
+            | Self::TournamentConcluded
+            | Self::NotLive
+            | Self::BracketExists
+            | Self::BracketMissing
+            | Self::BracketLocked
+            | Self::BracketIncomplete
+            | Self::TooFewEntrants(_)
+            | Self::MatchNotReady
+            | Self::NextMatchDecided
+            | Self::UnexpectedWinner
+            | Self::WinnerCannotLeave => (ErrorCode::InvalidState, None),
+            Self::NotAnEntrant(_) => (ErrorCode::NotAnEntrant, None),
+            Self::SeedOrderMismatch => (ErrorCode::UnprocessableRequest, None),
             Self::HandleTaken(_) => (ErrorCode::HandleTaken, None),
             Self::InvalidCredentials => (
                 ErrorCode::InvalidCredentials,
@@ -118,6 +200,18 @@ impl ServiceError {
         E: StdError + Send + Sync + 'static,
     {
         Self::InvalidToken(Box::new(error))
+    }
+}
+
+impl From<BracketError> for ServiceError {
+    fn from(error: BracketError) -> Self {
+        match error {
+            BracketError::TooFewEntrants(count) => Self::TooFewEntrants(count),
+            BracketError::UnknownMatch(id) => Self::MatchNotFound(id),
+            BracketError::NotReady(_) => Self::MatchNotReady,
+            BracketError::NotAParticipant(entrant, _) => Self::NotAnEntrant(entrant),
+            BracketError::NextDecided(_) => Self::NextMatchDecided,
+        }
     }
 }
 

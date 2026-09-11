@@ -49,6 +49,17 @@ async fn the_document_is_served_and_lists_every_route() {
         "/api/players/{handle}",
         "/api/admin/players",
         "/api/admin/players/{id}",
+        "/api/tournaments",
+        "/api/tournaments/{id}",
+        "/api/tournaments/{id}/registration",
+        "/api/admin/tournaments",
+        "/api/admin/tournaments/{id}",
+        "/api/admin/tournaments/{id}/status",
+        "/api/admin/tournaments/{id}/entrants",
+        "/api/admin/tournaments/{id}/entrants/{entrantId}",
+        "/api/admin/tournaments/{id}/bracket",
+        "/api/admin/tournaments/{id}/seeds",
+        "/api/admin/tournaments/{id}/matches/{matchId}/result",
         "/health/live",
         "/health/ready",
     ] {
@@ -73,5 +84,40 @@ fn the_player_schema_has_the_documented_fields() {
     assert_eq!(
         document["components"]["schemas"]["Role"]["enum"],
         serde_json::json!(["user", "admin"])
+    );
+}
+
+#[test]
+fn the_tournament_schema_has_the_documented_fields() {
+    let document: Value = serde_json::to_value(ApiDoc::openapi()).unwrap();
+    let tournament = &document["components"]["schemas"]["Tournament"];
+    let mut fields: Vec<&str> = tournament["properties"]
+        .as_object()
+        .unwrap()
+        .keys()
+        .map(String::as_str)
+        .collect();
+    fields.sort_unstable();
+
+    assert_eq!(
+        fields,
+        [
+            "createdAt",
+            "date",
+            "description",
+            "entrantCount",
+            "game",
+            "hasBracket",
+            "id",
+            "mode",
+            "name",
+            "registrationClosesAt",
+            "status",
+            "winner",
+        ]
+    );
+    assert_eq!(
+        document["components"]["schemas"]["TournamentStatus"]["enum"],
+        serde_json::json!(["draft", "open", "live", "concluded"])
     );
 }

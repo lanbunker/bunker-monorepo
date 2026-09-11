@@ -356,3 +356,40 @@ async fn a_local_environment_reports_the_cause_chain() {
         "local development needs the cause to debug with: {body}"
     );
 }
+
+#[tokio::test]
+async fn a_tournament_id_that_is_not_a_uuid_is_rejected() {
+    let response = TestApi::without_database()
+        .await
+        .get("/api/tournaments/not-a-uuid")
+        .await;
+
+    assert_error(response, StatusCode::BAD_REQUEST, "InvalidRequest").await;
+}
+
+#[tokio::test]
+async fn a_status_filter_on_the_public_tournament_list_is_rejected() {
+    let response = TestApi::without_database()
+        .await
+        .get("/api/tournaments?status=open")
+        .await;
+
+    assert_error(response, StatusCode::BAD_REQUEST, "InvalidRequest").await;
+}
+
+#[tokio::test]
+async fn admin_tournament_routes_without_a_token_are_unauthorized() {
+    let api = TestApi::without_database().await;
+    let id = uuid::Uuid::new_v4();
+
+    for path in [
+        format!("/api/admin/tournaments/{id}/status"),
+        format!("/api/admin/tournaments/{id}/entrants"),
+        format!("/api/admin/tournaments/{id}/bracket"),
+    ] {
+        let response = api.post(&path, &json!({})).await;
+        assert_error(response, StatusCode::UNAUTHORIZED, "Unauthorized").await;
+    }
+    let response = api.get("/api/admin/tournaments").await;
+    assert_error(response, StatusCode::UNAUTHORIZED, "Unauthorized").await;
+}

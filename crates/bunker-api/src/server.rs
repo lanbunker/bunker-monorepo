@@ -19,10 +19,13 @@ use crate::internal::http::{
 };
 use crate::internal::init_tracing;
 use crate::routers::{
-    AppState, admin_router, auth_router, health_router, openapi_router, player_router,
+    AppState, admin_router, admin_tournament_router, auth_router, health_router, openapi_router,
+    player_router, tournament_router,
 };
-use crate::services::{AuthService, ErrorCode, PasswordHasher, PlayerService, TokenIssuer};
-use crate::storage::{DbPool, PlayerStorage, connect, run_pending_migrations};
+use crate::services::{
+    AuthService, ErrorCode, PasswordHasher, PlayerService, TokenIssuer, TournamentService,
+};
+use crate::storage::{DbPool, PlayerStorage, TournamentStorage, connect, run_pending_migrations};
 
 /// Without this limit, a stopped request holds a connection and a task for ever.
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
@@ -47,12 +50,13 @@ impl std::fmt::Debug for Secrets {
 /// Connects storage to services to routes, by hand. There is no container and no
 /// reflection.
 pub fn build_router(pool: DbPool, config: AppConfig, secrets: &Secrets) -> Router {
-    let players = PlayerStorage::new(pool);
+    let players = PlayerStorage::new(pool.clone());
     let tokens = TokenIssuer::new(secrets.jwt_secret.as_ref().as_bytes(), TOKEN_TTL);
     let hasher = PasswordHasher::new(config.fast_password_hash);
 
     let state = AppState {
         auth: AuthService::new(players.clone(), tokens, hasher),
+        tournaments: TournamentService::new(TournamentStorage::new(pool), players.clone()),
         players: PlayerService::new(players),
     };
 
@@ -62,6 +66,8 @@ pub fn build_router(pool: DbPool, config: AppConfig, secrets: &Secrets) -> Route
         .merge(auth_router())
         .merge(player_router())
         .merge(admin_router())
+        .merge(tournament_router())
+        .merge(admin_tournament_router())
         .merge(health_router())
         .merge(openapi_router())
         .fallback(route_not_found)
@@ -94,7 +100,10 @@ impl From<ErrorCode> for StatusCode {
             ErrorCode::GenericError => Self::INTERNAL_SERVER_ERROR,
             ErrorCode::ServiceUnavailable => Self::SERVICE_UNAVAILABLE,
             ErrorCode::ItemNotFound | ErrorCode::RouteNotFound => Self::NOT_FOUND,
-            ErrorCode::HandleTaken => Self::CONFLICT,
+            ErrorCode::HandleTaken | ErrorCode::RegistrationClosed | ErrorCode::InvalidState => {
+                Self::CONFLICT
+            }
+            ErrorCode::NotAnEntrant => Self::UNPROCESSABLE_ENTITY,
             ErrorCode::InvalidCredentials | ErrorCode::Unauthorized => Self::UNAUTHORIZED,
             ErrorCode::Forbidden => Self::FORBIDDEN,
             ErrorCode::WrongPassword => Self::BAD_REQUEST,

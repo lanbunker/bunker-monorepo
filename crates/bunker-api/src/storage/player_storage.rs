@@ -1,11 +1,9 @@
-use bunker_models::{
-    Account, Glyph, GlyphBits, GlyphColor, Handle, PageQuery, Paginated, Player, PlayerId, Role,
-};
+use bunker_models::{Account, Glyph, Handle, PageQuery, Paginated, Player, PlayerId, Role};
 use time::OffsetDateTime;
-use uuid::Uuid;
 
 use super::db::DbPool;
 use super::error::StorageError;
+use super::row::{PlayerRow, parse_uuid, to_micros};
 
 const TABLE: &str = "players";
 
@@ -68,7 +66,7 @@ impl PlayerStorage {
         let handle = player.handle.as_ref();
         let glyph_bits = i64::from(player.glyph.bits.into_inner());
         let glyph_color = player.glyph.color.hex();
-        let created_at = to_micros(player.created_at)?;
+        let created_at = to_micros(TABLE, player.created_at)?;
 
         let role = Role::User.as_str();
         let inserted = sqlx::query!(
@@ -142,7 +140,7 @@ impl PlayerStorage {
 
         row.map(|row| {
             Ok(Credentials {
-                id: parse_id(&row.id)?,
+                id: PlayerId::new(parse_uuid(TABLE, &row.id)?),
                 password_hash: row.password_hash,
             })
         })
@@ -193,7 +191,7 @@ impl PlayerStorage {
 
         row.map(|row| {
             Ok(Credentials {
-                id: parse_id(&row.id)?,
+                id: PlayerId::new(parse_uuid(TABLE, &row.id)?),
                 password_hash: row.password_hash,
             })
         })
@@ -301,57 +299,6 @@ impl PlayerStorage {
 /// Separate from [`Player`], because the database holds primitives and the domain
 /// holds validated types.
 #[derive(Debug)]
-struct PlayerRow {
-    id: String,
-    handle: String,
-    glyph_bits: i64,
-    glyph_color: String,
-    role: String,
-    created_at: i64,
-}
-
-impl TryFrom<PlayerRow> for Player {
-    type Error = StorageError;
-
-    fn try_from(row: PlayerRow) -> Result<Self, Self::Error> {
-        let bits = u32::try_from(row.glyph_bits)
-            .ok()
-            .and_then(|raw| GlyphBits::try_new(raw).ok())
-            .ok_or_else(|| StorageError::malformed_row(TABLE, MalformedField("glyph_bits")))?;
-        let color = GlyphColor::from_hex(&row.glyph_color)
-            .ok_or_else(|| StorageError::malformed_row(TABLE, MalformedField("glyph_color")))?;
-
-        Ok(Self {
-            id: parse_id(&row.id)?,
-            handle: Handle::try_new(row.handle)
-                .map_err(|error| StorageError::malformed_row(TABLE, error))?,
-            glyph: Glyph { bits, color },
-            role: row
-                .role
-                .parse()
-                .map_err(|error| StorageError::malformed_row(TABLE, error))?,
-            created_at: from_micros(row.created_at)?,
-        })
-    }
-}
-
-fn to_micros(at: OffsetDateTime) -> Result<i64, StorageError> {
-    let micros = at.unix_timestamp_nanos() / 1_000;
-    i64::try_from(micros).map_err(|error| StorageError::malformed_row(TABLE, error))
-}
-
-fn from_micros(micros: i64) -> Result<OffsetDateTime, StorageError> {
-    OffsetDateTime::from_unix_timestamp_nanos(i128::from(micros) * 1_000)
-        .map_err(|error| StorageError::malformed_row(TABLE, error))
-}
-
-fn parse_id(raw: &str) -> Result<PlayerId, StorageError> {
-    Uuid::parse_str(raw)
-        .map(PlayerId::new)
-        .map_err(|error| StorageError::malformed_row(TABLE, error))
-}
-
-#[derive(Debug)]
 struct AccountRow {
     id: String,
     handle: String,
@@ -386,11 +333,6 @@ impl TryFrom<AccountRow> for StoredAccount {
         })
     }
 }
-
-/// A column value that the domain refuses and that has no error type of its own.
-#[derive(Debug, thiserror::Error)]
-#[error("column `{0}` holds a value outside the domain")]
-struct MalformedField(&'static str);
 
 /// `Ok` when the write hit the case-insensitive unique index on the handle, so
 /// the caller can turn it into a result. Any other failure stays a failure.

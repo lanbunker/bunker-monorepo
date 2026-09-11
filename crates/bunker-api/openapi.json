@@ -421,6 +421,1159 @@
         ]
       }
     },
+    "/api/admin/tournaments": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "list_tournaments",
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 1,
+              "minimum": 1
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Every tournament, drafts included",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Paginated_Tournament"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "create_tournament",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NewTournament"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "A new draft",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Tournament"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/admin/tournaments/{id}": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "get_tournament",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/TournamentId"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TournamentDetail"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      },
+      "delete": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "delete_tournament",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/TournamentId"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Gone, with its entrants and matches"
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      },
+      "patch": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "update_tournament",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/TournamentId"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TournamentUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Tournament"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/admin/tournaments/{id}/bracket": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "generate_bracket",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/TournamentId"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A fresh random bracket. Replaces one without results",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Bracket"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Not live, too few entrants, or results exist",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      },
+      "delete": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "delete_bracket",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/TournamentId"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Gone, or there was none"
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Results exist, or the tournament is concluded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/admin/tournaments/{id}/entrants": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "add_entrant",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/TournamentId"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EntrantAdd"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "The player was already in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Entrant"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Entrant"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown tournament or player",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "A bracket exists",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/admin/tournaments/{id}/entrants/{entrantId}": {
+      "delete": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "remove_entrant",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/TournamentId"
+            }
+          },
+          {
+            "name": "entrantId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/EntrantId"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Gone, or never in"
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "A bracket exists, or this is the winner",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/admin/tournaments/{id}/matches/{matchId}/result": {
+      "put": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "report_result",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/TournamentId"
+            }
+          },
+          {
+            "name": "matchId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/MatchId"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MatchResult"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "The whole bracket after the result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Bracket"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The match is not ready, or the next one is decided",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The winner is not a side of this match",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      },
+      "delete": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "clear_result",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/TournamentId"
+            }
+          },
+          {
+            "name": "matchId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/MatchId"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The whole bracket after the result is gone",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Bracket"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "A bye, or the next match is decided",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/admin/tournaments/{id}/seeds": {
+      "put": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "reorder_seeds",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/TournamentId"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SeedOrder"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "The bracket rebuilt in this order",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Bracket"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "No bracket, not live, or results exist",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The order does not list each entrant one time",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/admin/tournaments/{id}/status": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "change_status",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/TournamentId"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StatusChange"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Tournament"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The transition is not allowed in this state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The winner is not an entrant",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
     "/api/auth/login": {
       "post": {
         "tags": [
@@ -791,6 +1944,252 @@
         }
       }
     },
+    "/api/tournaments": {
+      "get": {
+        "tags": [
+          "tournaments"
+        ],
+        "operationId": "list_tournaments",
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 1,
+              "minimum": 1
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Newest event first. Drafts are hidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Paginated_Tournament"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/tournaments/{id}": {
+      "get": {
+        "tags": [
+          "tournaments"
+        ],
+        "operationId": "get_tournament",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/TournamentId"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TournamentDetail"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown, or still a draft",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/tournaments/{id}/registration": {
+      "post": {
+        "tags": [
+          "tournaments"
+        ],
+        "operationId": "register",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/TournamentId"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The caller's entry. A second call answers the same one",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Entrant"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Registration is not open",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      },
+      "delete": {
+        "tags": [
+          "tournaments"
+        ],
+        "operationId": "retire",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/TournamentId"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Gone, or never in"
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Registration is not open",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
     "/health/live": {
       "get": {
         "tags": [
@@ -890,6 +2289,82 @@
           }
         }
       },
+      "Bracket": {
+        "type": "object",
+        "description": "Every match of a tournament, round by round. `rounds[0]` is round 1 and the\nlast round holds the final alone.",
+        "required": [
+          "rounds"
+        ],
+        "properties": {
+          "rounds": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": {
+                "$ref": "#/components/schemas/Match"
+              }
+            }
+          }
+        }
+      },
+      "Description": {
+        "type": "string",
+        "maxLength": 1000,
+        "minLength": 0
+      },
+      "Entrant": {
+        "type": "object",
+        "description": "A registration. `player` is absent after the player deleted their account,\nso an old bracket keeps its shape.",
+        "required": [
+          "id",
+          "registeredAt"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/EntrantId"
+          },
+          "player": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Player"
+              }
+            ]
+          },
+          "registeredAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "seed": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "Set by the bracket. Seed 1 is the first in the generated order.",
+            "minimum": 0
+          }
+        }
+      },
+      "EntrantAdd": {
+        "type": "object",
+        "description": "Body of `POST /api/admin/tournaments/{id}/entrants`.",
+        "required": [
+          "playerId"
+        ],
+        "properties": {
+          "playerId": {
+            "$ref": "#/components/schemas/PlayerId"
+          }
+        },
+        "additionalProperties": false
+      },
+      "EntrantId": {
+        "type": "string",
+        "format": "uuid"
+      },
       "ErrorCode": {
         "type": "string",
         "description": "Each error code the API can answer with. A client selects on these names, so\nthey are part of the contract.\n\nTwo steps make a response from an error: `ServiceError::public` below selects\nthe code, and `From<ErrorCode> for StatusCode` in `server.rs` selects the\nstatus.",
@@ -902,6 +2377,9 @@
           "Unauthorized",
           "Forbidden",
           "WrongPassword",
+          "RegistrationClosed",
+          "InvalidState",
+          "NotAnEntrant",
           "InvalidRequest",
           "UnprocessableRequest",
           "UnsupportedMediaType",
@@ -909,6 +2387,16 @@
           "RouteNotFound",
           "MethodNotAllowed"
         ]
+      },
+      "GameMode": {
+        "type": "string",
+        "maxLength": 30,
+        "minLength": 1
+      },
+      "GameName": {
+        "type": "string",
+        "maxLength": 40,
+        "minLength": 1
       },
       "Glyph": {
         "type": "object",
@@ -1001,6 +2489,111 @@
         },
         "additionalProperties": false
       },
+      "Match": {
+        "type": "object",
+        "description": "One match. `round` starts at 1, `slot` at 0. An empty side is a bye in round\n1 and an undecided feeder afterwards.",
+        "required": [
+          "id",
+          "round",
+          "slot"
+        ],
+        "properties": {
+          "entrantA": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/EntrantId"
+              }
+            ]
+          },
+          "entrantB": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/EntrantId"
+              }
+            ]
+          },
+          "id": {
+            "$ref": "#/components/schemas/MatchId"
+          },
+          "round": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "slot": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "winner": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/EntrantId"
+              }
+            ]
+          }
+        }
+      },
+      "MatchId": {
+        "type": "string",
+        "format": "uuid"
+      },
+      "MatchResult": {
+        "type": "object",
+        "description": "Body of `PUT /api/admin/tournaments/{id}/matches/{matchId}/result`.",
+        "required": [
+          "winner"
+        ],
+        "properties": {
+          "winner": {
+            "$ref": "#/components/schemas/EntrantId"
+          }
+        },
+        "additionalProperties": false
+      },
+      "NewTournament": {
+        "type": "object",
+        "description": "Body of `POST /api/admin/tournaments`. A new tournament is always a draft.",
+        "required": [
+          "name",
+          "game",
+          "mode",
+          "date",
+          "registrationClosesAt"
+        ],
+        "properties": {
+          "date": {
+            "type": "string",
+            "format": "date"
+          },
+          "description": {
+            "$ref": "#/components/schemas/Description"
+          },
+          "game": {
+            "$ref": "#/components/schemas/GameName"
+          },
+          "mode": {
+            "$ref": "#/components/schemas/GameMode"
+          },
+          "name": {
+            "$ref": "#/components/schemas/TournamentName"
+          },
+          "registrationClosesAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "additionalProperties": false
+      },
       "Paginated_Player": {
         "type": "object",
         "description": "One page of results, and the totals a client needs for a pager.",
@@ -1040,6 +2633,113 @@
                 },
                 "role": {
                   "$ref": "#/components/schemas/Role"
+                }
+              }
+            }
+          },
+          "page": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 1
+          },
+          "pageSize": {
+            "type": "integer",
+            "format": "int32",
+            "maximum": 100,
+            "minimum": 1
+          },
+          "total": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Every row that matches, ignoring the window.",
+            "minimum": 0
+          },
+          "totalPages": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          }
+        }
+      },
+      "Paginated_Tournament": {
+        "type": "object",
+        "description": "One page of results, and the totals a client needs for a pager.",
+        "required": [
+          "items",
+          "total",
+          "page",
+          "pageSize",
+          "totalPages"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "description": "A tournament as every client sees it. `entrant_count` and `has_bracket` ride\nalong so a list needs no second call per row.",
+              "required": [
+                "id",
+                "name",
+                "game",
+                "mode",
+                "description",
+                "date",
+                "registrationClosesAt",
+                "status",
+                "entrantCount",
+                "hasBracket",
+                "createdAt"
+              ],
+              "properties": {
+                "createdAt": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "date": {
+                  "type": "string",
+                  "format": "date",
+                  "description": "The day of the event. A day has no timezone."
+                },
+                "description": {
+                  "$ref": "#/components/schemas/Description"
+                },
+                "entrantCount": {
+                  "type": "integer",
+                  "format": "int32",
+                  "minimum": 0
+                },
+                "game": {
+                  "$ref": "#/components/schemas/GameName"
+                },
+                "hasBracket": {
+                  "type": "boolean"
+                },
+                "id": {
+                  "$ref": "#/components/schemas/TournamentId"
+                },
+                "mode": {
+                  "$ref": "#/components/schemas/GameMode"
+                },
+                "name": {
+                  "$ref": "#/components/schemas/TournamentName"
+                },
+                "registrationClosesAt": {
+                  "type": "string",
+                  "format": "date-time",
+                  "description": "Registrations close at this instant. Past it, nobody applies or retires."
+                },
+                "status": {
+                  "$ref": "#/components/schemas/TournamentStatus"
+                },
+                "winner": {
+                  "oneOf": [
+                    {
+                      "type": "null"
+                    },
+                    {
+                      "$ref": "#/components/schemas/Entrant"
+                    }
+                  ]
                 }
               }
             }
@@ -1145,6 +2845,22 @@
         },
         "additionalProperties": false
       },
+      "SeedOrder": {
+        "type": "object",
+        "description": "Body of `PUT /api/admin/tournaments/{id}/seeds`: every entrant exactly once,\nseed 1 first.",
+        "required": [
+          "entrants"
+        ],
+        "properties": {
+          "entrants": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EntrantId"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
       "SignupRequest": {
         "type": "object",
         "description": "Request body of `POST /api/auth/signup`.",
@@ -1158,6 +2874,29 @@
           },
           "password": {
             "$ref": "#/components/schemas/Password"
+          }
+        },
+        "additionalProperties": false
+      },
+      "StatusChange": {
+        "type": "object",
+        "description": "Body of `POST /api/admin/tournaments/{id}/status`. A winner is accepted only\nwith `concluded` and only when the tournament has no bracket.",
+        "required": [
+          "status"
+        ],
+        "properties": {
+          "status": {
+            "$ref": "#/components/schemas/TournamentStatus"
+          },
+          "winner": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/EntrantId"
+              }
+            ]
           }
         },
         "additionalProperties": false
@@ -1190,6 +2929,184 @@
             "type": "string"
           }
         }
+      },
+      "Tournament": {
+        "type": "object",
+        "description": "A tournament as every client sees it. `entrant_count` and `has_bracket` ride\nalong so a list needs no second call per row.",
+        "required": [
+          "id",
+          "name",
+          "game",
+          "mode",
+          "description",
+          "date",
+          "registrationClosesAt",
+          "status",
+          "entrantCount",
+          "hasBracket",
+          "createdAt"
+        ],
+        "properties": {
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "date": {
+            "type": "string",
+            "format": "date",
+            "description": "The day of the event. A day has no timezone."
+          },
+          "description": {
+            "$ref": "#/components/schemas/Description"
+          },
+          "entrantCount": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "game": {
+            "$ref": "#/components/schemas/GameName"
+          },
+          "hasBracket": {
+            "type": "boolean"
+          },
+          "id": {
+            "$ref": "#/components/schemas/TournamentId"
+          },
+          "mode": {
+            "$ref": "#/components/schemas/GameMode"
+          },
+          "name": {
+            "$ref": "#/components/schemas/TournamentName"
+          },
+          "registrationClosesAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Registrations close at this instant. Past it, nobody applies or retires."
+          },
+          "status": {
+            "$ref": "#/components/schemas/TournamentStatus"
+          },
+          "winner": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Entrant"
+              }
+            ]
+          }
+        }
+      },
+      "TournamentDetail": {
+        "type": "object",
+        "description": "One tournament with everything a page needs.",
+        "required": [
+          "tournament",
+          "entrants"
+        ],
+        "properties": {
+          "bracket": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Bracket"
+              }
+            ]
+          },
+          "entrants": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Entrant"
+            }
+          },
+          "tournament": {
+            "$ref": "#/components/schemas/Tournament"
+          }
+        }
+      },
+      "TournamentId": {
+        "type": "string",
+        "format": "uuid"
+      },
+      "TournamentName": {
+        "type": "string",
+        "maxLength": 60,
+        "minLength": 1
+      },
+      "TournamentStatus": {
+        "type": "string",
+        "description": "The life of a tournament. `Draft` is visible to admins only. `Open` takes\nregistrations until the deadline. `Live` freezes the entrants for the\nbracket. `Concluded` is final.",
+        "enum": [
+          "draft",
+          "open",
+          "live",
+          "concluded"
+        ]
+      },
+      "TournamentUpdate": {
+        "type": "object",
+        "description": "Body of `PATCH /api/admin/tournaments/{id}`. An absent field keeps its value.",
+        "properties": {
+          "date": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date"
+          },
+          "description": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Description"
+              }
+            ]
+          },
+          "game": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/GameName"
+              }
+            ]
+          },
+          "mode": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/GameMode"
+              }
+            ]
+          },
+          "name": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/TournamentName"
+              }
+            ]
+          },
+          "registrationClosesAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          }
+        },
+        "additionalProperties": false
       }
     },
     "securitySchemes": {
@@ -1208,6 +3125,10 @@
     {
       "name": "players",
       "description": "Public player data"
+    },
+    {
+      "name": "tournaments",
+      "description": "Tournaments, entrants and brackets"
     },
     {
       "name": "admin",

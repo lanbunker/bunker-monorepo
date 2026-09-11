@@ -6,9 +6,11 @@ mod error;
 mod password;
 mod player_service;
 mod token;
+mod tournament_service;
 
 pub use auth_service::AuthService;
 pub use error::{ErrorCode, ServiceError};
 pub use password::PasswordHasher;
 pub use player_service::PlayerService;
 pub use token::{TokenIssuer, VerifiedToken};
+pub use tournament_service::TournamentService;

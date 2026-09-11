@@ -29,11 +29,13 @@ use axum::response::Response;
 use bunker_api::config::{AppEnv, DbConfig, JwtSecret, MaxConnections, resolve_app_config};
 use bunker_api::server::{Secrets, build_router};
 use bunker_api::storage::{connect, run_pending_migrations};
-use bunker_models::{Account, Player, Role, TokenResponse};
+use bunker_models::{Account, Entrant, Player, Role, TokenResponse, Tournament, TournamentId};
 use http_body_util::BodyExt as _;
 use serde::de::DeserializeOwned;
 use serde_json::{Value, json};
 use tempfile::TempDir;
+use time::format_description::well_known::Rfc3339;
+use time::{Duration, OffsetDateTime};
 use tower::ServiceExt as _;
 
 /// The secret every test router signs with. A test that needs a token from
@@ -143,6 +145,89 @@ impl TestApi {
             .unwrap();
 
         token.token
+    }
+
+    pub async fn delete_as(&self, path: &str, token: &str) -> Response {
+        let request = Request::builder()
+            .method(Method::DELETE)
+            .uri(path)
+            .header(header::AUTHORIZATION, format!("Bearer {token}"))
+            .body(Body::empty())
+            .unwrap();
+        self.send(request).await
+    }
+
+    /// A draft tournament for tomorrow whose registration closes in
+    /// `closes_in_seconds`. A negative value makes a deadline in the past.
+    pub async fn create_tournament(&self, admin: &str, closes_in_seconds: i64) -> Tournament {
+        let closes_at = OffsetDateTime::now_utc() + Duration::seconds(closes_in_seconds);
+        let response = self
+            .post_as(
+                "/api/admin/tournaments",
+                &json!({
+                    "name": "Sniper Cup",
+                    "game": "COD MW2",
+                    "mode": "1v1 sniper only",
+                    "description": "One life, one shot.",
+                    "date": "2026-10-24",
+                    "registrationClosesAt": closes_at.format(&Rfc3339).unwrap(),
+                }),
+                admin,
+            )
+            .await;
+        assert_eq!(
+            response.status(),
+            StatusCode::CREATED,
+            "tournament creation failed"
+        );
+
+        read_json(response).await
+    }
+
+    pub async fn set_status(
+        &self,
+        admin: &str,
+        tournament: TournamentId,
+        status: &str,
+    ) -> Tournament {
+        let response = self
+            .post_as(
+                &format!("/api/admin/tournaments/{tournament}/status"),
+                &json!({ "status": status }),
+                admin,
+            )
+            .await;
+        assert_eq!(
+            response.status(),
+            StatusCode::OK,
+            "status change to {status} failed"
+        );
+
+        read_json(response).await
+    }
+
+    /// Signs up a player and adds them as an entrant through the admin route.
+    pub async fn add_entrant(
+        &self,
+        admin: &str,
+        tournament: TournamentId,
+        handle: &str,
+    ) -> Entrant {
+        let player = self.signup_player(handle).await;
+        let response = self
+            .post_as(
+                &format!("/api/admin/tournaments/{tournament}/entrants"),
+                &json!({ "playerId": player.id }),
+                admin,
+            )
+            .await;
+        assert_eq!(
+            response.status(),
+            StatusCode::CREATED,
+            "adding {handle} failed"
+        );
+
+        read_json(response).await
     }
 
     pub async fn put(&self, path: &str, body: &Value) -> Response {

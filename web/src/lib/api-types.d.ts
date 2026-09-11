@@ -68,6 +68,134 @@ export interface paths {
         patch?: never
         trace?: never
     }
+    "/api/admin/tournaments": {
+        parameters: {
+            query?: never
+            header?: never
+            path?: never
+            cookie?: never
+        }
+        get: operations["list_tournaments"]
+        put?: never
+        post: operations["create_tournament"]
+        delete?: never
+        options?: never
+        head?: never
+        patch?: never
+        trace?: never
+    }
+    "/api/admin/tournaments/{id}": {
+        parameters: {
+            query?: never
+            header?: never
+            path?: never
+            cookie?: never
+        }
+        get: operations["get_tournament"]
+        put?: never
+        post?: never
+        delete: operations["delete_tournament"]
+        options?: never
+        head?: never
+        patch: operations["update_tournament"]
+        trace?: never
+    }
+    "/api/admin/tournaments/{id}/bracket": {
+        parameters: {
+            query?: never
+            header?: never
+            path?: never
+            cookie?: never
+        }
+        get?: never
+        put?: never
+        post: operations["generate_bracket"]
+        delete: operations["delete_bracket"]
+        options?: never
+        head?: never
+        patch?: never
+        trace?: never
+    }
+    "/api/admin/tournaments/{id}/entrants": {
+        parameters: {
+            query?: never
+            header?: never
+            path?: never
+            cookie?: never
+        }
+        get?: never
+        put?: never
+        post: operations["add_entrant"]
+        delete?: never
+        options?: never
+        head?: never
+        patch?: never
+        trace?: never
+    }
+    "/api/admin/tournaments/{id}/entrants/{entrantId}": {
+        parameters: {
+            query?: never
+            header?: never
+            path?: never
+            cookie?: never
+        }
+        get?: never
+        put?: never
+        post?: never
+        delete: operations["remove_entrant"]
+        options?: never
+        head?: never
+        patch?: never
+        trace?: never
+    }
+    "/api/admin/tournaments/{id}/matches/{matchId}/result": {
+        parameters: {
+            query?: never
+            header?: never
+            path?: never
+            cookie?: never
+        }
+        get?: never
+        put: operations["report_result"]
+        post?: never
+        delete: operations["clear_result"]
+        options?: never
+        head?: never
+        patch?: never
+        trace?: never
+    }
+    "/api/admin/tournaments/{id}/seeds": {
+        parameters: {
+            query?: never
+            header?: never
+            path?: never
+            cookie?: never
+        }
+        get?: never
+        put: operations["reorder_seeds"]
+        post?: never
+        delete?: never
+        options?: never
+        head?: never
+        patch?: never
+        trace?: never
+    }
+    "/api/admin/tournaments/{id}/status": {
+        parameters: {
+            query?: never
+            header?: never
+            path?: never
+            cookie?: never
+        }
+        get?: never
+        put?: never
+        post: operations["change_status"]
+        delete?: never
+        options?: never
+        head?: never
+        patch?: never
+        trace?: never
+    }
     "/api/auth/login": {
         parameters: {
             query?: never
@@ -180,6 +308,54 @@ export interface paths {
         patch?: never
         trace?: never
     }
+    "/api/tournaments": {
+        parameters: {
+            query?: never
+            header?: never
+            path?: never
+            cookie?: never
+        }
+        get: operations["list_tournaments"]
+        put?: never
+        post?: never
+        delete?: never
+        options?: never
+        head?: never
+        patch?: never
+        trace?: never
+    }
+    "/api/tournaments/{id}": {
+        parameters: {
+            query?: never
+            header?: never
+            path?: never
+            cookie?: never
+        }
+        get: operations["get_tournament"]
+        put?: never
+        post?: never
+        delete?: never
+        options?: never
+        head?: never
+        patch?: never
+        trace?: never
+    }
+    "/api/tournaments/{id}/registration": {
+        parameters: {
+            query?: never
+            header?: never
+            path?: never
+            cookie?: never
+        }
+        get?: never
+        put?: never
+        post: operations["register"]
+        delete: operations["retire"]
+        options?: never
+        head?: never
+        patch?: never
+        trace?: never
+    }
     "/health/live": {
         parameters: {
             query?: never
@@ -235,6 +411,35 @@ export interface components {
             status: number
         }
         /**
+         * @description Every match of a tournament, round by round. `rounds[0]` is round 1 and the
+         *     last round holds the final alone.
+         */
+        Bracket: {
+            rounds: components["schemas"]["Match"][][]
+        }
+        Description: string
+        /**
+         * @description A registration. `player` is absent after the player deleted their account,
+         *     so an old bracket keeps its shape.
+         */
+        Entrant: {
+            id: components["schemas"]["EntrantId"]
+            player?: null | components["schemas"]["Player"]
+            /** Format: date-time */
+            registeredAt: string
+            /**
+             * Format: int32
+             * @description Set by the bracket. Seed 1 is the first in the generated order.
+             */
+            seed?: number | null
+        }
+        /** @description Body of `POST /api/admin/tournaments/{id}/entrants`. */
+        EntrantAdd: {
+            playerId: components["schemas"]["PlayerId"]
+        }
+        /** Format: uuid */
+        EntrantId: string
+        /**
          * @description Each error code the API can answer with. A client selects on these names, so
          *     they are part of the contract.
          *
@@ -252,12 +457,17 @@ export interface components {
             | "Unauthorized"
             | "Forbidden"
             | "WrongPassword"
+            | "RegistrationClosed"
+            | "InvalidState"
+            | "NotAnEntrant"
             | "InvalidRequest"
             | "UnprocessableRequest"
             | "UnsupportedMediaType"
             | "PayloadTooLarge"
             | "RouteNotFound"
             | "MethodNotAllowed"
+        GameMode: string
+        GameName: string
         /**
          * @description What the players table stores: the grid and the color. Generated one time at
          *     signup and then read, never recomputed.
@@ -303,6 +513,37 @@ export interface components {
             handle: components["schemas"]["Handle"]
             password: components["schemas"]["Password"]
         }
+        /**
+         * @description One match. `round` starts at 1, `slot` at 0. An empty side is a bye in round
+         *     1 and an undecided feeder afterwards.
+         */
+        Match: {
+            entrantA?: null | components["schemas"]["EntrantId"]
+            entrantB?: null | components["schemas"]["EntrantId"]
+            id: components["schemas"]["MatchId"]
+            /** Format: int32 */
+            round: number
+            /** Format: int32 */
+            slot: number
+            winner?: null | components["schemas"]["EntrantId"]
+        }
+        /** Format: uuid */
+        MatchId: string
+        /** @description Body of `PUT /api/admin/tournaments/{id}/matches/{matchId}/result`. */
+        MatchResult: {
+            winner: components["schemas"]["EntrantId"]
+        }
+        /** @description Body of `POST /api/admin/tournaments`. A new tournament is always a draft. */
+        NewTournament: {
+            /** Format: date */
+            date: string
+            description?: components["schemas"]["Description"]
+            game: components["schemas"]["GameName"]
+            mode: components["schemas"]["GameMode"]
+            name: components["schemas"]["TournamentName"]
+            /** Format: date-time */
+            registrationClosesAt: string
+        }
         /** @description One page of results, and the totals a client needs for a pager. */
         Paginated_Player: {
             items: {
@@ -312,6 +553,44 @@ export interface components {
                 handle: components["schemas"]["Handle"]
                 id: components["schemas"]["PlayerId"]
                 role: components["schemas"]["Role"]
+            }[]
+            /** Format: int32 */
+            page: number
+            /** Format: int32 */
+            pageSize: number
+            /**
+             * Format: int64
+             * @description Every row that matches, ignoring the window.
+             */
+            total: number
+            /** Format: int64 */
+            totalPages: number
+        }
+        /** @description One page of results, and the totals a client needs for a pager. */
+        Paginated_Tournament: {
+            items: {
+                /** Format: date-time */
+                createdAt: string
+                /**
+                 * Format: date
+                 * @description The day of the event. A day has no timezone.
+                 */
+                date: string
+                description: components["schemas"]["Description"]
+                /** Format: int32 */
+                entrantCount: number
+                game: components["schemas"]["GameName"]
+                hasBracket: boolean
+                id: components["schemas"]["TournamentId"]
+                mode: components["schemas"]["GameMode"]
+                name: components["schemas"]["TournamentName"]
+                /**
+                 * Format: date-time
+                 * @description Registrations close at this instant. Past it, nobody applies or retires.
+                 */
+                registrationClosesAt: string
+                status: components["schemas"]["TournamentStatus"]
+                winner?: null | components["schemas"]["Entrant"]
             }[]
             /** Format: int32 */
             page: number
@@ -352,10 +631,25 @@ export interface components {
         RoleUpdate: {
             role: components["schemas"]["Role"]
         }
+        /**
+         * @description Body of `PUT /api/admin/tournaments/{id}/seeds`: every entrant exactly once,
+         *     seed 1 first.
+         */
+        SeedOrder: {
+            entrants: components["schemas"]["EntrantId"][]
+        }
         /** @description Request body of `POST /api/auth/signup`. */
         SignupRequest: {
             handle: components["schemas"]["Handle"]
             password: components["schemas"]["Password"]
+        }
+        /**
+         * @description Body of `POST /api/admin/tournaments/{id}/status`. A winner is accepted only
+         *     with `concluded` and only when the tournament has no bracket.
+         */
+        StatusChange: {
+            status: components["schemas"]["TournamentStatus"]
+            winner?: null | components["schemas"]["EntrantId"]
         }
         /**
          * @description The answer to an admin password reset. Shown once, never stored in clear, and
@@ -369,6 +663,61 @@ export interface components {
             /** Format: date-time */
             expiresAt: string
             token: string
+        }
+        /**
+         * @description A tournament as every client sees it. `entrant_count` and `has_bracket` ride
+         *     along so a list needs no second call per row.
+         */
+        Tournament: {
+            /** Format: date-time */
+            createdAt: string
+            /**
+             * Format: date
+             * @description The day of the event. A day has no timezone.
+             */
+            date: string
+            description: components["schemas"]["Description"]
+            /** Format: int32 */
+            entrantCount: number
+            game: components["schemas"]["GameName"]
+            hasBracket: boolean
+            id: components["schemas"]["TournamentId"]
+            mode: components["schemas"]["GameMode"]
+            name: components["schemas"]["TournamentName"]
+            /**
+             * Format: date-time
+             * @description Registrations close at this instant. Past it, nobody applies or retires.
+             */
+            registrationClosesAt: string
+            status: components["schemas"]["TournamentStatus"]
+            winner?: null | components["schemas"]["Entrant"]
+        }
+        /** @description One tournament with everything a page needs. */
+        TournamentDetail: {
+            bracket?: null | components["schemas"]["Bracket"]
+            entrants: components["schemas"]["Entrant"][]
+            tournament: components["schemas"]["Tournament"]
+        }
+        /** Format: uuid */
+        TournamentId: string
+        TournamentName: string
+        /**
+         * @description The life of a tournament. `Draft` is visible to admins only. `Open` takes
+         *     registrations until the deadline. `Live` freezes the entrants for the
+         *     bracket. `Concluded` is final.
+         * @enum {string}
+         */
+        TournamentStatus: "draft" | "open" | "live" | "concluded"
+        /** @description Body of `PATCH /api/admin/tournaments/{id}`. An absent field keeps its value. */
+        TournamentUpdate: {
+            /** Format: date */
+            date?: string | null
+            description?: null | components["schemas"]["Description"]
+            game?: null | components["schemas"]["GameName"]
+            mode?: null | components["schemas"]["GameMode"]
+            name?: null | components["schemas"]["TournamentName"]
+            /** Format: date-time */
+            registrationClosesAt?: string | null
         }
     }
     responses: never
@@ -661,6 +1010,833 @@ export interface operations {
             }
         }
     }
+    list_tournaments: {
+        parameters: {
+            query?: {
+                page?: number
+                pageSize?: number
+            }
+            header?: never
+            path?: never
+            cookie?: never
+        }
+        requestBody?: never
+        responses: {
+            /** @description Every tournament, drafts included */
+            200: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["Paginated_Tournament"]
+                }
+            }
+            400: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            401: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            403: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+        }
+    }
+    create_tournament: {
+        parameters: {
+            query?: never
+            header?: never
+            path?: never
+            cookie?: never
+        }
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NewTournament"]
+            }
+        }
+        responses: {
+            /** @description A new draft */
+            201: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["Tournament"]
+                }
+            }
+            400: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            401: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            403: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            422: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+        }
+    }
+    get_tournament: {
+        parameters: {
+            query?: never
+            header?: never
+            path: {
+                id: components["schemas"]["TournamentId"]
+            }
+            cookie?: never
+        }
+        requestBody?: never
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["TournamentDetail"]
+                }
+            }
+            400: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            401: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            403: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            404: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+        }
+    }
+    delete_tournament: {
+        parameters: {
+            query?: never
+            header?: never
+            path: {
+                id: components["schemas"]["TournamentId"]
+            }
+            cookie?: never
+        }
+        requestBody?: never
+        responses: {
+            /** @description Gone, with its entrants and matches */
+            204: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content?: never
+            }
+            400: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            401: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            403: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+        }
+    }
+    update_tournament: {
+        parameters: {
+            query?: never
+            header?: never
+            path: {
+                id: components["schemas"]["TournamentId"]
+            }
+            cookie?: never
+        }
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TournamentUpdate"]
+            }
+        }
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["Tournament"]
+                }
+            }
+            400: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            401: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            403: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            404: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            422: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+        }
+    }
+    generate_bracket: {
+        parameters: {
+            query?: never
+            header?: never
+            path: {
+                id: components["schemas"]["TournamentId"]
+            }
+            cookie?: never
+        }
+        requestBody?: never
+        responses: {
+            /** @description A fresh random bracket. Replaces one without results */
+            200: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["Bracket"]
+                }
+            }
+            400: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            401: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            403: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            404: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            /** @description Not live, too few entrants, or results exist */
+            409: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+        }
+    }
+    delete_bracket: {
+        parameters: {
+            query?: never
+            header?: never
+            path: {
+                id: components["schemas"]["TournamentId"]
+            }
+            cookie?: never
+        }
+        requestBody?: never
+        responses: {
+            /** @description Gone, or there was none */
+            204: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content?: never
+            }
+            400: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            401: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            403: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            404: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            /** @description Results exist, or the tournament is concluded */
+            409: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+        }
+    }
+    add_entrant: {
+        parameters: {
+            query?: never
+            header?: never
+            path: {
+                id: components["schemas"]["TournamentId"]
+            }
+            cookie?: never
+        }
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EntrantAdd"]
+            }
+        }
+        responses: {
+            /** @description The player was already in */
+            200: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["Entrant"]
+                }
+            }
+            201: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["Entrant"]
+                }
+            }
+            400: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            401: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            403: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            /** @description Unknown tournament or player */
+            404: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            /** @description A bracket exists */
+            409: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            422: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+        }
+    }
+    remove_entrant: {
+        parameters: {
+            query?: never
+            header?: never
+            path: {
+                id: components["schemas"]["TournamentId"]
+                entrantId: components["schemas"]["EntrantId"]
+            }
+            cookie?: never
+        }
+        requestBody?: never
+        responses: {
+            /** @description Gone, or never in */
+            204: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content?: never
+            }
+            400: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            401: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            403: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            404: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            /** @description A bracket exists, or this is the winner */
+            409: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+        }
+    }
+    report_result: {
+        parameters: {
+            query?: never
+            header?: never
+            path: {
+                id: components["schemas"]["TournamentId"]
+                matchId: components["schemas"]["MatchId"]
+            }
+            cookie?: never
+        }
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MatchResult"]
+            }
+        }
+        responses: {
+            /** @description The whole bracket after the result */
+            200: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["Bracket"]
+                }
+            }
+            400: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            401: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            403: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            404: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            /** @description The match is not ready, or the next one is decided */
+            409: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            /** @description The winner is not a side of this match */
+            422: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+        }
+    }
+    clear_result: {
+        parameters: {
+            query?: never
+            header?: never
+            path: {
+                id: components["schemas"]["TournamentId"]
+                matchId: components["schemas"]["MatchId"]
+            }
+            cookie?: never
+        }
+        requestBody?: never
+        responses: {
+            /** @description The whole bracket after the result is gone */
+            200: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["Bracket"]
+                }
+            }
+            400: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            401: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            403: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            404: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            /** @description A bye, or the next match is decided */
+            409: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+        }
+    }
+    reorder_seeds: {
+        parameters: {
+            query?: never
+            header?: never
+            path: {
+                id: components["schemas"]["TournamentId"]
+            }
+            cookie?: never
+        }
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SeedOrder"]
+            }
+        }
+        responses: {
+            /** @description The bracket rebuilt in this order */
+            200: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["Bracket"]
+                }
+            }
+            400: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            401: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            403: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            404: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            /** @description No bracket, not live, or results exist */
+            409: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            /** @description The order does not list each entrant one time */
+            422: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+        }
+    }
+    change_status: {
+        parameters: {
+            query?: never
+            header?: never
+            path: {
+                id: components["schemas"]["TournamentId"]
+            }
+            cookie?: never
+        }
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StatusChange"]
+            }
+        }
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["Tournament"]
+                }
+            }
+            400: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            401: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            403: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            404: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            /** @description The transition is not allowed in this state */
+            409: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            /** @description The winner is not an entrant */
+            422: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+        }
+    }
     login: {
         parameters: {
             query?: never
@@ -920,6 +2096,183 @@ export interface operations {
                 }
             }
             404: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+        }
+    }
+    list_tournaments: {
+        parameters: {
+            query?: {
+                page?: number
+                pageSize?: number
+            }
+            header?: never
+            path?: never
+            cookie?: never
+        }
+        requestBody?: never
+        responses: {
+            /** @description Newest event first. Drafts are hidden */
+            200: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["Paginated_Tournament"]
+                }
+            }
+            400: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+        }
+    }
+    get_tournament: {
+        parameters: {
+            query?: never
+            header?: never
+            path: {
+                id: components["schemas"]["TournamentId"]
+            }
+            cookie?: never
+        }
+        requestBody?: never
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["TournamentDetail"]
+                }
+            }
+            400: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            /** @description Unknown, or still a draft */
+            404: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+        }
+    }
+    register: {
+        parameters: {
+            query?: never
+            header?: never
+            path: {
+                id: components["schemas"]["TournamentId"]
+            }
+            cookie?: never
+        }
+        requestBody?: never
+        responses: {
+            /** @description The caller's entry. A second call answers the same one */
+            200: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["Entrant"]
+                }
+            }
+            400: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            401: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            404: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            /** @description Registration is not open */
+            409: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+        }
+    }
+    retire: {
+        parameters: {
+            query?: never
+            header?: never
+            path: {
+                id: components["schemas"]["TournamentId"]
+            }
+            cookie?: never
+        }
+        requestBody?: never
+        responses: {
+            /** @description Gone, or never in */
+            204: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content?: never
+            }
+            400: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            401: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            404: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            /** @description Registration is not open */
+            409: {
                 headers: {
                     [name: string]: unknown
                 }
