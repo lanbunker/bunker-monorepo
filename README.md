@@ -156,12 +156,23 @@ empty or unmigrated file fails with `no such table`.
 
 ## Deploy
 
-The site deploys to Cloudflare Workers with wrangler on each push to `main`
-(`deploy.yml`). The API deploys from the `deploy-api` job in `ci.yml`, after
-every other job is green: a static musl binary goes over SSH through a
-Cloudflare Tunnel to a Debian container, a root script installs it and restarts
-the service, and the job checks `/health/ready` on the public name. Migrations
-run at startup, so a deploy is one binary swap.
+Two pipelines, both from GitHub Actions on a push to `main`. The `dev` branch
+runs CI and deploys nothing.
 
-`deploy/README.md` holds the one-time setup: the container, the tunnel, the
-Access policy for SSH, and the five values GitHub Actions needs.
+| What | Where it runs | How |
+| --- | --- | --- |
+| Site | Cloudflare Workers | `deploy.yml`: `pnpm build`, then wrangler. The Worker var `API_URL` points at the API name. |
+| API | A Debian 12 LXC container on the Proxmox box in the office | `deploy-api` job in `ci.yml`, after `rust`, `web` and `e2e` are green |
+
+The API job builds a static musl binary, opens SSH through a Cloudflare Tunnel
+with `cloudflared` and a key made for CI, uploads the binary, runs the root
+script `bunker-deploy` on the box, and checks `/health/ready` on
+`api.lanbunker.eu`. Migrations run at startup, so a deploy is one binary swap.
+The box keeps no open port: `cloudflared` inside the container dials out, and
+Cloudflare routes `api.lanbunker.eu` to port 3000 and `ssh.lanbunker.eu` to
+port 22.
+
+GitHub Actions needs one secret, `DEPLOY_SSH_KEY`, and two variables,
+`API_HOST` and `SSH_HOST`. `deploy/README.md` holds the one-time setup of the
+container and the tunnel, the bootstrap script, and the day-to-day commands:
+logs, backups, making an admin, rotating the key.
