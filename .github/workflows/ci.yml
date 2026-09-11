@@ -136,16 +136,13 @@ jobs:
             API_HOST: ${{ vars.API_HOST }}
             SSH_HOST: ${{ vars.SSH_HOST }}
         steps:
-            # An empty secret makes cloudflared fall back to a browser login and
-            # hang. Stop here with the name instead.
+            # An empty value gives an opaque ssh error later. Stop here with the name.
             - name: Check the configuration
               env:
                   DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
-                  CF_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
-                  CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
               run: |
                   missing=0
-                  for name in DEPLOY_SSH_KEY CF_ACCESS_CLIENT_ID CF_ACCESS_CLIENT_SECRET API_HOST SSH_HOST; do
+                  for name in DEPLOY_SSH_KEY API_HOST SSH_HOST; do
                     if [ -z "${!name}" ]; then echo "missing $name" >&2; missing=1; fi
                   done
                   exit $missing
@@ -181,20 +178,8 @@ jobs:
                   sudo apt-get update -q
                   sudo apt-get install -y -q cloudflared
 
-            # Without the Access policy the SSH name has nothing in front of sshd.
-            # Access answers an unauthenticated request with a redirect to the
-            # team login page. Anything else stops the deploy.
-            - name: Check that Access guards the SSH name
-              run: |
-                  location=$(curl -sI "https://$SSH_HOST/" | tr -d '\r' | sed -n 's/^[Ll]ocation: //p')
-                  case "$location" in
-                    *cloudflareaccess.com*) echo "access redirects to the login page" ;;
-                    *) echo "no Access redirect on $SSH_HOST. add the Access application for the SSH name first" >&2; exit 1 ;;
-                  esac
-
-            # SSH goes through Cloudflare Access. The box has no open port, and
-            # only this service token passes the Access policy. cloudflared reads
-            # the token from the two TUNNEL_SERVICE_TOKEN names.
+            # SSH rides the tunnel: cloudflared on the runner opens the connection,
+            # so the box keeps no open port. The key is the only credential.
             - name: Configure SSH
               env:
                   DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
@@ -214,15 +199,9 @@ jobs:
                   CONF
 
             - name: Upload the binary
-              env:
-                  TUNNEL_SERVICE_TOKEN_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
-                  TUNNEL_SERVICE_TOKEN_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
               run: scp "target/$TARGET/release/bunker-api" bunker:bunker-api.new
 
             - name: Install and restart
-              env:
-                  TUNNEL_SERVICE_TOKEN_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
-                  TUNNEL_SERVICE_TOKEN_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
               run: ssh bunker sudo /usr/local/sbin/bunker-deploy
 
             - name: Check the public endpoint

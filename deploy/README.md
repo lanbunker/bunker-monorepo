@@ -8,7 +8,7 @@ two names through that tunnel:
 | Name | Inside the container | Who uses it |
 | --- | --- | --- |
 | `api.lanbunker.eu` | `127.0.0.1:3000` | the Worker that renders the site |
-| `ssh.lanbunker.eu` | `127.0.0.1:22` | GitHub Actions, behind an Access policy |
+| `ssh.lanbunker.eu` | `127.0.0.1:22` | GitHub Actions, key only |
 
 GitHub Actions builds the binary, copies it over SSH through the tunnel, runs
 `bunker-deploy` on the box, and checks `/health/ready` on the public name.
@@ -24,7 +24,7 @@ GitHub Actions builds the binary, copies it over SSH through the tunnel, runs
 
 ## One-time setup
 
-Do the steps in this order. Steps 1 to 3 are manual. Step 4 runs the script.
+Do the steps in this order. Steps 1 and 2 are manual. Step 3 runs the script.
 
 ### 1. Create the container on Proxmox
 
@@ -68,16 +68,12 @@ brings back everything, tunnel credentials included, on any Proxmox host.
 Cloudflare writes both CNAME records into the zone. The tunnel reads
 **Inactive** until `cloudflared` runs in the container, then **Healthy**.
 
-### 3. Protect SSH with Access
+The SSH name speaks only the tunnel protocol, so a plain `ssh` client cannot
+reach it. A client needs `cloudflared`, and then sshd accepts the deploy key
+and nothing else. Cloudflare Access would add a token check in front, but it
+needs a Zero Trust plan with a card on file, so this setup goes without it.
 
-1. **Access > Service Auth > Service Tokens > Create**. Name `github-deploy`, non-expiring. Copy the **Client ID** and the **Client Secret**. The secret shows one time.
-2. **Access > Applications > Add an application > Self-hosted**.
-   - Name `bunker ssh`. Application domain: subdomain `ssh`, domain `lanbunker.eu`.
-   - Policy: name `ci`, action **Service Auth**, include selector **Service Token** = `github-deploy`. Save.
-
-Without this policy, `ssh.lanbunker.eu` answers anyone on the internet with an SSH prompt. The API hostname stays open because the Worker needs it.
-
-### 4. Make the deploy key and run the bootstrap
+### 3. Make the deploy key and run the bootstrap
 
 On your Mac, make a key pair only for GitHub Actions, then copy this directory
 and the public key into the container over the LAN. The script reads the public
@@ -108,23 +104,20 @@ enabled but has no binary yet. The first deploy starts it.
 `deploy_key`, the private file, goes into GitHub in the next step. Delete both
 key files from your Mac after that.
 
-### 5. Set the GitHub values
+### 4. Set the GitHub values
 
 In the repository, **Settings > Secrets and variables > Actions**.
 
 | Kind | Name | Value |
 | --- | --- | --- |
 | secret | `DEPLOY_SSH_KEY` | the content of `deploy_key` |
-| secret | `CF_ACCESS_CLIENT_ID` | the Client ID of `github-deploy` |
-| secret | `CF_ACCESS_CLIENT_SECRET` | the Client Secret of `github-deploy` |
 | variable | `API_HOST` | `api.lanbunker.eu` |
 | variable | `SSH_HOST` | `ssh.lanbunker.eu` |
 
-### 6. First deploy
+### 5. First deploy
 
 Push to `main`. The `deploy-api` job runs after `rust`, `web` and `e2e` are
-green. It stops early with a clear message when a GitHub value is missing or
-when the SSH name has no Access application in front. When it ends,
+green. It stops early with a clear message when a GitHub value is missing. When it ends,
 `https://api.lanbunker.eu/health/ready` answers `{"status":"ok",...}` and the
 homepage shows `[  OK ] bunkernet uplink`.
 
@@ -134,7 +127,6 @@ homepage shows `[  OK ] bunkernet uplink`.
 - **Make an admin**: `sqlite3 /var/lib/bunker/bunker.db "update players set role = 'admin' where handle = 'dave' collate nocase"`.
 - **Restore a backup**: stop the unit, `gunzip -c /var/backups/bunker/bunker-<date>.db.gz > /var/lib/bunker/bunker.db`, `chown bunker:bunker` the file, start the unit.
 - **Rotate the deploy key**: make a new pair, replace `/home/deploy/.ssh/authorized_keys`, replace the `DEPLOY_SSH_KEY` secret.
-- **Rotate the service token**: make a new token in Access, add it to the policy, replace the two secrets, then delete the old token.
 - **Update the units or scripts**: copy `deploy/` again with `scp -r` and rerun the bootstrap. It asks nothing the second time.
 - **The tunnel token** sits in `/etc/systemd/system/cloudflared.service`, readable by the local accounts. Both are system accounts under your control.
 - **Move the container**: Proxmox backup and restore keeps everything, including the tunnel credentials. Nothing to change in Cloudflare or GitHub.
