@@ -8,6 +8,11 @@ export default defineConfig({
     output: "server",
     adapter: cloudflare(),
 
+    // Astro 7 compresses with JSX whitespace rules by default, which glues two
+    // inline elements that only a line break separates. The site relies on that
+    // break in many places, so it keeps the HTML-aware compression.
+    compressHTML: true,
+
     env: {
         schema: {
             // Where the Rust API answers. A Worker var in production, the shell or

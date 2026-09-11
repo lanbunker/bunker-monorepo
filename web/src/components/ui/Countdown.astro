@@ -14,11 +14,17 @@ const { deadline, label = "T-" } = Astro.props
 >
   <span class="mr-1 text-2xs text-dim">{label}</span>
   <span class="cd-segment" data-unit="d"></span>
-  <span class="text-dim" aria-hidden="true">:</span>
+  <span class="text-dim" aria-hidden="true">
+    :
+  </span>
   <span class="cd-segment" data-unit="h"></span>
-  <span class="text-dim" aria-hidden="true">:</span>
+  <span class="text-dim" aria-hidden="true">
+    :
+  </span>
   <span class="cd-segment" data-unit="m"></span>
-  <span class="text-dim" aria-hidden="true">:</span>
+  <span class="text-dim" aria-hidden="true">
+    :
+  </span>
   <span class="cd-segment" data-unit="s"></span>
 </div>
 
@@ -61,7 +67,9 @@ const { deadline, label = "T-" } = Astro.props
       el.classList.toggle("expired", remaining <= 0)
       el.setAttribute(
         "aria-label",
-        remaining <= 0 ? "Registration closed" : `${parts.d} days ${parts.h} hours ${parts.m} minutes remaining`,
+        remaining <= 0
+          ? "Registration closed"
+          : `${parts.d} days ${parts.h} hours ${parts.m} minutes remaining`,
       )
       for (const seg of el.querySelectorAll<HTMLElement>(".cd-segment")) {
         const unit = seg.dataset.unit

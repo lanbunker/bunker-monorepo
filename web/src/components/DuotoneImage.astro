@@ -3,16 +3,14 @@ import type { ImageMetadata } from "astro"
 import { Image } from "astro:assets"
 
 interface Props {
-  src: ImageMetadata;
-  alt: string;
+  src: ImageMetadata
+  alt: string
 }
 
-const { src, alt } = Astro.props;
+const { src, alt } = Astro.props
 ---
 
-<div
-  class="relative h-40 w-full overflow-hidden bg-black max-[30rem]:h-32 lg:h-50"
->
+<div class="relative h-40 w-full overflow-hidden bg-black max-[30rem]:h-32 lg:h-50">
   <Image
     src={src}
     alt={alt}
@@ -26,6 +24,5 @@ const { src, alt } = Astro.props;
   <div
     class="absolute inset-0 pointer-events-none"
     style="background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.15) 2px, rgba(0,0,0,0.15) 4px);"
-  >
-  </div>
+  ></div>
 </div>

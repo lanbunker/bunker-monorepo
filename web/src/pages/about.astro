@@ -12,7 +12,6 @@ const title = entry?.data.title ?? "README.txt"
   <Prompt command={`cat ${title}`} />
 
   <Panel>
-    <pre
-      class="m-0 font-mono text-xs leading-[1.9] whitespace-pre-wrap wrap-break-word text-ink">{entry?.body?.trim()}</pre>
+    <pre class="m-0 font-mono text-xs leading-[1.9] whitespace-pre-wrap wrap-break-word text-ink">{entry?.body?.trim()}</pre>
   </Panel>
 </Layout>

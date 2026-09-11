@@ -15,7 +15,11 @@ const status = event.data.status
 
 const look: Record<
   typeof status,
-  { panel: "accent" | "warn" | "default"; badge: "accent" | "warn" | "muted"; label: string }
+  {
+    panel: "accent" | "warn" | "default"
+    badge: "accent" | "warn" | "muted"
+    label: string
+  }
 > = {
   OPEN: { panel: "accent", badge: "accent", label: "REGISTRATION OPEN" },
   SOON: { panel: "warn", badge: "warn", label: "ANNOUNCED" },
@@ -24,16 +28,16 @@ const look: Record<
 ---
 
 <Panel tone={look[status].panel}>
-  {
-    event.data.image && (
-      <Fragment slot="media">
-        <DuotoneImage src={event.data.image} alt={event.data.name} />
-      </Fragment>
-    )
-  }
+  {event.data.image && (
+    <Fragment slot="media">
+      <DuotoneImage src={event.data.image} alt={event.data.name} />
+    </Fragment>
+  )}
   <div class="flex flex-wrap items-start justify-between gap-2">
     <h3 class="m-0 text-sm tracking-wide text-bright">{event.data.name}</h3>
-    <Badge tone={look[status].badge} filled={status === "OPEN"}>{look[status].label}</Badge>
+    <Badge tone={look[status].badge} filled={status === "OPEN"}>
+      {look[status].label}
+    </Badge>
   </div>
   <div class="mt-3 flex flex-col gap-1">
     <Kv label="Date" tone={status === "OPEN" ? "accent" : "default"}>

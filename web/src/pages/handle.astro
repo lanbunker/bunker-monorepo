@@ -1,15 +1,20 @@
 ---
 import { actions } from "astro:actions"
+import Alert from "../components/ui/Alert.astro"
 import Button from "../components/ui/Button.astro"
 import Panel from "../components/ui/Panel.astro"
 import Prompt from "../components/ui/Prompt.astro"
 import Layout from "../layouts/Layout.astro"
+import { SITE_FIELD } from "../lib/styles"
+import { sessionOf } from "../lib/session"
 
-const player = Astro.locals.player
-if (!player) return Astro.redirect("/login")
+const session = sessionOf(Astro.locals)
+if (!session) return Astro.redirect("/login")
 
 const result = Astro.getActionResult(actions.changeHandle)
 if (result && !result.error) return Astro.redirect("/profile?changed=handle")
+// A refused rename keeps what was typed, not the handle in force.
+const typed = Astro.locals.submitted.handle ?? session.player.handle
 ---
 
 <Layout title="RENAME//LAN_BUNKER" noindex>
@@ -28,20 +33,15 @@ if (result && !result.error) return Astro.redirect("/profile?changed=handle")
           pattern="[A-Za-z0-9_.\-]+"
           title="3 to 20 characters: letters, digits, _ . -"
           autocomplete="username"
-          value={player.handle}
-          class="w-full border-b border-border bg-transparent py-1 text-ink outline-none focus:border-accent"
+          value={typed}
+          class={SITE_FIELD}
         />
       </label>
       <p class="m-0 text-2xs text-mute">
-        the old handle frees up for someone else. links to your old public page stop working.
+        the old handle frees up for someone else. links to your old public page stop
+        working.
       </p>
-      {
-        result?.error && (
-          <p class="text-xs text-alert" role="alert">
-            {result.error.message}
-          </p>
-        )
-      }
+      <Alert error={result?.error} />
       <div class="mt-2">
         <Button>RENAME</Button>
       </div>
@@ -49,6 +49,8 @@ if (result && !result.error) return Astro.redirect("/profile?changed=handle")
   </Panel>
 
   <div class="mt-8">
-    <Button href="/profile" variant="ghost" size="sm">← PROFILE</Button>
+    <Button href="/profile" variant="ghost" size="sm">
+      ← PROFILE
+    </Button>
   </div>
 </Layout>

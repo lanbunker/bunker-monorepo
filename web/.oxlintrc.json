@@ -1,0 +1,127 @@
+{
+    "$schema": "./node_modules/oxlint/configuration_schema.json",
+    "plugins": [
+        "eslint",
+        "typescript",
+        "react",
+        "unicorn",
+        "oxc",
+        "import",
+        "promise",
+        "jsx-a11y"
+    ],
+    "categories": {
+        "correctness": "error",
+        "suspicious": "error",
+        "perf": "error",
+        "pedantic": "off",
+        "style": "off",
+        "restriction": "off",
+        "nursery": "off"
+    },
+    "env": {
+        "browser": true,
+        "es2024": true
+    },
+    "settings": {
+        "react": {
+            "version": "19.0"
+        }
+    },
+    "options": {
+        "denyWarnings": true
+    },
+    "ignorePatterns": [
+        "dist/**",
+        ".astro/**",
+        ".wrangler/**",
+        "test-results/**",
+        "src/lib/api-types.d.ts"
+    ],
+    "rules": {
+        "typescript/no-explicit-any": "error",
+        "typescript/no-unsafe-type-assertion": "error",
+        "typescript/no-non-null-assertion": "error",
+        "typescript/no-unnecessary-type-assertion": "error",
+        "typescript/no-confusing-non-null-assertion": "error",
+        "typescript/no-extra-non-null-assertion": "error",
+        "typescript/no-non-null-asserted-optional-chain": "error",
+        "typescript/ban-ts-comment": "error",
+        "typescript/no-unsafe-function-type": "error",
+        "typescript/no-misused-new": "error",
+        "typescript/consistent-type-imports": [
+            "error",
+            {
+                "prefer": "type-imports",
+                "fixStyle": "separate-type-imports"
+            }
+        ],
+        "no-console": [
+            "error",
+            {
+                "allow": ["warn", "error"]
+            }
+        ],
+        "no-eval": "error",
+        "no-var": "error",
+        "prefer-const": "error",
+        "eqeqeq": [
+            "error",
+            "always",
+            {
+                "null": "ignore"
+            }
+        ],
+        "no-param-reassign": "error",
+        "no-unsafe-optional-chaining": "error",
+        "no-unused-vars": [
+            "error",
+            {
+                "argsIgnorePattern": "^_",
+                "varsIgnorePattern": "^_",
+                "caughtErrorsIgnorePattern": "^_"
+            }
+        ],
+        "unicorn/no-array-for-each": "error",
+        "unicorn/prefer-at": "error",
+        "unicorn/prefer-string-replace-all": "error",
+        "unicorn/no-null": "off",
+        "unicorn/filename-case": "off",
+        "unicorn/no-nested-ternary": "off",
+        "unicorn/prefer-global-this": "off",
+        "unicorn/switch-case-braces": "off",
+        "unicorn/prefer-query-selector": "off",
+        "react/react-in-jsx-scope": "off",
+        "react/jsx-key": "error",
+        "react/no-danger": "error",
+        "react/no-children-prop": "error",
+        "react/rules-of-hooks": "error",
+        "react/exhaustive-deps": "error",
+        "no-await-in-loop": "error",
+        "no-return-assign": "error",
+        "no-self-compare": "error",
+        "no-template-curly-in-string": "error",
+        "default-case-last": "error",
+        "no-else-return": "off",
+        "prefer-object-spread": "error",
+        "unicorn/no-useless-spread": "error",
+        "unicorn/prefer-array-flat-map": "error",
+        "unicorn/throw-new-error": "error",
+        "promise/no-return-wrap": "error",
+        "promise/param-names": "error",
+        "import/no-unassigned-import": "off",
+        "no-underscore-dangle": "off"
+    },
+    "overrides": [
+        {
+            "files": ["e2e/**", "playwright.config.ts", "scripts/**"],
+            "env": {
+                "node": true
+            },
+            "rules": {
+                "no-await-in-loop": "off",
+                "typescript/no-non-null-assertion": "off"
+            }
+        }
+    ]
+}

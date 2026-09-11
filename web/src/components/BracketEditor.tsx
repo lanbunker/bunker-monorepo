@@ -1,7 +1,9 @@
 import { actions } from "astro:actions"
-import { useEffect, useState } from "react"
+import { useState } from "react"
 
 import type { Bracket, Entrant, Match } from "../lib/api"
+import { errorMessage } from "../lib/form"
+import { useHydrated } from "../lib/use-hydrated"
 import { BracketView } from "./BracketView"
 import type { BracketEditing } from "./BracketView"
 
@@ -40,9 +42,7 @@ export const BracketEditor = (props: BracketEditorProps) => {
     const [busy, setBusy] = useState(false)
     // The controls work only after hydration. Until then they stay disabled, so
     // a click on the server-rendered markup cannot get lost.
-    const [mounted, setMounted] = useState(false)
-    useEffect(() => setMounted(true), [])
-    const idle = mounted && !busy
+    const idle = useHydrated() && !busy
     const id = props.tournamentId
     const hasResults = bracket?.rounds.flat().some(isPlayed) ?? false
     const canSwap = idle && !props.locked && !hasResults
@@ -53,7 +53,9 @@ export const BracketEditor = (props: BracketEditorProps) => {
         const result = await call()
         setBusy(false)
         if (result.error) {
-            setError(result.error.message)
+            // The same reader the pages use: a refused input must never reach
+            // the panel as the JSON list Astro puts in the message.
+            setError(errorMessage(result.error))
             return false
         }
         if (result.data) setBracket("deleted" in result.data ? null : result.data)
@@ -63,16 +65,21 @@ export const BracketEditor = (props: BracketEditorProps) => {
     // Whether a bracket exists decides what the rest of the page shows: the
     // status buttons, the entrant controls, the kiosk link. Those parts are
     // server rendered, so a reload is the honest way to refresh them.
-    const generate = () =>
-        run(() => actions.generateBracket({ id })).then(
-            ok => ok && window.location.reload(),
-        )
+    const reloadWhenDone = async (call: () => Promise<ActionResult>) => {
+        if (await run(call)) window.location.reload()
+    }
+    const generate = () => void reloadWhenDone(() => actions.generateBracket({ id }))
     const remove = () => {
         if (window.confirm("remove the bracket? seeds are lost.")) {
-            run(() => actions.deleteBracket({ id })).then(
-                ok => ok && window.location.reload(),
-            )
+            void reloadWhenDone(() => actions.deleteBracket({ id }))
         }
+    }
+
+    const swapSeeds = async (swapped: string[]) => {
+        if (!(await run(() => actions.reorderSeeds({ id, entrants: swapped })))) return
+        setEntrants(current =>
+            current.map(e => ({ ...e, seed: swapped.indexOf(e.id) + 1 })),
+        )
     }
 
     /** The next match of `m`, which freezes `m` once it has a result. */
@@ -82,25 +89,19 @@ export const BracketEditor = (props: BracketEditorProps) => {
         canSwap,
         isFrozen: m => !idle || props.locked || Boolean(nextOf(m)?.winner),
         onPick: (m, entrant) => {
-            if (m.winner === entrant) {
-                run(() => actions.clearResult({ id, matchId: m.id }))
-            } else {
-                run(() => actions.reportResult({ id, matchId: m.id, winner: entrant }))
-            }
+            void run(() =>
+                m.winner === entrant
+                    ? actions.clearResult({ id, matchId: m.id })
+                    : actions.reportResult({ id, matchId: m.id, winner: entrant }),
+            )
         },
         onSwap: (from, to) => {
             // The two dragged entrants trade seeds. Everyone else keeps theirs.
-            const order = [...entrants]
-                .sort((a, b) => (a.seed ?? 0) - (b.seed ?? 0))
+            const order = entrants
+                .toSorted((a, b) => (a.seed ?? 0) - (b.seed ?? 0))
                 .map(e => e.id)
             const swapped = order.map(e => (e === from ? to : e === to ? from : e))
-            run(() => actions.reorderSeeds({ id, entrants: swapped })).then(ok => {
-                if (ok) {
-                    setEntrants(current =>
-                        current.map(e => ({ ...e, seed: swapped.indexOf(e.id) + 1 })),
-                    )
-                }
-            })
+            void swapSeeds(swapped)
         },
     }
 

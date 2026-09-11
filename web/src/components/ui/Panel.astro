@@ -21,13 +21,11 @@ const hasMedia = media.trim().length > 0
 ---
 
 <div class:list={["border bg-panel", borderClass[tone], className]}>
-  {
-    hasMedia && (
-      <div class="border-b border-faint">
-        <Fragment set:html={media} />
-      </div>
-    )
-  }
+  {hasMedia && (
+    <div class="border-b border-faint">
+      <Fragment set:html={media} />
+    </div>
+  )}
   <div class="p-4 max-[30rem]:p-3">
     <slot />
   </div>

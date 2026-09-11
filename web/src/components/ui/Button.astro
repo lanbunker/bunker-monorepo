@@ -44,31 +44,35 @@ const classes = [
 ]
 ---
 
-{
-  href && disabled ? (
-    <span aria-disabled="true" title={title} class:list={classes}>
-      <span aria-hidden="true">[</span>
-      <span class="btn-label"><slot /></span>
-      <span aria-hidden="true">]</span>
+{href && disabled ? (
+  <span aria-disabled="true" title={title} class:list={classes}>
+    <span aria-hidden="true">[</span>
+    <span class="btn-label">
+      <slot />
     </span>
-  ) : href ? (
-    <a
-      href={href}
-      target={external ? "_blank" : undefined}
-      rel={external ? "noopener noreferrer" : undefined}
-      title={title}
-      class:list={classes}
-    >
-      <span aria-hidden="true">[</span>
-      <span class="btn-label"><slot /></span>
-      {external && <span class="sr-only">(opens in new tab)</span>}
-      <span aria-hidden="true">]</span>
-    </a>
-  ) : (
-    <button type="submit" disabled={disabled} title={title} class:list={classes}>
-      <span aria-hidden="true">[</span>
-      <span class="btn-label"><slot /></span>
-      <span aria-hidden="true">]</span>
-    </button>
-  )
-}
+    <span aria-hidden="true">]</span>
+  </span>
+) : href ? (
+  <a
+    href={href}
+    target={external ? "_blank" : undefined}
+    rel={external ? "noopener noreferrer" : undefined}
+    title={title}
+    class:list={classes}
+  >
+    <span aria-hidden="true">[</span>
+    <span class="btn-label">
+      <slot />
+    </span>
+    {external && <span class="sr-only">(opens in new tab)</span>}
+    <span aria-hidden="true">]</span>
+  </a>
+) : (
+  <button type="submit" disabled={disabled} title={title} class:list={classes}>
+    <span aria-hidden="true">[</span>
+    <span class="btn-label">
+      <slot />
+    </span>
+    <span aria-hidden="true">]</span>
+  </button>
+)}

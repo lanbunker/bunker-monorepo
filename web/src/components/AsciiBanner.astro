@@ -19,8 +19,7 @@ if (hollow && !text.toUpperCase().endsWith(hollow.toUpperCase())) {
 >
   <canvas class="block h-full w-full" aria-label={text} role="img"></canvas>
   <noscript>
-    <pre
-      class="absolute inset-0 m-0 flex items-center justify-center text-xs text-accent">{text.toUpperCase()}</pre>
+    <pre class="absolute inset-0 m-0 flex items-center justify-center text-xs text-accent">{text.toUpperCase()}</pre>
   </noscript>
 </div>
 
@@ -91,7 +90,9 @@ if (hollow && !text.toUpperCase().endsWith(hollow.toUpperCase())) {
       letters
         .map((ch, i) => {
           const inBlock = i >= hollowFrom
-          const row = r < 0 || r >= GLYPH_H ? ".".repeat(GLYPH_W) : (GLYPHS[ch] ?? GLYPHS[" "])[r]
+          const dark = ".".repeat(GLYPH_W)
+          const glyph = GLYPHS[ch] ?? GLYPHS[" "] ?? []
+          const row = r < 0 || r >= GLYPH_H ? dark : (glyph[r] ?? dark)
           const body = inBlock ? row.replaceAll("#", "o").replaceAll(".", "b") : row
           const gap = i === letters.length - 1 ? "" : (inBlock ? "b" : ".").repeat(GAP)
           const lead = i === hollowFrom ? "b" : ""
@@ -100,7 +101,7 @@ if (hollow && !text.toUpperCase().endsWith(hollow.toUpperCase())) {
         })
         .join("")
     const rows = Array.from({ length: GLYPH_H + 2 * pad }, (_, r) => line(r - pad))
-    const cols = rows[0].length
+    const cols = rows[0]?.length ?? 0
     return { cols, rows }
   }
 
@@ -162,7 +163,7 @@ if (hollow && !text.toUpperCase().endsWith(hollow.toUpperCase())) {
       const mc = Math.floor((c - originC) / scaleX)
       const mr = Math.floor((r - originR) / scaleY)
       if (mc < 0 || mr < 0 || mc >= mask.cols || mr >= mask.rows.length) return "."
-      return mask.rows[mr][mc]
+      return mask.rows[mr]?.[mc] ?? "."
     }
 
     const draw = (t: number) => {
@@ -185,7 +186,7 @@ if (hollow && !text.toUpperCase().endsWith(hollow.toUpperCase())) {
             const wave = Math.sin(t * 1.8 + c * 0.11 + r * 0.32) * 0.5 + 0.5
             const grain = hash(c, r, Math.floor(t * 4)) * 0.18
             const level = Math.min(1, 0.32 + wave * 0.55 + grain + sweepBoost)
-            const ch = LETTER_RAMP[Math.min(3, Math.floor(level * 4))]
+            const ch = LETTER_RAMP[Math.min(3, Math.floor(level * 4))] ?? "#"
             ctx.fillStyle = `rgba(0, 255, 65, ${0.35 + level * 0.65})`
             ctx.fillText(ch, x, y)
             continue
@@ -197,7 +198,8 @@ if (hollow && !text.toUpperCase().endsWith(hollow.toUpperCase())) {
           if (n > 0.93) {
             const alpha = 0.05 + (n - 0.93) * 1.6 + sweepBoost * 0.5
             ctx.fillStyle = `rgba(0, 255, 65, ${alpha})`
-            ctx.fillText(NOISE_CHARS[Math.floor(hash(r, c, 7) * NOISE_CHARS.length)], x, y)
+            const noise = NOISE_CHARS[Math.floor(hash(r, c, 7) * NOISE_CHARS.length)]
+            ctx.fillText(noise ?? ".", x, y)
           }
         }
       }
@@ -247,10 +249,12 @@ if (hollow && !text.toUpperCase().endsWith(hollow.toUpperCase())) {
       }, 120)
     })
 
-    document.fonts?.ready.then(() => {
+    const afterFonts = async () => {
+      await document.fonts?.ready
       layout()
       if (reduced) draw(1.2)
-    })
+    }
+    void afterFonts()
   }
 
   for (const el of document.querySelectorAll<HTMLElement>(".ascii-banner")) {

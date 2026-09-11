@@ -19,7 +19,8 @@ interface Props {
 
 const { title = "LAN BUNKER", active, noindex = false, bare = false } = Astro.props
 const player = Astro.locals.player
-const description = "LAN BUNKER, a recurring local multiplayer event blending music and gaming."
+const description =
+  "LAN BUNKER, a recurring local multiplayer event blending music and gaming."
 
 const nav: { key: Section; label: string; href: string }[] = [
   { key: "home", label: "HOME", href: "/" },
@@ -31,11 +32,13 @@ const nav: { key: Section; label: string; href: string }[] = [
   { key: "about", label: "ABOUT", href: "/about" },
 ]
 
-const events = (await getCollection("events")).sort(
+const events = (await getCollection("events")).toSorted(
   (a, b) => parseEurDate(b.data.date) - parseEurDate(a.data.date),
 )
 // Events sort newest first, so the last upcoming entry is the soonest one.
-const nextEvent = events.findLast(e => e.data.status === "OPEN" || e.data.status === "SOON")
+const nextEvent = events.findLast(
+  e => e.data.status === "OPEN" || e.data.status === "SOON",
+)
 const nextEventTs = nextEvent ? parseEurDate(nextEvent.data.date) : NaN
 const firstEvent = events.at(-1)
 const firstEventTs = firstEvent ? parseEurDate(firstEvent.data.date) : NaN
@@ -56,7 +59,10 @@ const activeIndex = nav.findIndex(item => item.key === active)
     <meta property="og:title" content={title} />
     <meta property="og:description" content={description} />
     <meta property="og:url" content={Astro.url.href} />
-    <meta property="og:image" content={new URL("/web-app-manifest-512x512.png", Astro.url).href} />
+    <meta
+      property="og:image"
+      content={new URL("/web-app-manifest-512x512.png", Astro.url).href}
+    />
     <meta name="twitter:card" content="summary" />
     <link rel="icon" type="image/png" href="/favicon-96x96.png" sizes="96x96" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
@@ -73,28 +79,27 @@ const activeIndex = nav.findIndex(item => item.key === active)
       class:list={[
         "mx-auto px-6 max-[30rem]:px-3.5",
         // A bare page sets its own width: a signup form is narrow, a kiosk is wide.
-        bare ? "flex min-h-screen w-full flex-col items-center justify-center py-8" : "max-w-[60rem] pt-5 max-[30rem]:pt-3",
+        bare
+          ? "flex min-h-screen w-full flex-col items-center justify-center py-8"
+          : "max-w-[60rem] pt-5 max-[30rem]:pt-3",
       ]}
     >
       {!bare && (
-      <header class="flex items-center justify-between gap-4 pb-2.5">
-        <a href="/" class="flex items-center gap-1.5 no-underline">
-          <span class="text-base font-bold tracking-wider text-bright">LAN_BUNKER</span>
-          <span
-            class="animate-blink inline-block h-[0.95em] w-[0.55em] bg-accent text-base"
-            aria-hidden="true"
-          ></span>
-        </a>
-        <div class="flex items-center gap-4 text-2xs tracking-wider text-dim">
-          {
-            Number.isFinite(firstEventTs) && (
+        <header class="flex items-center justify-between gap-4 pb-2.5">
+          <a href="/" class="flex items-center gap-1.5 no-underline">
+            <span class="text-base font-bold tracking-wider text-bright">LAN_BUNKER</span>
+            <span
+              class="animate-blink inline-block h-[0.95em] w-[0.55em] bg-accent text-base"
+              aria-hidden="true"
+            ></span>
+          </a>
+          <div class="flex items-center gap-4 text-2xs tracking-wider text-dim">
+            {Number.isFinite(firstEventTs) && (
               <span data-since={firstEventTs} class="hidden min-[35rem]:inline">
                 uptime <span id="uptime" class="text-ink tabular-nums" />
               </span>
-            )
-          }
-          {
-            player ? (
+            )}
+            {player ? (
               <a
                 href="/profile"
                 class="inline-flex items-center gap-2 border px-2 py-0.5 text-xs no-underline hover:bg-faint"
@@ -105,20 +110,20 @@ const activeIndex = nav.findIndex(item => item.key === active)
                 {player.handle}
               </a>
             ) : (
-              <Button href="/login" variant="ghost" size="sm">LOGIN</Button>
-            )
-          }
-        </div>
-      </header>
+              <Button href="/login" variant="ghost" size="sm">
+                LOGIN
+              </Button>
+            )}
+          </div>
+        </header>
       )}
 
       {!bare && (
-      <nav
-        aria-label="Sections"
-        class="flex flex-wrap gap-y-1 border-y border-border py-2 text-xs max-[30rem]:text-2xs"
-      >
-        {
-          nav.map((item, i) => (
+        <nav
+          aria-label="Sections"
+          class="flex flex-wrap gap-y-1 border-y border-border py-2 text-xs max-[30rem]:text-2xs"
+        >
+          {nav.map((item, i) => (
             <a
               href={item.href}
               data-nav-index={i + 1}
@@ -135,9 +140,8 @@ const activeIndex = nav.findIndex(item => item.key === active)
               </span>
               {item.label}
             </a>
-          ))
-        }
-      </nav>
+          ))}
+        </nav>
       )}
 
       <main class:list={[bare && "w-full"]}>
@@ -145,29 +149,29 @@ const activeIndex = nav.findIndex(item => item.key === active)
       </main>
 
       {!bare && (
-      <footer
-        class="mt-12 flex flex-wrap justify-between gap-2 border-t border-faint pt-4 pb-4 text-2xs tracking-wide text-mute"
-      >
-        <span>&copy; LAN BUNKER {new Date().getFullYear()}</span>
-        <span class="pointer-coarse:hidden">press 1-{nav.length} to switch section</span>
-      </footer>
+        <footer class="mt-12 flex flex-wrap justify-between gap-2 border-t border-faint pt-4 pb-4 text-2xs tracking-wide text-mute">
+          <span>&copy; LAN BUNKER {new Date().getFullYear()}</span>
+          <span class="pointer-coarse:hidden">
+            press 1-{nav.length} to switch section
+          </span>
+        </footer>
       )}
     </div>
 
     {!bare && (
-    <div
-      class="fixed inset-x-0 bottom-0 z-30 flex h-7 items-stretch justify-between border-t border-border bg-panel text-2xs tracking-wide text-dim"
-    >
-      <div class="flex items-stretch">
-        <span class="flex items-center bg-accent px-2.5 text-black">LAN_BUNKER</span>
-        <span class="flex items-center px-2.5">
-          {activeIndex >= 0 ? `[${activeIndex + 1}]` : "[~]"}
-          <span class="ml-1 text-ink">{nav[activeIndex]?.label.toLowerCase() ?? title.split("//")[0]?.toLowerCase()}</span>
-        </span>
-      </div>
-      <div class="flex items-stretch">
-        {
-          nextEvent && Number.isFinite(nextEventTs) && (
+      <div class="fixed inset-x-0 bottom-0 z-30 flex h-7 items-stretch justify-between border-t border-border bg-panel text-2xs tracking-wide text-dim">
+        <div class="flex items-stretch">
+          <span class="flex items-center bg-accent px-2.5 text-black">LAN_BUNKER</span>
+          <span class="flex items-center px-2.5">
+            {activeIndex >= 0 ? `[${activeIndex + 1}]` : "[~]"}
+            <span class="ml-1 text-ink">
+              {nav[activeIndex]?.label.toLowerCase() ??
+                title.split("//")[0]?.toLowerCase()}
+            </span>
+          </span>
+        </div>
+        <div class="flex items-stretch">
+          {nextEvent && Number.isFinite(nextEventTs) && (
             <a
               href="/events"
               class="hidden items-center gap-1.5 border-l border-faint px-2.5 no-underline text-dim hover:text-accent min-[35rem]:flex"
@@ -177,14 +181,13 @@ const activeIndex = nav.findIndex(item => item.key === active)
               <span class="text-ink">{formatEurDate(nextEvent.data.date)}</span>
               <span id="next-tminus" class="text-accent-soft tabular-nums" />
             </a>
-          )
-        }
-        <span class="flex items-center gap-1.5 border-l border-faint px-2.5">
-          local time
-          <span id="clock" class="tabular-nums text-ink" />
-        </span>
+          )}
+          <span class="flex items-center gap-1.5 border-l border-faint px-2.5">
+            local time
+            <span id="clock" class="tabular-nums text-ink" />
+          </span>
+        </div>
       </div>
-    </div>
     )}
 
     <script>
@@ -194,11 +197,16 @@ const activeIndex = nav.findIndex(item => item.key === active)
       const uptime = document.getElementById("uptime")
       const tminus = document.getElementById("next-tminus")
       const since = Number(uptime?.parentElement?.dataset.since)
-      const [nextDay, nextMonth, nextYear] = (tminus?.parentElement?.dataset.nextDate ?? "")
+      const [nextDay, nextMonth, nextYear] = (
+        tminus?.parentElement?.dataset.nextDate ?? ""
+      )
         .split("/")
         .map(Number)
       // Local midnight of the event date, so the day count does not drift with the viewer's timezone.
-      const nextMidnight = nextYear ? new Date(nextYear, nextMonth - 1, nextDay).getTime() : NaN
+      const nextMidnight =
+        nextDay && nextMonth && nextYear
+          ? new Date(nextYear, nextMonth - 1, nextDay).getTime()
+          : NaN
 
       const updateClock = () => {
         const now = Date.now()
@@ -211,7 +219,11 @@ const activeIndex = nav.findIndex(item => item.key === active)
         }
         if (tminus && Number.isFinite(nextMidnight)) {
           const today = new Date(now)
-          const todayMidnight = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime()
+          const todayMidnight = new Date(
+            today.getFullYear(),
+            today.getMonth(),
+            today.getDate(),
+          ).getTime()
           const days = Math.round((nextMidnight - todayMidnight) / DAY)
           tminus.textContent = days > 0 ? `T-${days}d` : days === 0 ? "today" : ""
         }
@@ -223,12 +235,16 @@ const activeIndex = nav.findIndex(item => item.key === active)
       // has focus: a digit typed into any field, button or link stays there.
       document.addEventListener("keydown", e => {
         if (!/^[1-9]$/.test(e.key)) return
-        if (e.metaKey || e.ctrlKey || e.altKey || e.shiftKey || e.isComposing || e.repeat) return
+        if (e.metaKey || e.ctrlKey || e.altKey || e.shiftKey || e.isComposing || e.repeat)
+          return
         if (e.defaultPrevented) return
         const focused = document.activeElement
-        if (focused && focused !== document.body && focused !== document.documentElement) return
+        if (focused && focused !== document.body && focused !== document.documentElement)
+          return
         if (document.querySelector(".pswp--open")) return
-        const link = document.querySelector<HTMLAnchorElement>(`[data-nav-index="${e.key}"]`)
+        const link = document.querySelector<HTMLAnchorElement>(
+          `[data-nav-index="${e.key}"]`,
+        )
         if (link) window.location.assign(link.href)
       })
     </script>

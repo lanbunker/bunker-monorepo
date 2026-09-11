@@ -1,65 +1,91 @@
 ---
+import Alert from "../../components/ui/Alert.astro"
 import Glyph from "../../components/ui/Glyph.astro"
+import Pager from "../../components/ui/Pager.astro"
 import Panel from "../../components/ui/Panel.astro"
 import Prompt from "../../components/ui/Prompt.astro"
 import Layout from "../../layouts/Layout.astro"
-import Pager from "../../components/ui/Pager.astro"
-import { apiClient } from "../../lib/api"
+import { call, dataOf, failureOf, messageOf } from "../../lib/api"
 import { formatDate } from "../../lib/dates"
 import { PAGE_SIZE, pageFrom } from "../../lib/paging"
 
 const page = pageFrom(Astro.url)
-const { data, error } = await apiClient()
-  .GET("/api/players", { params: { query: { page, pageSize: PAGE_SIZE } } })
-  .catch(() => ({ data: undefined, error: undefined }))
-if (data && page > data.totalPages && data.totalPages > 0) {
-  return Astro.redirect(`/players?page=${data.totalPages}`)
+const result = await call(client =>
+  client.GET("/api/players", { params: { query: { page, pageSize: PAGE_SIZE } } }),
+)
+const roster = dataOf(result)
+if (roster && page > roster.totalPages && roster.totalPages > 0) {
+  return Astro.redirect(`/players?page=${roster.totalPages}`)
 }
-const players = data?.items
+const failure = failureOf(result)
 const offset = (page - 1) * PAGE_SIZE
 ---
 
 <Layout title="PLAYERS//LAN_BUNKER" active="players">
-  <Prompt command="ls /players" comment={data ? `bunkernet // ${data.total} enlisted` : "bunkernet offline"} />
+  <Prompt
+    command="ls /players"
+    comment={roster ? `bunkernet // ${roster.total} enlisted` : "bunkernet offline"}
+  />
 
   <Panel>
-    {
-      !players ? (
-        <p class="text-xs text-alert">{error?.message ?? "the player database is unreachable."}</p>
-      ) : data.total === 0 ? (
-        <p class="text-xs text-dim">no players yet. <a href="/signup" class="text-accent">be the first →</a></p>
-      ) : (
-        <table class="w-full border-collapse text-xs">
-          <thead>
-            <tr class="text-left text-2xs tracking-wider text-dim">
-              <th class="w-[8%] pb-2 font-normal">#</th>
-              <th class="w-[52%] pb-2 font-normal">player</th>
-              <th class="w-[15%] pb-2 font-normal">role</th>
-              <th class="w-[25%] pb-2 text-right font-normal">enlisted</th>
+    {!roster ? (
+      <Alert
+        message={failure && messageOf(failure, "The player database is unreachable.")}
+      />
+    ) : roster.total === 0 ? (
+      <p class="text-xs text-dim">
+        no players yet.{" "}
+        <a href="/signup" class="text-accent">
+          be the first →
+        </a>
+      </p>
+    ) : (
+      <table class="w-full border-collapse text-xs">
+        <thead>
+          <tr class="text-left text-2xs tracking-wider text-dim">
+            <th class="w-[8%] pb-2 font-normal">#</th>
+            <th class="w-[52%] pb-2 font-normal">player</th>
+            <th class="w-[15%] pb-2 font-normal">role</th>
+            <th class="w-[25%] pb-2 text-right font-normal">enlisted</th>
+          </tr>
+        </thead>
+        <tbody>
+          {roster.items.map((player, i) => (
+            <tr class="border-t border-faint hover:bg-faint/40">
+              <td class="py-2 text-mute tabular-nums">
+                {String(offset + i + 1).padStart(2, "0")}
+              </td>
+              <td class="py-2">
+                <a
+                  href={`/players/${player.handle}`}
+                  class="inline-flex items-center gap-2 no-underline text-bright hover:text-accent"
+                >
+                  <Glyph glyph={player.glyph} size="1.1em" />
+                  {player.handle}
+                </a>
+              </td>
+              <td
+                class:list={["py-2", player.role === "admin" ? "text-warn" : "text-dim"]}
+              >
+                {player.role}
+              </td>
+              <td class="py-2 text-right text-dim">
+                {formatDate(new Date(player.createdAt))}
+              </td>
             </tr>
-          </thead>
-          <tbody>
-            {players.map((player, i) => (
-              <tr class="border-t border-faint hover:bg-faint/40">
-                <td class="py-2 text-mute tabular-nums">{String(offset + i + 1).padStart(2, "0")}</td>
-                <td class="py-2">
-                  <a
-                    href={`/players/${player.handle}`}
-                    class="inline-flex items-center gap-2 no-underline text-bright hover:text-accent"
-                  >
-                    <Glyph glyph={player.glyph} size="1.1em" />
-                    {player.handle}
-                  </a>
-                </td>
-                <td class:list={["py-2", player.role === "admin" ? "text-warn" : "text-dim"]}>{player.role}</td>
-                <td class="py-2 text-right text-dim">{formatDate(new Date(player.createdAt))}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )
-    }
-    {data && <Pager page={page} totalPages={data.totalPages} total={data.total} href="/players" noun="player" />}
+          ))}
+        </tbody>
+      </table>
+    )}
+    {roster && (
+      <Pager
+        page={page}
+        totalPages={roster.totalPages}
+        total={roster.total}
+        href="/players"
+        noun="player"
+      />
+    )}
   </Panel>
 
   <Prompt command="cat ./scores.db" comment="all time" />

@@ -1,17 +1,17 @@
 import type { AstroCookies } from "astro"
-import { ActionError, defineAction } from "astro:actions"
+import { defineAction } from "astro:actions"
 import { z } from "zod"
 
-import { SESSION_COOKIE, apiClient, errorMessage } from "../lib/api"
-import type { ApiErrorBody } from "../lib/api"
+import { requireAdmin, requireToken, unwrap } from "../lib/action"
+import { SESSION_COOKIE, call, callEmpty } from "../lib/api"
+import {
+    credentials,
+    handle,
+    passwordChangeInput,
+    signupInput,
+    uuid,
+} from "../lib/schemas"
 import { tournamentActions } from "./tournaments"
-
-const handleField = z.string().min(3).max(20)
-
-const credentials = z.object({
-    handle: handleField,
-    password: z.string().min(8).max(128),
-})
 
 /** Sets the session cookie until the token expires. */
 const storeSession = (cookies: AstroCookies, token: string, expiresAt: string) => {
@@ -24,42 +24,21 @@ const storeSession = (cookies: AstroCookies, token: string, expiresAt: string) =
     })
 }
 
-/** A rename fails the same way for a player and for an admin. */
-const handleFailure = (error: ApiErrorBody | undefined) =>
-    new ActionError({
-        code: error?.code === "HandleTaken" ? "CONFLICT" : "BAD_REQUEST",
-        message: errorMessage(error, "The API is unreachable."),
-    })
-
-const requireAdmin = (locals: App.Locals): string => {
-    if (locals.player?.role !== "admin" || !locals.token) {
-        throw new ActionError({ code: "FORBIDDEN", message: "Admins only." })
-    }
-    return locals.token
-}
-
 export const server = {
     ...tournamentActions,
 
     signup: defineAction({
         accept: "form",
-        input: credentials
-            .extend({ confirmPassword: z.string().min(8).max(128) })
-            .refine(input => input.password === input.confirmPassword, {
-                message: "The two passwords differ.",
-                path: ["confirmPassword"],
-            }),
+        input: signupInput,
         handler: async (input, context) => {
-            const { data, error } = await apiClient().POST("/api/auth/signup", {
-                body: { handle: input.handle, password: input.password },
-            })
-            if (!data) {
-                throw new ActionError({
-                    code: error?.code === "HandleTaken" ? "CONFLICT" : "BAD_REQUEST",
-                    message: errorMessage(error, "The API is unreachable."),
-                })
-            }
-            storeSession(context.cookies, data.token, data.expiresAt)
+            const session = unwrap(
+                await call(client =>
+                    client.POST("/api/auth/signup", {
+                        body: { handle: input.handle, password: input.password },
+                    }),
+                ),
+            )
+            storeSession(context.cookies, session.token, session.expiresAt)
             return { handle: input.handle }
         },
     }),
@@ -68,23 +47,17 @@ export const server = {
         accept: "form",
         input: credentials,
         handler: async (input, context) => {
-            const { data, error } = await apiClient().POST("/api/auth/login", {
-                body: input,
-            })
-            if (!data) {
-                throw new ActionError({
-                    code: "UNAUTHORIZED",
-                    message: errorMessage(error, "The API is unreachable."),
-                })
-            }
-            storeSession(context.cookies, data.token, data.expiresAt)
+            const session = unwrap(
+                await call(client => client.POST("/api/auth/login", { body: input })),
+            )
+            storeSession(context.cookies, session.token, session.expiresAt)
             return { handle: input.handle }
         },
     }),
 
     logout: defineAction({
         accept: "form",
-        handler: async (_input, context) => {
+        handler: (_input, context) => {
             context.cookies.delete(SESSION_COOKIE, { path: "/" })
             return { ok: true }
         },
@@ -92,129 +65,108 @@ export const server = {
 
     changePassword: defineAction({
         accept: "form",
-        input: z
-            .object({
-                currentPassword: z.string().min(8).max(128),
-                newPassword: z.string().min(8).max(128),
-                confirmPassword: z.string().min(8).max(128),
-            })
-            .refine(input => input.newPassword === input.confirmPassword, {
-                message: "The two new passwords differ.",
-                path: ["confirmPassword"],
-            }),
+        input: passwordChangeInput,
         handler: async (input, context) => {
-            const token = context.locals.token
-            if (!token)
-                throw new ActionError({ code: "UNAUTHORIZED", message: "Log in first." })
-            const { data, error } = await apiClient(token).POST("/api/me/password", {
-                body: {
-                    currentPassword: input.currentPassword,
-                    newPassword: input.newPassword,
-                },
-            })
-            if (!data) {
-                throw new ActionError({
-                    code: "BAD_REQUEST",
-                    message: errorMessage(error, "The API is unreachable."),
-                })
-            }
-            // The API revoked every older token, this session included. Keep the player in.
-            storeSession(context.cookies, data.token, data.expiresAt)
+            const session = unwrap(
+                await call(
+                    client =>
+                        client.POST("/api/me/password", {
+                            body: {
+                                currentPassword: input.currentPassword,
+                                newPassword: input.newPassword,
+                            },
+                        }),
+                    requireToken(context.locals),
+                ),
+            )
+            // The API revoked every older token, this session included. Keep the
+            // player in.
+            storeSession(context.cookies, session.token, session.expiresAt)
             return { ok: true }
         },
     }),
 
     changeHandle: defineAction({
         accept: "form",
-        input: z.object({ handle: handleField }),
+        input: z.object({ handle }),
         handler: async (input, context) => {
-            const token = context.locals.token
-            if (!token)
-                throw new ActionError({ code: "UNAUTHORIZED", message: "Log in first." })
-            const { data, error } = await apiClient(token).PUT("/api/me/handle", {
-                body: { handle: input.handle },
-            })
-            if (!data) throw handleFailure(error)
-            return { handle: data.handle }
+            const player = unwrap(
+                await call(
+                    client =>
+                        client.PUT("/api/me/handle", { body: { handle: input.handle } }),
+                    requireToken(context.locals),
+                ),
+            )
+            return { handle: player.handle }
         },
     }),
 
     renamePlayer: defineAction({
         accept: "form",
-        input: z.object({ id: z.uuid(), handle: handleField }),
+        input: z.object({ id: uuid, handle }),
         handler: async (input, context) => {
-            const token = requireAdmin(context.locals)
-            const { data, error } = await apiClient(token).PUT(
-                "/api/admin/players/{id}/handle",
-                {
-                    params: { path: { id: input.id } },
-                    body: { handle: input.handle },
-                },
+            const player = unwrap(
+                await call(
+                    client =>
+                        client.PUT("/api/admin/players/{id}/handle", {
+                            params: { path: { id: input.id } },
+                            body: { handle: input.handle },
+                        }),
+                    requireAdmin(context.locals),
+                ),
             )
-            if (!data) throw handleFailure(error)
-            return { handle: data.handle }
+            return { handle: player.handle }
         },
     }),
 
     resetPassword: defineAction({
         accept: "form",
-        input: z.object({ id: z.uuid() }),
+        input: z.object({ id: uuid }),
         handler: async (input, context) => {
-            const token = requireAdmin(context.locals)
-            const { data, error } = await apiClient(token).POST(
-                "/api/admin/players/{id}/password-reset",
-                { params: { path: { id: input.id } } },
+            const reset = unwrap(
+                await call(
+                    client =>
+                        client.POST("/api/admin/players/{id}/password-reset", {
+                            params: { path: { id: input.id } },
+                        }),
+                    requireAdmin(context.locals),
+                ),
             )
-            if (!data) {
-                throw new ActionError({
-                    code: "BAD_REQUEST",
-                    message: errorMessage(error, "The API is unreachable."),
-                })
-            }
-            return { temporaryPassword: data.temporaryPassword }
+            return { temporaryPassword: reset.temporaryPassword }
         },
     }),
 
     setRole: defineAction({
         accept: "form",
-        input: z.object({
-            id: z.uuid(),
-            role: z.enum(["user", "admin"]),
-        }),
+        input: z.object({ id: uuid, role: z.enum(["user", "admin"]) }),
         handler: async (input, context) => {
-            const token = requireAdmin(context.locals)
-            const { data, error } = await apiClient(token).PATCH(
-                "/api/admin/players/{id}",
-                {
-                    params: { path: { id: input.id } },
-                    body: { role: input.role },
-                },
+            const player = unwrap(
+                await call(
+                    client =>
+                        client.PATCH("/api/admin/players/{id}", {
+                            params: { path: { id: input.id } },
+                            body: { role: input.role },
+                        }),
+                    requireAdmin(context.locals),
+                ),
             )
-            if (!data) {
-                throw new ActionError({
-                    code: "BAD_REQUEST",
-                    message: errorMessage(error, "The API is unreachable."),
-                })
-            }
-            return { handle: data.handle, role: data.role }
+            return { handle: player.handle, role: player.role }
         },
     }),
 
     deletePlayer: defineAction({
         accept: "form",
-        input: z.object({ id: z.uuid() }),
+        input: z.object({ id: uuid }),
         handler: async (input, context) => {
-            const token = requireAdmin(context.locals)
-            const { error, response } = await apiClient(token).DELETE(
-                "/api/admin/players/{id}",
-                { params: { path: { id: input.id } } },
+            unwrap(
+                await callEmpty(
+                    client =>
+                        client.DELETE("/api/admin/players/{id}", {
+                            params: { path: { id: input.id } },
+                        }),
+                    requireAdmin(context.locals),
+                ),
             )
-            if (!response.ok) {
-                throw new ActionError({
-                    code: "BAD_REQUEST",
-                    message: errorMessage(error, "The API is unreachable."),
-                })
-            }
             return { ok: true }
         },
     }),

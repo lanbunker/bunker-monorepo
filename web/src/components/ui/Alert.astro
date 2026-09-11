@@ -1,0 +1,33 @@
+---
+import type { ActionError } from "astro:actions"
+import { errorMessage } from "../../lib/form"
+
+type Tone = "error" | "notice" | "warn"
+
+interface Props {
+  /** A failed action. Its message is made readable before it renders. */
+  error?: ActionError | undefined
+  /** A plain sentence, for a failure that is not an action. */
+  message?: string | undefined
+  tone?: Tone
+  class?: string
+}
+
+const { error, message, tone = "error", class: className } = Astro.props
+const text = message ?? errorMessage(error)
+
+const toneClass: Record<Tone, string> = {
+  error: "text-alert",
+  notice: "text-accent",
+  warn: "text-warn",
+}
+---
+
+{text && (
+  <p
+    class:list={["m-0 text-xs", toneClass[tone], className]}
+    role={tone === "error" ? "alert" : "status"}
+  >
+    {text}
+  </p>
+)}

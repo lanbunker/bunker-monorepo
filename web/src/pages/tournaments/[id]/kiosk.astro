@@ -1,24 +1,30 @@
 ---
 import { LiveBracket } from "../../../components/LiveBracket"
 import Layout from "../../../layouts/Layout.astro"
-import { apiClient } from "../../../lib/api"
+import { call, dataOf, failureOf, isMissing } from "../../../lib/api"
 
 const id = Astro.params.id ?? ""
-const { data, response } = await apiClient()
-  .GET("/api/tournaments/{id}", { params: { path: { id } } })
-  .catch(() => ({ data: undefined, response: undefined }))
-if (!data && response && response.status < 500) return Astro.rewrite("/404")
+const result = await call(client =>
+  client.GET("/api/tournaments/{id}", { params: { path: { id } } }),
+)
+const failure = failureOf(result)
+if (failure && isMissing(failure)) return Astro.rewrite("/404")
+
+const detail = dataOf(result)
+// A live screen must never show a stale bracket.
 Astro.response.headers.set("Cache-Control", "no-store")
 ---
 
-<Layout title={`${data?.tournament.name ?? "kiosk"}//LIVE`} bare noindex>
+<Layout title={`${detail?.tournament.name ?? "kiosk"}//LIVE`} bare noindex>
   <div class="mx-auto w-full max-w-[90rem] px-6">
-    {
-      data ? (
-        <LiveBracket client:load initial={data} source={`/tournaments/${id}/detail.json`} />
-      ) : (
-        <p class="text-base text-alert">the tournament database is unreachable.</p>
-      )
-    }
+    {detail ? (
+      <LiveBracket
+        client:load
+        initial={detail}
+        source={`/tournaments/${id}/detail.json`}
+      />
+    ) : (
+      <p class="text-base text-alert">the tournament database is unreachable.</p>
+    )}
   </div>
 </Layout>

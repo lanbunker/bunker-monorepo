@@ -1,44 +1,57 @@
 ---
 import { BracketView } from "../../../components/BracketView"
+import Alert from "../../../components/ui/Alert.astro"
 import Badge from "../../../components/ui/Badge.astro"
 import Button from "../../../components/ui/Button.astro"
 import Prompt from "../../../components/ui/Prompt.astro"
 import Layout from "../../../layouts/Layout.astro"
-import { apiClient } from "../../../lib/api"
+import { call, dataOf, failureOf, isMissing } from "../../../lib/api"
 import { STATUS_LABEL } from "../../../lib/tournaments"
 
 const id = Astro.params.id ?? ""
-const { data, response } = await apiClient()
-  .GET("/api/tournaments/{id}", { params: { path: { id } } })
-  .catch(() => ({ data: undefined, response: undefined }))
+const result = await call(client =>
+  client.GET("/api/tournaments/{id}", { params: { path: { id } } }),
+)
+const failure = failureOf(result)
+if (failure && isMissing(failure)) return Astro.rewrite("/404")
 
-if (!data && response && response.status < 500) return Astro.rewrite("/404")
-if (data && !data.bracket) return Astro.rewrite("/404")
-const t = data?.tournament
+const detail = dataOf(result)
+// A tournament with no bracket has no bracket page.
+if (detail && !detail.bracket) return Astro.rewrite("/404")
+const t = detail?.tournament
 ---
 
 <Layout title={`${t?.name ?? "bracket"}//LAN_BUNKER`} active="tournaments">
   <Prompt command={`cat ./tournaments/${id.slice(0, 8)}/bracket`} />
 
-  {
-    data && data.bracket && t ? (
-      <>
-        <div class="mb-4 flex flex-wrap items-baseline justify-between gap-3">
-          <div>
-            <div class="text-2xs tracking-wider text-dim">{t.game}</div>
-            <h1 class="m-0 text-base tracking-wider text-bright">{t.name}</h1>
-            <div class="mt-1 text-xs text-dim">{t.mode}</div>
-          </div>
-          <Badge tone={t.status === "concluded" ? "muted" : "warn"} filled={t.status === "live"}>{STATUS_LABEL[t.status]}</Badge>
+  {detail && detail.bracket && t ? (
+    <>
+      <div class="mb-4 flex flex-wrap items-baseline justify-between gap-3">
+        <div>
+          <div class="text-2xs tracking-wider text-dim">{t.game}</div>
+          <h1 class="m-0 text-base tracking-wider text-bright">{t.name}</h1>
+          <div class="mt-1 text-xs text-dim">{t.mode}</div>
         </div>
-        <BracketView bracket={data.bracket} entrants={data.entrants} />
-        <div class="mt-8 flex flex-wrap gap-3">
-          <Button href="/tournaments" variant="ghost" size="sm">← TOURNAMENTS</Button>
-          {t.status === "live" && <Button href={`/tournaments/${id}/kiosk`} variant="ghost" size="sm" external>KIOSK VIEW</Button>}
-        </div>
-      </>
-    ) : (
-      <p class="text-xs text-alert">the tournament database is unreachable.</p>
-    )
-  }
+        <Badge
+          tone={t.status === "concluded" ? "muted" : "warn"}
+          filled={t.status === "live"}
+        >
+          {STATUS_LABEL[t.status]}
+        </Badge>
+      </div>
+      <BracketView bracket={detail.bracket} entrants={detail.entrants} />
+      <div class="mt-8 flex flex-wrap gap-3">
+        <Button href="/tournaments" variant="ghost" size="sm">
+          ← TOURNAMENTS
+        </Button>
+        {t.status === "live" && (
+          <Button href={`/tournaments/${id}/kiosk`} variant="ghost" size="sm" external>
+            KIOSK VIEW
+          </Button>
+        )}
+      </div>
+    </>
+  ) : (
+    <Alert message="The tournament database is unreachable." />
+  )}
 </Layout>

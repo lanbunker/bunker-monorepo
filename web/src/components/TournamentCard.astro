@@ -1,8 +1,8 @@
 ---
 import { actions } from "astro:actions"
 import type { Player, Tournament } from "../lib/api"
-import { formatDate } from "../lib/dates"
-import { STATUS_LABEL, isRegistrationOpen, toLocalInput } from "../lib/tournaments"
+import { formatIsoDay, toLocalInput } from "../lib/dates"
+import { isRegistrationOpen, statusBadge } from "../lib/tournaments"
 import Badge from "./ui/Badge.astro"
 import Button from "./ui/Button.astro"
 import Countdown from "./ui/Countdown.astro"
@@ -16,41 +16,49 @@ interface Props {
   me?: Player
   /** Whether the viewer is already an entrant. */
   registered?: boolean
+  /** False when the entry list did not load. The card then offers no gesture. */
+  entriesKnown?: boolean
 }
 
-const { tournament: t, me, registered = false } = Astro.props
+const { tournament: t, me, registered = false, entriesKnown = true } = Astro.props
 const canRegister = isRegistrationOpen(t)
 const concluded = t.status === "concluded"
-const badge = concluded ? "CONCLUDED" : t.status === "open" && !canRegister ? "REGISTRATION CLOSED" : STATUS_LABEL[t.status]
-const badgeTone = canRegister ? "accent" : t.status === "live" ? "warn" : "muted"
+const badge = statusBadge(t, canRegister)
 const winner = t.winner?.player
 ---
 
 <article data-tournament={t.id}>
-<Panel tone={canRegister ? "accent" : "default"}>
-  <div class="flex flex-wrap items-start justify-between gap-2">
-    <h3 class="m-0 text-sm tracking-wide text-bright">{t.game}: {t.name}</h3>
-    <Badge tone={badgeTone} filled={canRegister}>{badge}</Badge>
-  </div>
-  {t.description && <p class="mt-1 text-xs text-dim">{t.description}</p>}
+  <Panel tone={canRegister ? "accent" : "default"}>
+    <div class="flex flex-wrap items-start justify-between gap-2">
+      <h3 class="m-0 text-sm tracking-wide text-bright">
+        {t.game}: {t.name}
+      </h3>
+      <Badge tone={badge.tone} filled={badge.filled}>
+        {badge.label}
+      </Badge>
+    </div>
+    {t.description && <p class="mt-1 text-xs text-dim">{t.description}</p>}
 
-  <div class="mt-3 flex flex-col gap-1">
-    <Kv label="Mode">{t.mode}</Kv>
-    <Kv label="Date" tone={canRegister ? "accent" : "default"}>{formatDate(new Date(`${t.date}T00:00:00`))}</Kv>
-    <Kv label="Entrants">{t.entrantCount}</Kv>
-    {
-      t.status === "open" && (
+    <div class="mt-3 flex flex-col gap-1">
+      <Kv label="Mode">{t.mode}</Kv>
+      <Kv label="Date" tone={canRegister ? "accent" : "default"}>
+        {formatIsoDay(t.date)}
+      </Kv>
+      <Kv label="Entrants">{t.entrantCount}</Kv>
+      {t.status === "open" && (
         <Kv label="Open until">
-          <time datetime={t.registrationClosesAt} data-local>{toLocalInput(t.registrationClosesAt).replace("T", " ")}</time>
+          <time datetime={t.registrationClosesAt} data-local>
+            {toLocalInput(t.registrationClosesAt).replace("T", " ")}
+          </time>
         </Kv>
-      )
-    }
-  </div>
+      )}
+    </div>
 
-  {
-    canRegister && (
+    {canRegister && (
       <div class="mt-4 flex flex-wrap items-center gap-4">
-        {me ? (
+        {!entriesKnown ? (
+          <span class="text-2xs text-warn">entries unavailable. reload the page.</span>
+        ) : me ? (
           registered ? (
             <form method="POST" action={actions.retireFromTournament}>
               <input type="hidden" name="id" value={t.id} />
@@ -63,26 +71,27 @@ const winner = t.winner?.player
             </form>
           )
         ) : (
-          <Button href="/login" variant="ghost">LOGIN TO APPLY</Button>
+          <Button href="/login" variant="ghost">
+            LOGIN TO APPLY
+          </Button>
         )}
         {registered && <span class="text-2xs text-accent">you are in.</span>}
         <Countdown deadline={t.registrationClosesAt} />
       </div>
-    )
-  }
+    )}
 
-  {
-    t.hasBracket && (
+    {t.hasBracket && (
       <div class="mt-4">
-        <Button href={`/tournaments/${t.id}/bracket`} variant={concluded ? "ghost" : "primary"}>
+        <Button
+          href={`/tournaments/${t.id}/bracket`}
+          variant={concluded ? "ghost" : "primary"}
+        >
           {concluded ? "BRACKET" : "LIVE BRACKET"}
         </Button>
       </div>
-    )
-  }
+    )}
 
-  {
-    concluded && (
+    {concluded && (
       <div class="mt-5 flex flex-wrap items-center gap-5 border-t border-faint pt-4">
         {winner ? (
           <>
@@ -101,12 +110,13 @@ const winner = t.winner?.player
             </div>
           </>
         ) : (
-          <p class="m-0 text-2xs text-mute">{t.winner ? "the winner deleted their account." : "no winner recorded."}</p>
+          <p class="m-0 text-2xs text-mute">
+            {t.winner ? "the winner deleted their account." : "no winner recorded."}
+          </p>
         )}
       </div>
-    )
-  }
-</Panel>
+    )}
+  </Panel>
 </article>
 
 <script>
@@ -114,6 +124,9 @@ const winner = t.winner?.player
   // again here in local time.
   for (const el of document.querySelectorAll<HTMLTimeElement>("time[data-local]")) {
     const at = new Date(el.dateTime)
-    el.textContent = at.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })
+    el.textContent = at.toLocaleString(undefined, {
+      dateStyle: "medium",
+      timeStyle: "short",
+    })
   }
 </script>

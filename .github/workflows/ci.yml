@@ -67,11 +67,18 @@ jobs:
 
             - run: pnpm install --frozen-lockfile
 
-            - run: pnpm exec oxfmt --check
+            # The checklist writes the formatting. CI only reads it, so a commit
+            # that skipped the checklist fails here.
+            - run: pnpm fmt:check
+
+            # TypeScript 7 reads every .ts and .tsx in under a second.
+            - run: pnpm typecheck
 
             - run: pnpm lint
 
-            - run: pnpm exec astro check
+            # `astro check` is the only checker that reads .astro. It needs
+            # TypeScript 6, which is why the two live side by side.
+            - run: pnpm check
 
             - run: pnpm build
 

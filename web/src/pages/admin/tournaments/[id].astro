@@ -1,279 +1,346 @@
 ---
 import { actions } from "astro:actions"
 import { BracketEditor } from "../../../components/BracketEditor"
+import Alert from "../../../components/ui/Alert.astro"
 import Button from "../../../components/ui/Button.astro"
 import Glyph from "../../../components/ui/Glyph.astro"
 import AdminLayout from "../../../layouts/AdminLayout.astro"
-import { apiClient } from "../../../lib/api"
-import { formatDate } from "../../../lib/dates"
-import { entrantName, toLocalInput } from "../../../lib/tournaments"
+import { call, dataOf, failureOf, isMissing } from "../../../lib/api"
+import { formatDate, toLocalInput } from "../../../lib/dates"
+import { firstError, noticeFrom } from "../../../lib/form"
+import { adminSessionOf } from "../../../lib/session"
+import { ADMIN_FIELD, ADMIN_FIELD_INLINE } from "../../../lib/styles"
+import { entrantName } from "../../../lib/tournaments"
 
-const me = Astro.locals.player
-if (me?.role !== "admin" || !Astro.locals.token) return Astro.rewrite("/404")
+const session = adminSessionOf(Astro.locals)
+if (!session) return Astro.rewrite("/404")
 const id = Astro.params.id ?? ""
 
-// Every form redirects after success, so a refresh repeats nothing.
-const results = [
-  [actions.updateTournament, "saved"],
-  [actions.setTournamentStatus, "status changed"],
-  [actions.addEntrant, "entrant added"],
-  [actions.removeEntrant, "entrant removed"],
-] as const
-const outcomes = results.map(([action, done]) => [Astro.getActionResult(action), done] as const)
-const success = outcomes.find(([result]) => result?.data)
-if (success) return Astro.redirect(`/admin/tournaments/${id}?done=${encodeURIComponent(success[1])}`)
-const deleted = Astro.getActionResult(actions.deleteTournament)
-if (deleted?.data) return Astro.redirect("/admin/tournaments?done=tournament+deleted")
-const failure = outcomes.find(([result]) => result?.error)?.[0]?.error ?? deleted?.error
-// Only known notices render. The query string is anyone's to write.
-const notice = results.map(([, done]) => done).find(done => done === Astro.url.searchParams.get("done"))
+const NOTICES = {
+  saved: "saved",
+  status: "status changed",
+  added: "entrant added",
+  removed: "entrant removed",
+}
 
-const { data, response } = await apiClient(Astro.locals.token)
-  .GET("/api/admin/tournaments/{id}", { params: { path: { id } } })
-  .catch(() => ({ data: undefined, response: undefined }))
-if (!data && response && response.status < 500) return Astro.rewrite("/404")
-const t = data?.tournament
-const field =
-  "w-full border-b border-warn/40 bg-transparent px-1 py-1 text-xs text-admin-ink outline-none focus:border-warn"
+// Every form redirects after success, so a refresh repeats nothing.
+const saved = Astro.getActionResult(actions.updateTournament)
+const status = Astro.getActionResult(actions.setTournamentStatus)
+const added = Astro.getActionResult(actions.addEntrant)
+const removed = Astro.getActionResult(actions.removeEntrant)
+const done = [
+  saved?.data && "saved",
+  status?.data && "status",
+  added?.data && "added",
+  removed?.data && "removed",
+].find(key => typeof key === "string")
+if (done) return Astro.redirect(`/admin/tournaments/${id}?done=${done}`)
+
+const deleted = Astro.getActionResult(actions.deleteTournament)
+if (deleted?.data) return Astro.redirect("/admin/tournaments?done=deleted")
+
+const failure = firstError(saved, status, added, removed, deleted)
+const notice = noticeFrom(Astro.url, NOTICES)
+
+const result = await call(
+  client => client.GET("/api/admin/tournaments/{id}", { params: { path: { id } } }),
+  session.token,
+)
+const outage = failureOf(result)
+if (outage && isMissing(outage)) return Astro.rewrite("/404")
+
+const detail = dataOf(result)
+const t = detail?.tournament
 ---
 
 <AdminLayout title={`BACKOFFICE//${t?.name ?? "tournament"}`} active="tournaments">
-  {
-    !data || !t ? (
-      <p class="text-xs text-alert">the api is unreachable.</p>
-    ) : (
-      <>
-        <div class="flex flex-wrap items-baseline justify-between gap-3">
-          <h1 class="m-0 text-sm tracking-wider text-warn">
-            root@bunker:~# tournaments/{t.id.slice(0, 8)} <span class="text-admin-dim"># {t.status}</span>
-          </h1>
-          <div class="flex flex-wrap gap-2">
-            {t.status !== "draft" && (
-              <Button href={`/tournaments/${t.id}/bracket`} variant="ghost" size="sm" external>
-                PUBLIC BRACKET
-              </Button>
-            )}
-            {t.hasBracket && (
-              <Button href={`/tournaments/${t.id}/kiosk`} variant="warn" size="sm" external>
-                KIOSK
-              </Button>
-            )}
-            <Button href="/admin/tournaments" variant="ghost" size="sm">
-              ← LIST
+  <Alert error={failure} class="mb-3" />
+  {!detail || !t ? (
+    <p class="text-xs text-alert">the api is unreachable.</p>
+  ) : (
+    <>
+      <div class="flex flex-wrap items-baseline justify-between gap-3">
+        <h1 class="m-0 text-sm tracking-wider text-warn">
+          root@bunker:~# tournaments/{t.id.slice(0, 8)}{" "}
+          <span class="text-admin-dim"># {t.status}</span>
+        </h1>
+        <div class="flex flex-wrap gap-2">
+          {t.status !== "draft" && (
+            <Button
+              href={`/tournaments/${t.id}/bracket`}
+              variant="ghost"
+              size="sm"
+              external
+            >
+              PUBLIC BRACKET
             </Button>
-          </div>
+          )}
+          {t.hasBracket && (
+            <Button href={`/tournaments/${t.id}/kiosk`} variant="warn" size="sm" external>
+              KIOSK
+            </Button>
+          )}
+          <Button href="/admin/tournaments" variant="ghost" size="sm">
+            ← LIST
+          </Button>
         </div>
+      </div>
 
-        {notice && (
-          <p class="mt-3 text-xs text-warn" role="status">
-            {notice}
-          </p>
-        )}
-        {failure && (
-          <p class="mt-3 text-xs text-alert" role="alert">
-            {failure.message}
-          </p>
-        )}
+      <Alert message={notice} tone="warn" class="mt-3" />
 
-        <section class="mt-4 border border-warn/40 p-4">
-          <h2 class="m-0 mb-3 text-2xs font-normal tracking-wider text-admin-dim">status</h2>
-          <div class="flex flex-wrap items-center gap-2">
-            {t.status === "draft" && (
-              <form method="POST" action={actions.setTournamentStatus}>
-                <input type="hidden" name="id" value={t.id} />
-                <input type="hidden" name="status" value="open" />
-                <Button variant="warn" size="sm">
-                  open registration
-                </Button>
-              </form>
-            )}
-            {(t.status === "draft" || t.status === "open") && (
-              <form method="POST" action={actions.setTournamentStatus}>
-                <input type="hidden" name="id" value={t.id} />
-                <input type="hidden" name="status" value="live" />
-                <Button variant="warn" size="sm">
-                  go live
-                </Button>
-              </form>
-            )}
-            {t.status === "live" && !t.hasBracket && (
-              <form method="POST" action={actions.setTournamentStatus}>
-                <input type="hidden" name="id" value={t.id} />
-                <input type="hidden" name="status" value="open" />
-                <Button variant="warn" size="sm">
-                  back to registration
-                </Button>
-              </form>
-            )}
-            {t.status !== "concluded" && (
-              <form
-                method="POST"
-                action={actions.setTournamentStatus}
-                class="flex flex-wrap items-center gap-2"
-                data-confirm="conclude the tournament? this cannot be undone."
-              >
-                <input type="hidden" name="id" value={t.id} />
-                <input type="hidden" name="status" value="concluded" />
-                {!t.hasBracket && (
-                  <label class="flex items-center gap-2 text-2xs text-admin-dim">
-                    winner
-                    <select name="winner" class="border-b border-warn/40 bg-transparent px-1 py-0.5 text-xs text-admin-ink">
-                      <option value="">none</option>
-                      {data.entrants.map(e => (
-                        <option value={e.id}>{entrantName(e)}</option>
-                      ))}
-                    </select>
-                  </label>
-                )}
-                <Button variant="danger" size="sm">
-                  conclude
-                </Button>
-              </form>
-            )}
-            {t.status === "concluded" && (
-              <span class="text-xs text-admin-dim">
-                concluded. winner:{" "}
-                <span class="text-warn" data-winner={t.winner ? entrantName(t.winner) : ""}>
-                  {t.winner ? entrantName(t.winner) : "none"}
-                </span>
-              </span>
-            )}
-          </div>
-          {t.hasBracket && t.status === "live" && (
-            <p class="m-0 mt-2 text-2xs text-admin-mute">the bracket decides the winner. conclude once the final has one.</p>
-          )}
-        </section>
-
-        <section class="mt-4 border border-warn/40 p-4">
-          <h2 class="m-0 mb-3 text-2xs font-normal tracking-wider text-admin-dim">details</h2>
-          <form method="POST" action={actions.updateTournament} class="grid gap-3 text-xs min-[40rem]:grid-cols-2">
-            <input type="hidden" name="id" value={t.id} />
-            <label class="flex flex-col gap-1">
-              <span class="text-2xs text-admin-dim">name</span>
-              <input name="name" required maxlength="60" value={t.name} class={field} />
-            </label>
-            <label class="flex flex-col gap-1">
-              <span class="text-2xs text-admin-dim">game</span>
-              <input name="game" required maxlength="40" value={t.game} class={field} />
-            </label>
-            <label class="flex flex-col gap-1">
-              <span class="text-2xs text-admin-dim">mode</span>
-              <input name="mode" required maxlength="30" value={t.mode} class={field} />
-            </label>
-            <label class="flex flex-col gap-1">
-              <span class="text-2xs text-admin-dim">date</span>
-              <input name="date" type="date" required value={t.date} class={field} />
-            </label>
-            <label class="flex flex-col gap-1">
-              <span class="text-2xs text-admin-dim">registration closes (your local time)</span>
-              <input
-                type="datetime-local"
-                required
-                data-iso-for="registrationClosesAt"
-                data-iso={t.registrationClosesAt}
-                value={toLocalInput(t.registrationClosesAt)}
-                class={field}
-              />
-              <input type="hidden" name="registrationClosesAt" value={t.registrationClosesAt} />
-            </label>
-            <label class="flex flex-col gap-1 min-[40rem]:col-span-2">
-              <span class="text-2xs text-admin-dim">description</span>
-              <textarea name="description" maxlength="1000" rows="2" class={field}>{t.description}</textarea>
-            </label>
-            <div class="min-[40rem]:col-span-2">
-              <Button variant="warn" size="sm">
-                save
-              </Button>
-            </div>
-          </form>
-        </section>
-
-        <section class="mt-4 border border-warn/40 p-4">
-          <h2 class="m-0 mb-3 text-2xs font-normal tracking-wider text-admin-dim">
-            entrants <span class="text-admin-mute"># {data.entrants.length}</span>
-          </h2>
-          {data.entrants.length > 0 ? (
-            <table class="w-full border-collapse text-xs" aria-label="entrants">
-              <thead>
-                <tr class="text-left text-2xs tracking-wider text-admin-dim">
-                  <th class="w-[10%] pb-2 font-normal">seed</th>
-                  <th class="w-[45%] pb-2 font-normal">player</th>
-                  <th class="w-[25%] pb-2 font-normal">registered</th>
-                  <th class="w-[20%] pb-2 text-right font-normal"></th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.entrants.map(e => (
-                  <tr class="border-t border-warn/20">
-                    <td class="py-1.5 text-admin-dim tabular-nums">{e.seed ?? "-"}</td>
-                    <td class="py-1.5">
-                      <span class="inline-flex items-center gap-2 text-admin-ink">
-                        {e.player && <Glyph glyph={e.player.glyph} size="1.1em" />}
-                        {entrantName(e)}
-                      </span>
-                    </td>
-                    <td class="py-1.5 text-admin-dim">{formatDate(new Date(e.registeredAt))}</td>
-                    <td class="py-1.5 text-right">
-                      {!t.hasBracket && t.status !== "concluded" && (
-                        <form method="POST" action={actions.removeEntrant} data-confirm={`remove ${entrantName(e)}?`}>
-                          <input type="hidden" name="id" value={t.id} />
-                          <input type="hidden" name="entrantId" value={e.id} />
-                          <Button variant="danger" size="sm">
-                            remove
-                          </Button>
-                        </form>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          ) : (
-            <p class="m-0 text-xs text-admin-dim">nobody yet.</p>
-          )}
-          {!t.hasBracket && t.status !== "concluded" && (
-            <form method="POST" action={actions.addEntrant} class="mt-3 flex flex-wrap items-center gap-2">
+      <section class="mt-4 border border-warn/40 p-4">
+        <h2 class="m-0 mb-3 text-2xs font-normal tracking-wider text-admin-dim">
+          status
+        </h2>
+        <div class="flex flex-wrap items-center gap-2">
+          {t.status === "draft" && (
+            <form method="POST" action={actions.setTournamentStatus}>
               <input type="hidden" name="id" value={t.id} />
-              <input
-                name="handle"
-                required
-                minlength="3"
-                maxlength="20"
-                placeholder="handle"
-                aria-label="handle of the player to add"
-                class="w-40 border-b border-warn/40 bg-transparent px-1 py-0.5 text-xs text-admin-ink outline-none focus:border-warn"
-              />
+              <input type="hidden" name="status" value="open" />
               <Button variant="warn" size="sm">
-                add entrant
+                open registration
               </Button>
             </form>
           )}
-        </section>
-
-        <section class="mt-4 border border-warn/40 p-4">
-          <h2 class="m-0 mb-3 text-2xs font-normal tracking-wider text-admin-dim">bracket</h2>
-          {t.status === "live" || t.hasBracket ? (
-            <BracketEditor
-              client:load
-              tournamentId={t.id}
-              entrants={data.entrants}
-              bracket={data.bracket}
-              locked={t.status === "concluded"}
-            />
-          ) : (
-            <p class="m-0 text-xs text-admin-dim">go live to generate the bracket.</p>
+          {(t.status === "draft" || t.status === "open") && (
+            <form method="POST" action={actions.setTournamentStatus}>
+              <input type="hidden" name="id" value={t.id} />
+              <input type="hidden" name="status" value="live" />
+              <Button variant="warn" size="sm">
+                go live
+              </Button>
+            </form>
           )}
-        </section>
+          {t.status === "live" && !t.hasBracket && (
+            <form method="POST" action={actions.setTournamentStatus}>
+              <input type="hidden" name="id" value={t.id} />
+              <input type="hidden" name="status" value="open" />
+              <Button variant="warn" size="sm">
+                back to registration
+              </Button>
+            </form>
+          )}
+          {t.status !== "concluded" && (
+            <form
+              method="POST"
+              action={actions.setTournamentStatus}
+              class="flex flex-wrap items-center gap-2"
+              data-confirm="conclude the tournament? this cannot be undone."
+            >
+              <input type="hidden" name="id" value={t.id} />
+              <input type="hidden" name="status" value="concluded" />
+              {!t.hasBracket && (
+                <label class="flex items-center gap-2 text-2xs text-admin-dim">
+                  winner
+                  <select name="winner" class={ADMIN_FIELD_INLINE}>
+                    <option value="">none</option>
+                    {detail.entrants.map(e => (
+                      <option value={e.id}>{entrantName(e)}</option>
+                    ))}
+                  </select>
+                </label>
+              )}
+              <Button variant="danger" size="sm">
+                conclude
+              </Button>
+            </form>
+          )}
+          {t.status === "concluded" && (
+            <span class="text-xs text-admin-dim">
+              concluded. winner:{" "}
+              <span class="text-warn" data-winner={t.winner ? entrantName(t.winner) : ""}>
+                {t.winner ? entrantName(t.winner) : "none"}
+              </span>
+            </span>
+          )}
+        </div>
+        {t.hasBracket && t.status === "live" && (
+          <p class="m-0 mt-2 text-2xs text-admin-mute">
+            the bracket decides the winner. conclude once the final has one.
+          </p>
+        )}
+      </section>
 
-        <section class="mt-8 flex justify-end">
-          <form method="POST" action={actions.deleteTournament} data-confirm={`delete ${t.name}? entrants and bracket go with it.`}>
+      <section class="mt-4 border border-warn/40 p-4">
+        <h2 class="m-0 mb-3 text-2xs font-normal tracking-wider text-admin-dim">
+          details
+        </h2>
+        <form
+          method="POST"
+          action={actions.updateTournament}
+          class="grid gap-3 text-xs min-[40rem]:grid-cols-2"
+        >
+          <input type="hidden" name="id" value={t.id} />
+          <label class="flex flex-col gap-1">
+            <span class="text-2xs text-admin-dim">name</span>
+            <input
+              name="name"
+              required
+              maxlength="60"
+              value={t.name}
+              class={ADMIN_FIELD}
+            />
+          </label>
+          <label class="flex flex-col gap-1">
+            <span class="text-2xs text-admin-dim">game</span>
+            <input
+              name="game"
+              required
+              maxlength="40"
+              value={t.game}
+              class={ADMIN_FIELD}
+            />
+          </label>
+          <label class="flex flex-col gap-1">
+            <span class="text-2xs text-admin-dim">mode</span>
+            <input
+              name="mode"
+              required
+              maxlength="30"
+              value={t.mode}
+              class={ADMIN_FIELD}
+            />
+          </label>
+          <label class="flex flex-col gap-1">
+            <span class="text-2xs text-admin-dim">date</span>
+            <input name="date" type="date" required value={t.date} class={ADMIN_FIELD} />
+          </label>
+          <label class="flex flex-col gap-1">
+            <span class="text-2xs text-admin-dim">
+              registration closes (your local time)
+            </span>
+            <input
+              type="datetime-local"
+              required
+              data-iso-for="registrationClosesAt"
+              data-iso={t.registrationClosesAt}
+              value={toLocalInput(t.registrationClosesAt)}
+              class={ADMIN_FIELD}
+            />
+            <input
+              type="hidden"
+              name="registrationClosesAt"
+              value={t.registrationClosesAt}
+            />
+          </label>
+          <label class="flex flex-col gap-1 min-[40rem]:col-span-2">
+            <span class="text-2xs text-admin-dim">description</span>
+            <textarea
+              name="description"
+              maxlength="1000"
+              rows="2"
+              class={ADMIN_FIELD}
+            >{t.description}</textarea>
+          </label>
+          <div class="min-[40rem]:col-span-2">
+            <Button variant="warn" size="sm">
+              save
+            </Button>
+          </div>
+        </form>
+      </section>
+
+      <section class="mt-4 border border-warn/40 p-4">
+        <h2 class="m-0 mb-3 text-2xs font-normal tracking-wider text-admin-dim">
+          entrants <span class="text-admin-mute"># {detail.entrants.length}</span>
+        </h2>
+        {detail.entrants.length > 0 ? (
+          <table class="w-full border-collapse text-xs" aria-label="entrants">
+            <thead>
+              <tr class="text-left text-2xs tracking-wider text-admin-dim">
+                <th class="w-[10%] pb-2 font-normal">seed</th>
+                <th class="w-[45%] pb-2 font-normal">player</th>
+                <th class="w-[25%] pb-2 font-normal">registered</th>
+                <th class="w-[20%] pb-2 text-right font-normal" />
+              </tr>
+            </thead>
+            <tbody>
+              {detail.entrants.map(e => (
+                <tr class="border-t border-warn/20">
+                  <td class="py-1.5 text-admin-dim tabular-nums">{e.seed ?? "-"}</td>
+                  <td class="py-1.5">
+                    <span class="inline-flex items-center gap-2 text-admin-ink">
+                      {e.player && <Glyph glyph={e.player.glyph} size="1.1em" />}
+                      {entrantName(e)}
+                    </span>
+                  </td>
+                  <td class="py-1.5 text-admin-dim">
+                    {formatDate(new Date(e.registeredAt))}
+                  </td>
+                  <td class="py-1.5 text-right">
+                    {!t.hasBracket && t.status !== "concluded" && (
+                      <form
+                        method="POST"
+                        action={actions.removeEntrant}
+                        data-confirm={`remove ${entrantName(e)}?`}
+                      >
+                        <input type="hidden" name="id" value={t.id} />
+                        <input type="hidden" name="entrantId" value={e.id} />
+                        <Button variant="danger" size="sm">
+                          remove
+                        </Button>
+                      </form>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ) : (
+          <p class="m-0 text-xs text-admin-dim">nobody yet.</p>
+        )}
+        {!t.hasBracket && t.status !== "concluded" && (
+          <form
+            method="POST"
+            action={actions.addEntrant}
+            class="mt-3 flex flex-wrap items-center gap-2"
+          >
             <input type="hidden" name="id" value={t.id} />
-            <Button variant="danger" size="sm">
-              delete tournament
+            <input
+              name="handle"
+              required
+              minlength="3"
+              maxlength="20"
+              placeholder="handle"
+              aria-label="handle of the player to add"
+              class:list={["w-40", ADMIN_FIELD_INLINE]}
+            />
+            <Button variant="warn" size="sm">
+              add entrant
             </Button>
           </form>
-        </section>
-      </>
-    )
-  }
+        )}
+      </section>
+
+      <section class="mt-4 border border-warn/40 p-4">
+        <h2 class="m-0 mb-3 text-2xs font-normal tracking-wider text-admin-dim">
+          bracket
+        </h2>
+        {t.status === "live" || t.hasBracket ? (
+          <BracketEditor
+            client:load
+            tournamentId={t.id}
+            entrants={detail.entrants}
+            bracket={detail.bracket}
+            locked={t.status === "concluded"}
+          />
+        ) : (
+          <p class="m-0 text-xs text-admin-dim">go live to generate the bracket.</p>
+        )}
+      </section>
+
+      <section class="mt-8 flex justify-end">
+        <form
+          method="POST"
+          action={actions.deleteTournament}
+          data-confirm={`delete ${t.name}? entrants and bracket go with it.`}
+        >
+          <input type="hidden" name="id" value={t.id} />
+          <Button variant="danger" size="sm">
+            delete tournament
+          </Button>
+        </form>
+      </section>
+    </>
+  )}
 </AdminLayout>

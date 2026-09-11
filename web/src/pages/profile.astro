@@ -17,21 +17,39 @@ if (!player) return Astro.redirect("/login")
 // not survive a redirect, so the flag rides on the query string.
 const changed = Astro.url.searchParams.get("changed")
 const notice =
-  changed === "password" ? "password changed." : changed === "handle" ? "handle changed." : undefined
+  changed === "password"
+    ? "password changed."
+    : changed === "handle"
+      ? "handle changed."
+      : undefined
 ---
 
 <Layout title={`${player.handle}//LAN_BUNKER`} noindex>
   <Prompt command="whoami" />
 
-  {notice && <p class="mb-4 text-xs text-accent" role="status">{notice}</p>}
+  {notice && (
+    <p class="mb-4 text-xs text-accent" role="status">
+      {notice}
+    </p>
+  )}
 
   <PlayerCard player={player} own />
 
   <div class="mt-6 flex flex-wrap items-center gap-3">
-    <Button href={`/players/${player.handle}`} variant="ghost">PUBLIC PAGE</Button>
-    <Button href="/handle" variant="ghost">CHANGE HANDLE</Button>
-    <Button href="/password" variant="ghost">CHANGE PASSWORD</Button>
-    {player.role === "admin" && <Button href="/admin" variant="warn">BACKOFFICE</Button>}
+    <Button href={`/players/${player.handle}`} variant="ghost">
+      PUBLIC PAGE
+    </Button>
+    <Button href="/handle" variant="ghost">
+      CHANGE HANDLE
+    </Button>
+    <Button href="/password" variant="ghost">
+      CHANGE PASSWORD
+    </Button>
+    {player.role === "admin" && (
+      <Button href="/admin" variant="warn">
+        BACKOFFICE
+      </Button>
+    )}
     <form method="POST" action={actions.logout}>
       <Button variant="danger">LOGOUT</Button>
     </form>

@@ -7,9 +7,19 @@
         "enabled": true,
     },
     // Where the Rust API answers. The Worker is the only client of this name.
-    // Local development reads API_URL from `.env` or the shell instead.
+    // The deploy uses the top level. Local runs select an environment with
+    // CLOUDFLARE_ENV, because a Worker var wins over the shell in local mode.
     "vars": {
         "API_URL": "https://api.lanbunker.eu",
+    },
+
+    "env": {
+        "dev": {
+            "vars": { "API_URL": "http://127.0.0.1:3000" },
+        },
+        "e2e": {
+            "vars": { "API_URL": "http://127.0.0.1:3999" },
+        },
     },
 
     // Uncomment when ready for D1

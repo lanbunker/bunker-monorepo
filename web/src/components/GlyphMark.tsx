@@ -37,12 +37,12 @@ export const GlyphMark = (props: GlyphMarkProps) => {
                 style={{ width: markSize, height: markSize }}
                 fill="currentColor"
             >
-                {cells.map((lit, i) =>
-                    lit ? (
+                {cells.map(cell =>
+                    cell.lit ? (
                         <rect
-                            key={i}
-                            x={i % GLYPH_SIZE}
-                            y={Math.floor(i / GLYPH_SIZE)}
+                            key={`${cell.x}-${cell.y}`}
+                            x={cell.x}
+                            y={cell.y}
                             width="1"
                             height="1"
                         />

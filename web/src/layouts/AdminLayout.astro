@@ -37,37 +37,46 @@ const sections: { key: Section; label: string; href: string; ready: boolean }[] 
     <div class="mx-auto max-w-[72rem] px-6 pt-4 pb-12 max-[30rem]:px-3.5">
       <header class="flex flex-wrap items-center justify-between gap-4 border-b border-warn/40 pb-3">
         <a href="/admin" class="flex items-center gap-2 no-underline">
-          <span class="bg-warn px-2 py-0.5 text-2xs font-bold tracking-wider text-black">BACKOFFICE</span>
+          <span class="bg-warn px-2 py-0.5 text-2xs font-bold tracking-wider text-black">
+            BACKOFFICE
+          </span>
           <span class="text-base tracking-wider text-warn">root@bunker</span>
         </a>
         <div class="flex items-center gap-4 text-2xs tracking-wider text-admin-dim">
-          {player && <span>operator <span class="text-admin-ink">{player.handle}</span></span>}
-          <a href="/" class="border border-warn/40 px-2 py-0.5 no-underline text-warn hover:bg-warn hover:text-black">← site</a>
+          {player && (
+            <span>
+              operator <span class="text-admin-ink">{player.handle}</span>
+            </span>
+          )}
+          <a
+            href="/"
+            class="border border-warn/40 px-2 py-0.5 no-underline text-warn hover:bg-warn hover:text-black"
+          >
+            ← site
+          </a>
         </div>
       </header>
 
       <div class="mt-4 grid gap-6 min-[45rem]:grid-cols-[12rem_1fr]">
         <nav aria-label="Backoffice sections" class="flex flex-col gap-1 text-xs">
-          {
-            sections.map(section => (
-              <a
-                href={section.ready ? section.href : undefined}
-                aria-current={active === section.key ? "page" : undefined}
-                aria-disabled={section.ready ? undefined : "true"}
-                class:list={[
-                  "flex items-center justify-between px-3 py-1.5 no-underline tracking-wide",
-                  active === section.key
-                    ? "bg-warn font-bold text-black"
-                    : section.ready
-                      ? "text-admin-ink hover:bg-warn/15 hover:text-warn"
-                      : "cursor-not-allowed text-admin-mute",
-                ]}
-              >
-                <span>{section.label}</span>
-                {!section.ready && <span class="text-2xs">soon</span>}
-              </a>
-            ))
-          }
+          {sections.map(section => (
+            <a
+              href={section.ready ? section.href : undefined}
+              aria-current={active === section.key ? "page" : undefined}
+              aria-disabled={section.ready ? undefined : "true"}
+              class:list={[
+                "flex items-center justify-between px-3 py-1.5 no-underline tracking-wide",
+                active === section.key
+                  ? "bg-warn font-bold text-black"
+                  : section.ready
+                    ? "text-admin-ink hover:bg-warn/15 hover:text-warn"
+                    : "cursor-not-allowed text-admin-mute",
+              ]}
+            >
+              <span>{section.label}</span>
+              {!section.ready && <span class="text-2xs">soon</span>}
+            </a>
+          ))}
         </nav>
 
         <main class="min-w-0">
@@ -77,25 +86,28 @@ const sections: { key: Section; label: string; href: string; ready: boolean }[] 
     </div>
 
     <div class="hazard fixed inset-x-0 bottom-0 h-1.5"></div>
-  <script>
+    <script>
+      import { toLocalInput } from "../lib/dates"
+
       // One listener for every destructive form. The text lives in a data
       // attribute, so a name never lands inside a JavaScript string.
-      for (const form of document.querySelectorAll<HTMLFormElement>("form[data-confirm]")) {
+      for (const form of document.querySelectorAll<HTMLFormElement>(
+        "form[data-confirm]",
+      )) {
         form.addEventListener("submit", event => {
-          if (!window.confirm(form.dataset.confirm ?? "are you sure?")) event.preventDefault()
+          if (!window.confirm(form.dataset.confirm ?? "are you sure?"))
+            event.preventDefault()
         })
       }
 
       // The server cannot know the admin's timezone. A local datetime field
       // writes its instant into the hidden field that the form sends.
-      for (const local of document.querySelectorAll<HTMLInputElement>("input[data-iso-for]")) {
+      for (const local of document.querySelectorAll<HTMLInputElement>(
+        "input[data-iso-for]",
+      )) {
         const hidden = local.form?.elements.namedItem(local.dataset.isoFor ?? "")
         if (!(hidden instanceof HTMLInputElement)) continue
-        if (local.dataset.iso) {
-          const at = new Date(local.dataset.iso)
-          const pad = (n: number) => String(n).padStart(2, "0")
-          local.value = `${at.getFullYear()}-${pad(at.getMonth() + 1)}-${pad(at.getDate())}T${pad(at.getHours())}:${pad(at.getMinutes())}`
-        }
+        if (local.dataset.iso) local.value = toLocalInput(local.dataset.iso)
         const sync = () => {
           if (local.value) hidden.value = new Date(local.value).toISOString()
         }

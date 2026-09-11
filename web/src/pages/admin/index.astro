@@ -1,18 +1,22 @@
 ---
 import AdminLayout from "../../layouts/AdminLayout.astro"
-import { apiClient } from "../../lib/api"
+import { call, dataOf } from "../../lib/api"
+import { adminSessionOf } from "../../lib/session"
 
-const player = Astro.locals.player
-if (player?.role !== "admin" || !Astro.locals.token) return Astro.rewrite("/404")
+const session = adminSessionOf(Astro.locals)
+if (!session) return Astro.rewrite("/404")
 
 // One row is enough: the total rides along with any page.
-const client = apiClient(Astro.locals.token)
-const [{ data }, { data: tournaments }] = await Promise.all([
-  client.GET("/api/admin/players", { params: { query: { page: 1, pageSize: 1 } } }).catch(() => ({ data: undefined })),
-  client
-    .GET("/api/admin/tournaments", { params: { query: { page: 1, pageSize: 1 } } })
-    .catch(() => ({ data: undefined })),
+const query = { page: 1, pageSize: 1 }
+const [players, tournaments] = await Promise.all([
+  call(client => client.GET("/api/admin/players", { params: { query } }), session.token),
+  call(
+    client => client.GET("/api/admin/tournaments", { params: { query } }),
+    session.token,
+  ),
 ])
+const roster = dataOf(players)
+const cups = dataOf(tournaments)
 ---
 
 <AdminLayout title="BACKOFFICE//overview" active="overview">
@@ -21,20 +25,33 @@ const [{ data }, { data: tournaments }] = await Promise.all([
   <div class="mt-4 grid gap-4 min-[40rem]:grid-cols-3">
     <div class="border border-warn/40 p-4">
       <div class="text-2xs tracking-wider text-admin-dim">players</div>
-      <div class="mt-1 text-[1.75rem] leading-none text-warn">{data?.total ?? "?"}</div>
+      <div data-stat="players" class="mt-1 text-[1.75rem] leading-none text-warn">
+        {roster?.total ?? "?"}
+      </div>
     </div>
     <div class="border border-warn/40 p-4">
       <div class="text-2xs tracking-wider text-admin-dim">tournaments</div>
-      <div class="mt-1 text-[1.75rem] leading-none text-warn">{tournaments?.total ?? "?"}</div>
+      <div data-stat="tournaments" class="mt-1 text-[1.75rem] leading-none text-warn">
+        {cups?.total ?? "?"}
+      </div>
     </div>
     <div class="border border-warn/40 p-4">
       <div class="text-2xs tracking-wider text-admin-dim">api</div>
-      <div class="mt-1 text-[1.75rem] leading-none text-warn">{data ? "up" : "down"}</div>
+      <div data-stat="api" class="mt-1 text-[1.75rem] leading-none text-warn">
+        {roster ? "up" : "down"}
+      </div>
     </div>
   </div>
 
   <p class="mt-6 text-xs text-admin-dim">
-    manage players under <a href="/admin/players" class="text-warn">players</a> and tournaments under
-    <a href="/admin/tournaments" class="text-warn">tournaments</a>. events and scores open as the backend grows.
+    manage players under{" "}
+    <a href="/admin/players" class="text-warn">
+      players
+    </a>{" "}
+    and tournaments under
+    <a href="/admin/tournaments" class="text-warn">
+      tournaments
+    </a>
+    . events and scores open as the backend grows.
   </p>
 </AdminLayout>

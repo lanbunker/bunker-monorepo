@@ -1,21 +1,30 @@
 ---
 import { actions } from "astro:actions"
+import Alert from "../components/ui/Alert.astro"
 import Button from "../components/ui/Button.astro"
 import Panel from "../components/ui/Panel.astro"
 import Prompt from "../components/ui/Prompt.astro"
 import Layout from "../layouts/Layout.astro"
+import { SITE_FIELD } from "../lib/styles"
 
 if (Astro.locals.player) return Astro.redirect("/profile")
 
 const result = Astro.getActionResult(actions.login)
 if (result && !result.error) return Astro.redirect("/profile")
+// A refused login keeps the handle. The password field starts empty again.
+const typed = Astro.locals.submitted.handle ?? ""
 ---
 
 <Layout title="LOGIN//LAN_BUNKER">
   <Prompt command="ssh bunkernet" />
 
   <Panel class="max-w-[28rem]">
-    <form method="POST" action={actions.login} class="flex flex-col gap-3 text-xs" autocomplete="on">
+    <form
+      method="POST"
+      action={actions.login}
+      class="flex flex-col gap-3 text-xs"
+      autocomplete="on"
+    >
       <label class="flex items-baseline gap-2">
         <span class="w-24 shrink-0 text-dim">login:</span>
         <input
@@ -25,7 +34,8 @@ if (result && !result.error) return Astro.redirect("/profile")
           minlength="3"
           maxlength="20"
           autocomplete="username"
-          class="w-full border-b border-border bg-transparent py-1 text-ink outline-none focus:border-accent"
+          value={typed}
+          class={SITE_FIELD}
         />
       </label>
       <label class="flex items-baseline gap-2">
@@ -37,24 +47,22 @@ if (result && !result.error) return Astro.redirect("/profile")
           minlength="8"
           maxlength="128"
           autocomplete="current-password"
-          class="w-full border-b border-border bg-transparent py-1 text-ink outline-none focus:border-accent"
+          class={SITE_FIELD}
         />
       </label>
-      {
-        result?.error && (
-          <p class="text-xs text-alert" role="alert">
-            {result.error.message}
-          </p>
-        )
-      }
+      <Alert error={result?.error} />
       <div class="mt-2 flex items-center gap-4">
         <Button>LOGIN</Button>
-        <a href="/signup" class="text-2xs text-dim no-underline hover:text-accent">no account? enlist →</a>
+        <a href="/signup" class="text-2xs text-dim no-underline hover:text-accent">
+          no account? enlist →
+        </a>
       </div>
     </form>
   </Panel>
 
   <div class="mt-8">
-    <Button href="/" variant="ghost" size="sm">← HOME</Button>
+    <Button href="/" variant="ghost" size="sm">
+      ← HOME
+    </Button>
   </div>
 </Layout>

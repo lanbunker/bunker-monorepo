@@ -1,42 +1,28 @@
 import { expect, test } from "@playwright/test"
 import type { Page } from "@playwright/test"
 
-import { PASSWORD, handle, logout, promote, signup } from "./support"
-
-const tomorrow = () => {
-    const d = new Date(Date.now() + 86_400_000)
-    const pad = (n: number) => String(n).padStart(2, "0")
-    return {
-        day: `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`,
-        deadline: `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T20:00`,
-    }
-}
+import {
+    API,
+    PASSWORD,
+    createDraft,
+    handle,
+    logout,
+    signup,
+    signupAdmin,
+    tokenFor,
+} from "./support"
 
 /** Signs up an admin and creates a draft tournament. Lands on its edit page. */
-const createDraft = async (page: Page, name: string) => {
-    const admin = handle("adm")
-    await signup(page, admin)
-    promote(admin)
-
-    await page.goto("/admin/tournaments")
-    await page.getByLabel("name").fill(name)
-    await page.getByLabel("game").fill("COD MW2")
-    await page.getByLabel("mode").fill("1v1 sniper only")
-    await page.getByLabel("date").fill(tomorrow().day)
-    await page
-        .getByLabel("registration closes (your local time)")
-        .fill(tomorrow().deadline)
-    await page.getByRole("button", { name: "CREATE DRAFT" }).click()
-    await expect(page).toHaveURL(/\/admin\/tournaments\/[0-9a-f-]{36}$/)
-    const id = page.url().split("/").at(-1) ?? ""
-    return { admin, id }
+const draftAsAdmin = async (page: Page, name: string) => {
+    const admin = await signupAdmin(page)
+    return { admin, id: await createDraft(page, name) }
 }
 
 test("an admin creates a tournament, opens it, and the public page lists it", async ({
     page,
 }) => {
     const name = `Cup ${handle("t")}`
-    const { id } = await createDraft(page, name)
+    const { id } = await draftAsAdmin(page, name)
 
     await page.goto("/tournaments")
     await expect(page.getByText(name)).toHaveCount(0)
@@ -46,20 +32,25 @@ test("an admin creates a tournament, opens it, and the public page lists it", as
     await expect(page.getByRole("status")).toContainText("status changed")
     await expect(page.getByRole("heading", { level: 1 })).toContainText("# open")
 
+    // Other tournaments are open at the same time, so every assertion names the
+    // card of this one.
     await page.goto("/tournaments")
+    const card = page.locator(`[data-tournament="${id}"]`)
     await expect(
-        page.getByRole("heading", { level: 3, name: new RegExp(name) }),
+        card.getByRole("heading", { level: 3, name: new RegExp(name) }),
     ).toBeVisible()
-    await expect(page.getByText("REGISTRATION OPEN")).toBeVisible()
+    await expect(card).toContainText("REGISTRATION OPEN")
+    await expect(card.getByRole("button", { name: "APPLY" })).toBeVisible()
 
+    // The homepage carries the soonest open tournament, whichever it is.
     await page.goto("/")
-    await expect(page.locator("#status-block")).toContainText(name)
+    await expect(page.locator("#status-block")).toContainText(/Tournament/i)
     await expect(page.getByRole("link", { name: "APPLY" })).toBeVisible()
 })
 
 test("a player applies and retires while registration is open", async ({ page }) => {
     const name = `Cup ${handle("t")}`
-    const { id } = await createDraft(page, name)
+    const { id } = await draftAsAdmin(page, name)
     await page.getByRole("button", { name: "open registration" }).click()
     await logout(page)
 
@@ -80,21 +71,15 @@ test("a player applies and retires while registration is open", async ({ page })
     await expect(card.getByRole("button", { name: "APPLY" })).toBeVisible()
 })
 
-/** The API port of the e2e servers. Bulk setup goes straight there. */
-const API = "http://127.0.0.1:3999"
-
 /** Signs players up through the API and adds them as entrants. Fast, for large fields. */
 const enrol = async (page: Page, admin: string, id: string, names: string[]) => {
-    const login = await page.request.post(`${API}/api/auth/login`, {
-        data: { handle: admin, password: PASSWORD },
-    })
-    const token = (await login.json()).token
+    const token = await tokenFor(page, admin)
     for (const name of names) {
-        const signup = await page.request.post(`${API}/api/auth/signup`, {
+        const created = await page.request.post(`${API}/api/auth/signup`, {
             data: { handle: name, password: PASSWORD },
         })
         const player =
-            (await signup.json()).player ??
+            (await created.json()).player ??
             (await page.request.get(`${API}/api/players/${name}`).then(r => r.json()))
         const added = await page.request.post(
             `${API}/api/admin/tournaments/${id}/entrants`,
@@ -112,7 +97,7 @@ const openSide = (page: Page) =>
     page
         .locator("[data-match]")
         .filter({ hasNot: page.getByText("win", { exact: true }) })
-        .locator("[role=button]")
+        .locator("button[data-pick]")
         .first()
 
 const settled = async (page: Page) => {
@@ -129,7 +114,7 @@ test("a bracket runs from generation to a champion, live on the kiosk", async ({
         await logout(page)
     }
     const name = `Cup ${handle("t")}`
-    const { id } = await createDraft(page, name)
+    const { id } = await draftAsAdmin(page, name)
 
     for (const player of players) {
         await page.getByLabel("handle of the player to add").fill(player)
@@ -184,7 +169,7 @@ test("a bracket runs from generation to a champion, live on the kiosk", async ({
 test("thirty players: seeds swap by drag, and the whole bracket plays out", async ({
     page,
 }) => {
-    const { admin, id } = await createDraft(page, `Big ${handle("t")}`)
+    const { admin, id } = await draftAsAdmin(page, `Big ${handle("t")}`)
     const names = Array.from({ length: 30 }, (_, i) => `${handle("p")}${i.toString(36)}`)
     await enrol(page, admin, id, names)
 
@@ -245,7 +230,7 @@ test("thirty players: seeds swap by drag, and the whole bracket plays out", asyn
 test("an odd field gets byes, a result can be cleared, and the bracket regenerates", async ({
     page,
 }) => {
-    const { admin, id } = await createDraft(page, `Odd ${handle("t")}`)
+    const { admin, id } = await draftAsAdmin(page, `Odd ${handle("t")}`)
     const names = Array.from({ length: 5 }, (_, i) => `${handle("o")}${i}`)
     await enrol(page, admin, id, names)
     await page.reload()
@@ -268,7 +253,7 @@ test("an odd field gets byes, a result can be cleared, and the bracket regenerat
     await page
         .locator("[data-match]")
         .filter({ hasText: "win" })
-        .locator("[role=button]")
+        .locator("button[data-pick]")
         .first()
         .click()
     await settled(page)
@@ -285,6 +270,33 @@ test("an odd field gets byes, a result can be cleared, and the bracket regenerat
     await expect(page.getByRole("button", { name: "generate bracket" })).toBeVisible()
 })
 
+test("only a round one side can be dragged or dropped on", async ({ page }) => {
+    const { admin, id } = await draftAsAdmin(page, `Drag ${handle("t")}`)
+    // Five entrants leave three byes, so two players reach round two with no
+    // result behind them. Those sides take a click and must take no drop.
+    await enrol(
+        page,
+        admin,
+        id,
+        Array.from({ length: 5 }, (_, i) => `${handle("d")}${i}`),
+    )
+    await page.reload()
+    await page.getByRole("button", { name: "go live" }).click()
+    await page.getByRole("button", { name: "generate bracket" }).click()
+    await expect(page.locator("[data-match]")).toHaveCount(7)
+
+    // Five entrants fill five sides of round one, and each one can be dragged.
+    await expect(
+        page.locator("[data-round='1'] [data-entrant][draggable=true]"),
+    ).toHaveCount(5)
+
+    // A later round holds sides that take a result. None of them may drag or
+    // accept a drop: a swap must never ride on a click target.
+    const later = page.locator("[data-round]:not([data-round='1'])")
+    await expect(later.locator("button[data-pick]")).not.toHaveCount(0)
+    await expect(later.locator("[draggable=true]")).toHaveCount(0)
+})
+
 test("a user cannot open the tournament backoffice", async ({ page }) => {
     await signup(page, handle("usr"))
     const hidden = await page.goto("/admin/tournaments")
@@ -294,11 +306,8 @@ test("a user cannot open the tournament backoffice", async ({ page }) => {
 test("an open tournament past its deadline shows registration closed", async ({
     page,
 }) => {
-    const { admin, id } = await createDraft(page, `Late ${handle("t")}`)
-    const login = await page.request.post(`${API}/api/auth/login`, {
-        data: { handle: admin, password: PASSWORD },
-    })
-    const token = (await login.json()).token
+    const { admin, id } = await draftAsAdmin(page, `Late ${handle("t")}`)
+    const token = await tokenFor(page, admin)
     const past = new Date(Date.now() - 3_600_000).toISOString()
     const patched = await page.request.patch(`${API}/api/admin/tournaments/${id}`, {
         data: { registrationClosesAt: past },

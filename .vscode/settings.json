@@ -1,7 +1,8 @@
 {
-    // oxfmt formats the web code with web/.oxfmtrc.json, the same as `pnpm fmt`.
-    // oxlint runs on save with its default rules. The Astro extension formats
-    // .astro files, which oxfmt does not cover yet.
+    // oxfmt formats the web code with web/.oxfmtrc.json. The Astro extension
+    // formats .astro, which oxfmt cannot parse, and reads web/.prettierrc.json,
+    // whose settings match oxfmt. `make web-check` runs both, so a save and the
+    // checklist produce the same bytes.
     "oxc.fmt.enable": true,
     "oxc.fmt.configPath": "web/.oxfmtrc.json",
     "oxc.lint.run": "onSave",

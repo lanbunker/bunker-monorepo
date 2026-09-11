@@ -1,4 +1,5 @@
 import { useState } from "react"
+import type { DragEvent } from "react"
 
 import type { Bracket, Entrant, Match } from "../lib/api"
 import { entrantName, roundLabel } from "../lib/tournaments"
@@ -41,85 +42,105 @@ type SideProps = {
     onDragEnd: () => void
 }
 
+const SIDE_BASE = "flex items-center gap-2 px-3 py-1.5"
+
+/** Why a side of an editable bracket takes no gesture right now. */
+const waitingTitle = (props: SideProps): string | undefined => {
+    if (!props.editing || props.interactive || props.draggable) return undefined
+    return props.decided
+        ? "the next match is decided. clear that result first"
+        : "waiting for the other side"
+}
+
+const toneOf = (props: SideProps): string => {
+    if (props.won) return "text-accent"
+    return props.decided ? "text-mute line-through" : "text-ink"
+}
+
 const Side = (props: SideProps) => {
     const entrant = props.entrant
     if (!entrant) {
+        return <div className={`${SIDE_BASE} text-mute italic`}>{props.placeholder}</div>
+    }
+
+    const name = entrantName(entrant)
+    const body = (
+        <>
+            {entrant.player && <GlyphMark glyph={entrant.player.glyph} size="1.1em" />}
+            <span className="truncate">{name}</span>
+            {props.won && <span className="text-2xs ml-auto tracking-wider">win</span>}
+        </>
+    )
+    const tone = toneOf(props)
+
+    // A side that takes no gesture carries no role and stays out of the tab
+    // order. The public bracket renders only this arm.
+    if (!props.interactive && !props.draggable) {
+        const waiting = waitingTitle(props)
         return (
-            <div className="text-mute flex items-center gap-2 px-3 py-1.5 italic">
-                {props.placeholder}
+            <div
+                className={`${SIDE_BASE} ${tone} ${waiting ? "cursor-not-allowed" : ""}`}
+                data-entrant={entrant.id}
+                title={waiting}
+            >
+                {body}
             </div>
         )
     }
-    const tone = props.won
-        ? "text-accent"
-        : props.decided
-          ? "text-mute line-through"
-          : "text-ink"
-    // In an editor a side that cannot take a click says why on hover.
-    const waiting = Boolean(props.editing) && !props.interactive && !props.draggable
-    const cursor = props.draggable
-        ? "cursor-grab"
-        : props.interactive
-          ? "cursor-pointer"
-          : waiting
-            ? "cursor-not-allowed"
-            : ""
-    const hover = props.interactive || props.draggable ? "hover:bg-faint" : ""
-    const faded = props.dragging ? "opacity-40" : ""
-    const pick = () => props.editing?.onPick(props.match, entrant.id)
 
+    const faded = props.dragging ? "opacity-40" : ""
+
+    // Only a round one side can be dragged, and only a round one side can be a
+    // drop target. Without this guard every later side accepts a drop and swaps
+    // seeds on a gesture nothing on screen offers.
+    const dragProps = props.draggable
+        ? {
+              draggable: true,
+              onDragStart: (event: DragEvent<HTMLElement>) => {
+                  event.dataTransfer.setData("text/plain", entrant.id)
+                  event.dataTransfer.effectAllowed = "move"
+                  props.onDragStart(entrant.id)
+              },
+              onDragEnd: props.onDragEnd,
+              onDragOver: (event: DragEvent<HTMLElement>) => event.preventDefault(),
+              onDrop: (event: DragEvent<HTMLElement>) => {
+                  event.preventDefault()
+                  const from = event.dataTransfer.getData("text/plain")
+                  if (from && from !== entrant.id) props.editing?.onSwap(from, entrant.id)
+                  props.onDragEnd()
+              },
+          }
+        : {}
+
+    // A side that takes a result is a real button, so Enter and Space work with
+    // no handler of our own. It can be dragged as well.
+    if (props.interactive) {
+        return (
+            <button
+                type="button"
+                className={`${SIDE_BASE} w-full ${tone} ${faded} hover:bg-faint cursor-pointer`}
+                data-entrant={entrant.id}
+                data-pick=""
+                aria-label={`${name} wins`}
+                onClick={() => props.editing?.onPick(props.match, entrant.id)}
+                {...dragProps}
+            >
+                {body}
+            </button>
+        )
+    }
+
+    // A side that can only be dragged is not a button: a keyboard cannot work
+    // it, so it must not announce itself as one or take a tab stop.
     return (
         <div
-            className={`flex items-center gap-2 px-3 py-1.5 ${tone} ${cursor} ${hover} ${faded}`}
+            className={`${SIDE_BASE} ${tone} ${faded} hover:bg-faint cursor-grab`}
             data-entrant={entrant.id}
-            role={props.interactive ? "button" : undefined}
-            tabIndex={props.interactive ? 0 : undefined}
-            aria-label={props.interactive ? `${entrantName(entrant)} wins` : undefined}
-            title={
-                waiting
-                    ? props.decided
-                        ? "the next match is decided. clear that result first"
-                        : "waiting for the other side"
-                    : undefined
-            }
-            onClick={props.interactive ? pick : undefined}
-            onKeyDown={
-                props.interactive
-                    ? event => {
-                          if (event.key === "Enter" || event.key === " ") {
-                              event.preventDefault()
-                              pick()
-                          }
-                      }
-                    : undefined
-            }
-            draggable={props.draggable}
-            onDragStart={
-                props.draggable
-                    ? event => {
-                          event.dataTransfer.setData("text/plain", entrant.id)
-                          event.dataTransfer.effectAllowed = "move"
-                          props.onDragStart(entrant.id)
-                      }
-                    : undefined
-            }
-            onDragEnd={props.draggable ? props.onDragEnd : undefined}
-            onDragOver={props.draggable ? event => event.preventDefault() : undefined}
-            onDrop={
-                props.draggable
-                    ? event => {
-                          event.preventDefault()
-                          const from = event.dataTransfer.getData("text/plain")
-                          if (from && from !== entrant.id)
-                              props.editing?.onSwap(from, entrant.id)
-                          props.onDragEnd()
-                      }
-                    : undefined
-            }
+            aria-label={`${name}, drag onto another player to swap seeds`}
+            title="drag onto another player to swap their seeds"
+            {...dragProps}
         >
-            {entrant.player && <GlyphMark glyph={entrant.player.glyph} size="1.1em" />}
-            <span className="truncate">{entrantName(entrant)}</span>
-            {props.won && <span className="text-2xs ml-auto tracking-wider">win</span>}
+            {body}
         </div>
     )
 }
@@ -182,7 +203,11 @@ export const BracketView = (props: BracketViewProps) => {
                 }}
             >
                 {rounds.map((round, index) => (
-                    <div key={index} className="flex flex-col gap-3">
+                    <div
+                        key={roundLabel(index, rounds.length)}
+                        data-round={index + 1}
+                        className="flex flex-col gap-3"
+                    >
                         <div className="text-2xs text-dim tracking-wider">
                             {roundLabel(index, rounds.length)}
                         </div>

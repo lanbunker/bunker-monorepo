@@ -1,105 +1,173 @@
 ---
 import { actions } from "astro:actions"
+import Alert from "../../../components/ui/Alert.astro"
 import Button from "../../../components/ui/Button.astro"
 import Pager from "../../../components/ui/Pager.astro"
 import AdminLayout from "../../../layouts/AdminLayout.astro"
-import { apiClient } from "../../../lib/api"
+import { call, dataOf } from "../../../lib/api"
+import { formatIsoDay } from "../../../lib/dates"
+import { firstError, noticeFrom } from "../../../lib/form"
 import { PAGE_SIZE, pageFrom } from "../../../lib/paging"
+import { adminSessionOf } from "../../../lib/session"
+import { ADMIN_FIELD } from "../../../lib/styles"
 
-const me = Astro.locals.player
-if (me?.role !== "admin" || !Astro.locals.token) return Astro.rewrite("/404")
+const session = adminSessionOf(Astro.locals)
+if (!session) return Astro.rewrite("/404")
 
 const created = Astro.getActionResult(actions.createTournament)
 if (created?.data) return Astro.redirect(`/admin/tournaments/${created.data.id}`)
 const deleted = Astro.getActionResult(actions.deleteTournament)
-if (deleted?.data) return Astro.redirect("/admin/tournaments?done=tournament+deleted")
-const failure = created?.error ?? deleted?.error
-// Only known notices render. The query string is anyone's to write.
-const notice = { "tournament deleted": "tournament deleted" }[Astro.url.searchParams.get("done") ?? ""]
+if (deleted?.data) return Astro.redirect("/admin/tournaments?done=deleted")
+const failure = firstError(created, deleted)
+const notice = noticeFrom(Astro.url, { deleted: "tournament deleted" })
 
 const page = pageFrom(Astro.url)
-const { data } = await apiClient(Astro.locals.token)
-  .GET("/api/admin/tournaments", { params: { query: { page, pageSize: PAGE_SIZE } } })
-  .catch(() => ({ data: undefined }))
+const result = await call(
+  client =>
+    client.GET("/api/admin/tournaments", {
+      params: { query: { page, pageSize: PAGE_SIZE } },
+    }),
+  session.token,
+)
+// A refused draft keeps every field. Only the deadline cannot come back: the
+// browser writes it from a local field the server never sees.
+const typed = Astro.locals.submitted
+const data = dataOf(result)
 if (data && page > data.totalPages && data.totalPages > 0) {
   return Astro.redirect(`/admin/tournaments?page=${data.totalPages}`)
 }
-const field =
-  "w-full border-b border-warn/40 bg-transparent px-1 py-1 text-xs text-admin-ink outline-none focus:border-warn"
 ---
 
 <AdminLayout title="BACKOFFICE//tournaments" active="tournaments">
   <h1 class="m-0 text-sm tracking-wider text-warn">
-    root@bunker:~# tournaments <span class="text-admin-dim"># {data?.total ?? "?"} rows</span>
+    root@bunker:~# tournaments{" "}
+    <span class="text-admin-dim"># {data?.total ?? "?"} rows</span>
   </h1>
 
-  {notice && <p class="mt-3 text-xs text-warn" role="status">{notice}</p>}
-  {failure && <p class="mt-3 text-xs text-alert" role="alert">{failure.message}</p>}
+  <Alert message={notice} tone="warn" class="mt-3" />
+  <Alert error={failure} class="mt-3" />
 
   <div class="mt-4 overflow-x-auto border border-warn/40">
-    {
-      !data ? (
-        <p class="p-4 text-xs text-alert">the api is unreachable.</p>
-      ) : data.total === 0 ? (
-        <p class="p-4 text-xs text-admin-dim">no tournaments yet. create the first one below.</p>
-      ) : (
-        <table class="w-full border-collapse text-xs">
-          <thead>
-            <tr class="bg-warn/10 text-left text-2xs tracking-wider text-admin-dim">
-              <th class="w-[35%] px-3 py-2 font-normal">tournament</th>
-              <th class="w-[15%] px-3 py-2 font-normal">date</th>
-              <th class="w-[15%] px-3 py-2 font-normal">status</th>
-              <th class="w-[10%] px-3 py-2 font-normal">entrants</th>
-              <th class="w-[25%] px-3 py-2 text-right font-normal">winner</th>
+    {!data ? (
+      <p class="p-4 text-xs text-alert">the api is unreachable.</p>
+    ) : data.total === 0 ? (
+      <p class="p-4 text-xs text-admin-dim">
+        no tournaments yet. create the first one below.
+      </p>
+    ) : (
+      <table class="w-full border-collapse text-xs">
+        <thead>
+          <tr class="bg-warn/10 text-left text-2xs tracking-wider text-admin-dim">
+            <th class="w-[35%] px-3 py-2 font-normal">tournament</th>
+            <th class="w-[15%] px-3 py-2 font-normal">date</th>
+            <th class="w-[15%] px-3 py-2 font-normal">status</th>
+            <th class="w-[10%] px-3 py-2 font-normal">entrants</th>
+            <th class="w-[25%] px-3 py-2 text-right font-normal">winner</th>
+          </tr>
+        </thead>
+        <tbody>
+          {data.items.map(t => (
+            <tr class="border-t border-warn/20">
+              <td class="px-3 py-2">
+                <a
+                  href={`/admin/tournaments/${t.id}`}
+                  class="text-admin-ink no-underline hover:text-warn"
+                >
+                  {t.game}: {t.name}
+                </a>
+              </td>
+              <td class="px-3 py-2 text-admin-dim">{formatIsoDay(t.date)}</td>
+              <td
+                class:list={[
+                  "px-3 py-2",
+                  t.status === "draft" ? "text-admin-mute" : "text-warn",
+                ]}
+              >
+                {t.status}
+              </td>
+              <td class="px-3 py-2 text-admin-dim">{t.entrantCount}</td>
+              <td class="px-3 py-2 text-right text-admin-dim">
+                {t.winner?.player?.handle ?? "-"}
+              </td>
             </tr>
-          </thead>
-          <tbody>
-            {data.items.map(t => (
-              <tr class="border-t border-warn/20">
-                <td class="px-3 py-2">
-                  <a href={`/admin/tournaments/${t.id}`} class="text-admin-ink no-underline hover:text-warn">
-                    {t.game}: {t.name}
-                  </a>
-                </td>
-                <td class="px-3 py-2 text-admin-dim">{t.date}</td>
-                <td class:list={["px-3 py-2", t.status === "draft" ? "text-admin-mute" : "text-warn"]}>{t.status}</td>
-                <td class="px-3 py-2 text-admin-dim">{t.entrantCount}</td>
-                <td class="px-3 py-2 text-right text-admin-dim">{t.winner?.player?.handle ?? "-"}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )
-    }
+          ))}
+        </tbody>
+      </table>
+    )}
   </div>
-  {data && <Pager page={page} totalPages={data.totalPages} total={data.total} href="/admin/tournaments" noun="tournament" />}
+  {data && (
+    <Pager
+      page={page}
+      totalPages={data.totalPages}
+      total={data.total}
+      href="/admin/tournaments"
+      noun="tournament"
+    />
+  )}
 
-  <h2 class="mt-8 mb-3 text-sm font-normal tracking-wider text-warn">root@bunker:~# tournaments --new</h2>
-  <form method="POST" action={actions.createTournament} class="grid gap-3 border border-warn/40 p-4 text-xs min-[40rem]:grid-cols-2">
+  <h2 class="mt-8 mb-3 text-sm font-normal tracking-wider text-warn">
+    root@bunker:~# tournaments --new
+  </h2>
+  <form
+    method="POST"
+    action={actions.createTournament}
+    class="grid gap-3 border border-warn/40 p-4 text-xs min-[40rem]:grid-cols-2"
+  >
     <label class="flex flex-col gap-1">
       <span class="text-2xs text-admin-dim">name</span>
-      <input name="name" required maxlength="60" class={field} placeholder="1v1 Sniper Only" />
+      <input
+        name="name"
+        required
+        maxlength="60"
+        value={typed.name}
+        class={ADMIN_FIELD}
+        placeholder="1v1 Sniper Only"
+      />
     </label>
     <label class="flex flex-col gap-1">
       <span class="text-2xs text-admin-dim">game</span>
-      <input name="game" required maxlength="40" class={field} placeholder="COD Modern Warfare 2" />
+      <input
+        name="game"
+        required
+        maxlength="40"
+        value={typed.game}
+        class={ADMIN_FIELD}
+        placeholder="COD Modern Warfare 2"
+      />
     </label>
     <label class="flex flex-col gap-1">
       <span class="text-2xs text-admin-dim">mode</span>
-      <input name="mode" required maxlength="30" class={field} placeholder="1v1 direct elimination" />
+      <input
+        name="mode"
+        required
+        maxlength="30"
+        value={typed.mode}
+        class={ADMIN_FIELD}
+        placeholder="1v1 direct elimination"
+      />
     </label>
     <label class="flex flex-col gap-1">
       <span class="text-2xs text-admin-dim">date</span>
-      <input name="date" type="date" required class={field} />
+      <input name="date" type="date" required value={typed.date} class={ADMIN_FIELD} />
     </label>
     <label class="flex flex-col gap-1">
       <span class="text-2xs text-admin-dim">registration closes (your local time)</span>
-      <input type="datetime-local" required data-iso-for="registrationClosesAt" class={field} />
+      <input
+        type="datetime-local"
+        required
+        data-iso-for="registrationClosesAt"
+        class={ADMIN_FIELD}
+      />
       <input type="hidden" name="registrationClosesAt" />
     </label>
     <label class="flex flex-col gap-1 min-[40rem]:col-span-2">
       <span class="text-2xs text-admin-dim">description</span>
-      <textarea name="description" maxlength="1000" rows="2" class={field}></textarea>
+      <textarea
+        name="description"
+        maxlength="1000"
+        rows="2"
+        class={ADMIN_FIELD}
+      >{typed.description}</textarea>
     </label>
     <div class="min-[40rem]:col-span-2">
       <Button variant="warn">CREATE DRAFT</Button>

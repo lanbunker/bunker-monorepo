@@ -23,13 +23,18 @@ const { player, own = false } = Astro.props
         <h1 class="m-0 text-[1.75rem] leading-none text-(--player)">{player.handle}</h1>
         <div class="flex items-center gap-2">
           {player.role === "admin" && <Badge tone="warn">admin</Badge>}
-          {own && <Badge tone="accent" filled>you</Badge>}
+          {own && (
+            <Badge tone="accent" filled>
+              you
+            </Badge>
+          )}
         </div>
       </div>
       <div class="mt-5 flex flex-col gap-1">
         <Kv label="Enlisted">{formatDate(new Date(player.createdAt))}</Kv>
         <Kv label="Glyph">
-          <span class="text-dim">bits</span> <span data-glyph-bits>{player.glyph.bits}</span>
+          <span class="text-dim">bits</span>{" "}
+          <span data-glyph-bits>{player.glyph.bits}</span>
           <span class="ml-2 text-dim">color</span> {player.glyph.color}
         </Kv>
       </div>

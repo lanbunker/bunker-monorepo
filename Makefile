@@ -1,4 +1,4 @@
-.PHONY: help install-cli db db-reset migration migrate schema admin openapi api-types dev run test lint fmt checklist web-dev web-build web-check web-e2e
+.PHONY: help install-cli db db-reset migration migrate schema admin openapi api-types dev run test lint fmt checklist web-dev web-build web-fmt web-check web-e2e
 
 # `.env` is the one place the URL lives. The sqlx macros compile each query
 # against this database, so `test` and `lint` make sure it exists first.
@@ -86,16 +86,20 @@ checklist: ## Run this one command before you report that a Rust task is complet
 	$(MAKE) lint
 	$(MAKE) test
 
-web-dev: ## Start the Astro dev server
+web-dev: ## Start the Astro dev server against the local API
 	pnpm -C web dev
 
 web-build: ## Build the Astro site
 	pnpm -C web build
 
-web-check: ## Format check, lint, type check and build for the site
-	pnpm -C web exec oxfmt --check
+web-fmt: ## Format every site source: oxfmt, and prettier for .astro
+	pnpm -C web fmt
+
+web-check: ## Format, type check, lint and build the site. Run this before you yield
+	$(MAKE) web-fmt
+	pnpm -C web typecheck
 	pnpm -C web lint
-	pnpm -C web exec astro check
+	pnpm -C web check
 	pnpm -C web build
 
 web-e2e: $(DB_FILE) ## Playwright end to end tests against a fresh API and the dev site

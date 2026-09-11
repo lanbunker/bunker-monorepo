@@ -165,9 +165,11 @@ generated types are stale.
 
 ## Tests
 
-`make checklist` runs the Rust suite. `make web-check` type checks and builds the
-site. `make web-e2e` runs Playwright against a fresh API on `.dev/e2e.db` and the
-dev site: signup, login, roster, profile, 404 and the backoffice.
+`make checklist` runs the Rust suite. `make web-check` checks the format, runs
+both type checkers, lints and builds the site. `make web-e2e` runs Playwright
+against a fresh API on `.dev/e2e.db` and the dev site: signup, login, the roster,
+the profile, every public page, 404s, the backoffice, tournaments and brackets.
+It also asserts that every refusal reaches the page as one readable sentence.
 
 ## Change the schema
 
@@ -190,6 +192,12 @@ keeps the two in step. `CLAUDE.md` gives the procedure and the rules.
 The sqlx macros compile each query against `DATABASE_URL` from `.env`, which
 must point at the migrated local database from `make db`. A build against an
 empty or unmigrated file fails with `no such table`.
+
+The site names the API in `API_URL`, which lives in `web/wrangler.jsonc`. A
+Worker var beats the shell in local mode, so a local run selects an environment
+instead of exporting a variable: `CLOUDFLARE_ENV=dev` for `make web-dev` and
+`CLOUDFLARE_ENV=e2e` for Playwright. The top level is production. `web/README.md`
+gives the detail.
 
 ## Deploy
 

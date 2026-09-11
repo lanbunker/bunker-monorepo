@@ -1,146 +1,202 @@
 ---
 import { actions } from "astro:actions"
+import Alert from "../../components/ui/Alert.astro"
 import Button from "../../components/ui/Button.astro"
 import Glyph from "../../components/ui/Glyph.astro"
-import AdminLayout from "../../layouts/AdminLayout.astro"
 import Pager from "../../components/ui/Pager.astro"
-import { apiClient } from "../../lib/api"
+import AdminLayout from "../../layouts/AdminLayout.astro"
+import { call, dataOf } from "../../lib/api"
 import { formatDate } from "../../lib/dates"
+import { donePath, firstError, noticeFrom } from "../../lib/form"
 import { PAGE_SIZE, pageFrom } from "../../lib/paging"
+import { adminSessionOf } from "../../lib/session"
 
-const me = Astro.locals.player
-if (me?.role !== "admin" || !Astro.locals.token) return Astro.rewrite("/404")
+const session = adminSessionOf(Astro.locals)
+if (!session) return Astro.rewrite("/404")
 
-// Role and delete redirect after success, so a refresh cannot repeat them. The
-// temporary password shows once, so that one renders on the POST and is never cached.
+// Role, rename and delete redirect after success, so a refresh cannot repeat
+// them. The temporary password shows once, so that one renders on the POST.
 const roleResult = Astro.getActionResult(actions.setRole)
-if (roleResult?.data) {
-  const params = new URLSearchParams({ done: `${roleResult.data.handle} is now ${roleResult.data.role}` })
-  return Astro.redirect(`/admin/players?${params.toString()}`)
-}
 const deleteResult = Astro.getActionResult(actions.deletePlayer)
-if (deleteResult?.data) return Astro.redirect("/admin/players?done=player+deleted")
 const renameResult = Astro.getActionResult(actions.renamePlayer)
-if (renameResult?.data) {
-  const params = new URLSearchParams({ done: `renamed to ${renameResult.data.handle}` })
-  return Astro.redirect(`/admin/players?${params.toString()}`)
-}
 const resetResult = Astro.getActionResult(actions.resetPassword)
+
+/** Where a change sends the admin, with a known key and the handle it touched. */
+const afterChange = (): string | undefined => {
+  const role = roleResult?.data
+  if (role) {
+    return donePath(
+      "/admin/players",
+      role.role === "admin" ? "promoted" : "demoted",
+      role.handle,
+    )
+  }
+  if (deleteResult?.data) return donePath("/admin/players", "deleted")
+  const renamed = renameResult?.data
+  if (renamed) return donePath("/admin/players", "renamed", renamed.handle)
+  return undefined
+}
+const changed = afterChange()
+if (changed) return Astro.redirect(changed)
+
+// A temporary password is in this response. It belongs to one request only.
 Astro.response.headers.set("Cache-Control", "no-store")
 
-const failure = roleResult?.error ?? deleteResult?.error ?? renameResult?.error ?? resetResult?.error
-const notice = Astro.url.searchParams.get("done") ?? undefined
+const failure = firstError(roleResult, deleteResult, renameResult, resetResult)
+// Only a known key renders. The query string is anyone's to write, and `who`
+// is a handle the API validated before the redirect carried it.
+const who = Astro.url.searchParams.get("who") ?? ""
+const notice = noticeFrom(Astro.url, {
+  promoted: `${who} is now admin`,
+  demoted: `${who} is now user`,
+  renamed: `renamed to ${who}`,
+  deleted: "player deleted",
+})
 const temporaryPassword = resetResult?.data?.temporaryPassword
 
 const page = pageFrom(Astro.url)
-const { data } = await apiClient(Astro.locals.token)
-  .GET("/api/admin/players", { params: { query: { page, pageSize: PAGE_SIZE } } })
-  .catch(() => ({ data: undefined }))
-if (data && page > data.totalPages && data.totalPages > 0) {
-  return Astro.redirect(`/admin/players?page=${data.totalPages}`)
+const result = await call(
+  client =>
+    client.GET("/api/admin/players", {
+      params: { query: { page, pageSize: PAGE_SIZE } },
+    }),
+  session.token,
+)
+const roster = dataOf(result)
+if (roster && page > roster.totalPages && roster.totalPages > 0) {
+  return Astro.redirect(`/admin/players?page=${roster.totalPages}`)
 }
-const players = data?.items
 ---
 
 <AdminLayout title="BACKOFFICE//players" active="players">
   <h1 class="m-0 text-sm tracking-wider text-warn">
-    root@bunker:~# players <span class="text-admin-dim"># {data?.total ?? "?"} rows</span>
+    root@bunker:~# players{" "}
+    <span class="text-admin-dim"># {roster?.total ?? "?"} rows</span>
   </h1>
 
-  {notice && <p class="mt-3 text-xs text-warn" role="status">{notice}</p>}
-  {
-    temporaryPassword && (
-      <div class="mt-3 border border-warn bg-warn/10 p-3 text-xs" role="status">
-        <p class="m-0 text-warn">temporary password, shown once. hand it over in person.</p>
-        <p class="m-0 mt-1 text-base tracking-wider text-admin-ink select-all">{temporaryPassword}</p>
-        <p class="m-0 mt-1 text-2xs text-admin-dim">the player must change it at the next login.</p>
-      </div>
-    )
-  }
-  {failure && <p class="mt-3 text-xs text-alert" role="alert">{failure.message}</p>}
+  <Alert message={notice} tone="warn" class="mt-3" />
+  {temporaryPassword && (
+    <div class="mt-3 border border-warn bg-warn/10 p-3 text-xs" role="status">
+      <p class="m-0 text-warn">temporary password, shown once. hand it over in person.</p>
+      <p class="m-0 mt-1 text-base tracking-wider text-admin-ink select-all">
+        {temporaryPassword}
+      </p>
+      <p class="m-0 mt-1 text-2xs text-admin-dim">
+        the player must change it at the next login.
+      </p>
+    </div>
+  )}
+  <Alert error={failure} class="mt-3" />
 
   <div class="mt-4 overflow-x-auto border border-warn/40">
-    {
-      !players ? (
-        <p class="p-4 text-xs text-alert">the api is unreachable.</p>
-      ) : (
-        <table class="w-full border-collapse text-xs">
-          <thead>
-            <tr class="bg-warn/10 text-left text-2xs tracking-wider text-admin-dim">
-              <th class="w-[25%] px-3 py-2 font-normal">player</th>
-              <th class="w-[10%] px-3 py-2 font-normal">role</th>
-              <th class="w-[15%] px-3 py-2 font-normal">enlisted</th>
-              <th class="w-[50%] px-3 py-2 text-right font-normal">actions</th>
+    {!roster ? (
+      <p class="p-4 text-xs text-alert">the api is unreachable.</p>
+    ) : (
+      <table class="w-full border-collapse text-xs">
+        <thead>
+          <tr class="bg-warn/10 text-left text-2xs tracking-wider text-admin-dim">
+            <th class="w-[25%] px-3 py-2 font-normal">player</th>
+            <th class="w-[10%] px-3 py-2 font-normal">role</th>
+            <th class="w-[15%] px-3 py-2 font-normal">enlisted</th>
+            <th class="w-[50%] px-3 py-2 text-right font-normal">actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {roster.items.map(player => (
+            <tr class="border-t border-warn/20">
+              <td class="px-3 py-2">
+                <a
+                  href={`/players/${player.handle}`}
+                  class="inline-flex items-center gap-2 no-underline text-admin-ink hover:text-warn"
+                >
+                  <Glyph glyph={player.glyph} size="1.1em" />
+                  {player.handle}
+                </a>
+              </td>
+              <td
+                class:list={[
+                  "px-3 py-2",
+                  player.role === "admin" ? "text-warn" : "text-admin-dim",
+                ]}
+              >
+                {player.role}
+              </td>
+              <td class="px-3 py-2 text-admin-dim">
+                {formatDate(new Date(player.createdAt))}
+              </td>
+              <td class="px-3 py-2">
+                {player.id === session.player.id ? (
+                  <span class="text-2xs text-admin-dim">this is you</span>
+                ) : (
+                  <div class="flex flex-wrap justify-end gap-2">
+                    <form method="POST" action={actions.setRole}>
+                      <input type="hidden" name="id" value={player.id} />
+                      <input
+                        type="hidden"
+                        name="role"
+                        value={player.role === "admin" ? "user" : "admin"}
+                      />
+                      <Button variant="warn" size="sm">
+                        {player.role === "admin" ? "demote" : "promote"}
+                      </Button>
+                    </form>
+                    <form
+                      method="POST"
+                      action={actions.renamePlayer}
+                      class="flex items-center gap-1"
+                    >
+                      <input type="hidden" name="id" value={player.id} />
+                      <input
+                        name="handle"
+                        type="text"
+                        required
+                        minlength="3"
+                        maxlength="20"
+                        pattern="[A-Za-z0-9_.\-]+"
+                        placeholder={player.handle}
+                        aria-label={`new handle for ${player.handle}`}
+                        class="w-24 border-b border-warn/40 bg-transparent px-1 py-0.5 text-2xs text-admin-ink outline-none focus:border-warn"
+                      />
+                      <Button variant="warn" size="sm">
+                        rename
+                      </Button>
+                    </form>
+                    <form
+                      method="POST"
+                      action={actions.resetPassword}
+                      data-confirm={`reset the password of ${player.handle}? the current one stops working.`}
+                    >
+                      <input type="hidden" name="id" value={player.id} />
+                      <Button variant="warn" size="sm">
+                        reset password
+                      </Button>
+                    </form>
+                    <form
+                      method="POST"
+                      action={actions.deletePlayer}
+                      data-confirm={`delete ${player.handle}? this cannot be undone.`}
+                    >
+                      <input type="hidden" name="id" value={player.id} />
+                      <Button variant="danger" size="sm">
+                        delete
+                      </Button>
+                    </form>
+                  </div>
+                )}
+              </td>
             </tr>
-          </thead>
-          <tbody>
-            {players.map(player => (
-              <tr class="border-t border-warn/20">
-                <td class="px-3 py-2">
-                  <a
-                    href={`/players/${player.handle}`}
-                    class="inline-flex items-center gap-2 no-underline text-admin-ink hover:text-warn"
-                  >
-                    <Glyph glyph={player.glyph} size="1.1em" />
-                    {player.handle}
-                  </a>
-                </td>
-                <td class:list={["px-3 py-2", player.role === "admin" ? "text-warn" : "text-admin-dim"]}>
-                  {player.role}
-                </td>
-                <td class="px-3 py-2 text-admin-dim">{formatDate(new Date(player.createdAt))}</td>
-                <td class="px-3 py-2">
-                  {player.id === me.id ? (
-                    <span class="text-2xs text-admin-dim">this is you</span>
-                  ) : (
-                    <div class="flex flex-wrap justify-end gap-2">
-                      <form method="POST" action={actions.setRole}>
-                        <input type="hidden" name="id" value={player.id} />
-                        <input type="hidden" name="role" value={player.role === "admin" ? "user" : "admin"} />
-                        <Button variant="warn" size="sm">
-                          {player.role === "admin" ? "demote" : "promote"}
-                        </Button>
-                      </form>
-                      <form method="POST" action={actions.renamePlayer} class="flex items-center gap-1">
-                        <input type="hidden" name="id" value={player.id} />
-                        <input
-                          name="handle"
-                          type="text"
-                          required
-                          minlength="3"
-                          maxlength="20"
-                          pattern="[A-Za-z0-9_.\-]+"
-                          placeholder={player.handle}
-                          aria-label={`new handle for ${player.handle}`}
-                          class="w-24 border-b border-warn/40 bg-transparent px-1 py-0.5 text-2xs text-admin-ink outline-none focus:border-warn"
-                        />
-                        <Button variant="warn" size="sm">rename</Button>
-                      </form>
-                      <form
-                        method="POST"
-                        action={actions.resetPassword}
-                        data-confirm={`reset the password of ${player.handle}? the current one stops working.`}
-                      >
-                        <input type="hidden" name="id" value={player.id} />
-                        <Button variant="warn" size="sm">reset password</Button>
-                      </form>
-                      <form
-                        method="POST"
-                        action={actions.deletePlayer}
-                        data-confirm={`delete ${player.handle}? this cannot be undone.`}
-                      >
-                        <input type="hidden" name="id" value={player.id} />
-                        <Button variant="danger" size="sm">delete</Button>
-                      </form>
-                    </div>
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )
-    }
+          ))}
+        </tbody>
+      </table>
+    )}
   </div>
-  {data && <Pager page={page} totalPages={data.totalPages} total={data.total} href="/admin/players" noun="player" />}
+  {roster && (
+    <Pager
+      page={page}
+      totalPages={roster.totalPages}
+      total={roster.total}
+      href="/admin/players"
+      noun="player"
+    />
+  )}
 </AdminLayout>
