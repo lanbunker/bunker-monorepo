@@ -16,6 +16,7 @@ web/                  Astro site on Cloudflare Workers. Its own rules: web/CLAUD
 crates/bunker-models  Domain types shared by every Rust crate. No I/O.
 crates/bunker-api     axum + sqlx + SQLite backend. Layers below.
 crates/bunker-cabd    The cabinet daemon. Empty for now.
+deploy/               What runs on the API box: bootstrap script, systemd units.
 ```
 
 The Rust side is a Cargo workspace. The site is a pnpm project inside `web/`.

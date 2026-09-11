@@ -1,0 +1,8 @@
+[Unit]
+Description=Nightly copy of the LAN BUNKER database
+
+[Service]
+Type=oneshot
+User=bunker
+Group=bunker
+ExecStart=/usr/local/sbin/bunker-backup

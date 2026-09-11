@@ -77,7 +77,24 @@ cast_possible_truncation = "deny"
 cast_sign_loss = "deny"
 cast_possible_wrap = "deny"
 
+# Line tables keep file and line in a backtrace. Full debug data costs link
+# time and disk on every rebuild and nothing here needs a debugger by default.
+[profile.dev]
+debug = "line-tables-only"
+
+# Dependencies compile one time and sit in the cache, so they get the full
+# optimisation. At opt-level 0 argon2 turns every login in a test into a wait.
+[profile.dev.package."*"]
+opt-level = 3
+debug = false
+
+# Proc macros and build scripts run during every build. serde, sqlx and utoipa
+# expand faster when their macros are optimised.
+[profile.dev.build-override]
+opt-level = 3
+
 [profile.release]
+opt-level = 3
 lto = "fat"
 codegen-units = 1
 strip = true

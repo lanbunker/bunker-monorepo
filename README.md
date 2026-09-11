@@ -11,6 +11,7 @@ web/                   Astro site, server rendered on Cloudflare Workers
 crates/bunker-models   Domain types shared by every Rust crate
 crates/bunker-api      axum + sqlx + SQLite backend
 crates/bunker-cabd     Cabinet daemon for RetroPie boxes (empty for now)
+deploy/                Container bootstrap, systemd units, one-time setup guide
 ```
 
 The site has signup and login, a public roster and player pages, a profile page,
@@ -155,6 +156,12 @@ empty or unmigrated file fails with `no such table`.
 
 ## Deploy
 
-The site deploys to Cloudflare Workers with wrangler from GitHub Actions on each
-push that touches `web/`. The API is a static binary that runs on a box in the
-office behind a Cloudflare Tunnel. That pipeline is not written yet.
+The site deploys to Cloudflare Workers with wrangler on each push to `main`
+(`deploy.yml`). The API deploys from the `deploy-api` job in `ci.yml`, after
+every other job is green: a static musl binary goes over SSH through a
+Cloudflare Tunnel to a Debian container, a root script installs it and restarts
+the service, and the job checks `/health/ready` on the public name. Migrations
+run at startup, so a deploy is one binary swap.
+
+`deploy/README.md` holds the one-time setup: the container, the tunnel, the
+Access policy for SSH, and the five values GitHub Actions needs.

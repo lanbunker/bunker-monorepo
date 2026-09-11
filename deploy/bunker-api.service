@@ -1,0 +1,22 @@
+[Unit]
+Description=LAN BUNKER API
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=bunker
+Group=bunker
+EnvironmentFile=/etc/bunker/api.env
+WorkingDirectory=/var/lib/bunker
+ExecStart=/usr/local/bin/bunker-api
+Restart=on-failure
+RestartSec=2
+
+# Only options that need no mount namespace. An unprivileged LXC refuses
+# ProtectSystem, PrivateTmp and the Protect* family, and the unit would loop.
+# The container itself is the sandbox, and the process runs as a plain user.
+NoNewPrivileges=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+
+[Install]
+WantedBy=multi-user.target

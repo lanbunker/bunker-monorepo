@@ -6,9 +6,10 @@
     "observability": {
         "enabled": true,
     },
-    // Where the Rust API answers. The production value comes with the tunnel.
+    // Where the Rust API answers. The Worker is the only client of this name.
+    // Local development reads API_URL from `.env` or the shell instead.
     "vars": {
-        "API_URL": "http://127.0.0.1:3000",
+        "API_URL": "https://api.lanbunker.eu",
     },
 
     // Uncomment when ready for D1

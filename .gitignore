@@ -18,3 +18,7 @@ dist/
 
 # sqlx offline query data is not used: builds compile against .dev/bunker.db
 .sqlx/
+
+# The CI deploy key pair, made on this machine one time. Never commit it.
+deploy_key
+deploy_key.pub
