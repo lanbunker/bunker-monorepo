@@ -113,9 +113,46 @@ or `test`.
 | PUT | `/api/admin/players/{id}/handle` | admin | rename a player |
 | POST | `/api/admin/players/{id}/password-reset` | admin | temporary password, forces a change at login |
 | DELETE | `/api/admin/players/{id}` | admin | remove a player |
+| GET | `/api/tournaments` | none | tournaments, newest event first, drafts hidden. Same paging |
+| GET | `/api/tournaments/{id}` | none | one tournament with entrants and bracket |
+| GET | `/api/me/registrations` | bearer | the tournaments the caller entered |
+| POST | `/api/tournaments/{id}/registration` | bearer | apply. Idempotent |
+| DELETE | `/api/tournaments/{id}/registration` | bearer | retire. Idempotent |
+| GET, POST | `/api/admin/tournaments` | admin | every tournament, create a draft |
+| GET, PATCH, DELETE | `/api/admin/tournaments/{id}` | admin | detail, edit fields, delete with entrants and matches |
+| POST | `/api/admin/tournaments/{id}/status` | admin | move the status, name the winner |
+| POST | `/api/admin/tournaments/{id}/entrants` | admin | add a player |
+| DELETE | `/api/admin/tournaments/{id}/entrants/{entrantId}` | admin | remove an entrant |
+| POST, DELETE | `/api/admin/tournaments/{id}/bracket` | admin | generate a random bracket, remove it |
+| PUT | `/api/admin/tournaments/{id}/seeds` | admin | rebuild the bracket in a given seed order |
+| PUT, DELETE | `/api/admin/tournaments/{id}/matches/{matchId}/result` | admin | enter a result, clear it |
 | GET | `/api/openapi.json` | none | the contract |
 | GET | `/health/live` | none | process is up, version |
 | GET | `/health/ready` | none | database answers |
+
+## Tournaments
+
+A tournament moves through four statuses. `draft` is visible to admins only.
+`open` takes registrations until `registrationClosesAt`. `live` freezes the
+entrants and opens the bracket work. `concluded` is final: nothing changes after
+it. A draft can go live at once, which is how an old tournament is backfilled.
+`live` can go back to `open` only while no bracket exists.
+
+The bracket is single elimination and optional. The admin generates it from a
+random order of the entrants, moves seeds by hand, and enters one result per
+match. A winner moves into the next round. A result can change until the next
+match is decided. A bye is not a result. While no result exists, the bracket can
+be regenerated or removed, as long as the tournament is not concluded. With a bracket, the final decides the winner. Without
+one, the admin names the winner among the entrants, or nobody.
+
+Matches point at entrants and not at players, so a team can enter one day. The
+placements a bracket implies, second for the loser of the final and so on, are
+the input of a future score system. Nothing is stored for that yet.
+
+The bracket rules live in `crates/bunker-models/src/bracket.rs` as pure data with
+their own tests. The site shows a bracket on `/tournaments/{id}/bracket`, and
+`/tournaments/{id}/kiosk` is the same view in a bare layout that polls
+`/tournaments/{id}/detail.json` every three seconds for a screen at the event.
 
 ## End to end types
 

@@ -120,6 +120,10 @@ pub enum ServiceError {
     #[error("the seed order must list each entrant exactly once")]
     SeedOrderMismatch,
 
+    /// The stored matches do not form a bracket. A bug, never a client mistake.
+    #[error("the stored matches do not form a bracket")]
+    CorruptBracket,
+
     #[error("the token is missing, expired or not signed by this server")]
     InvalidToken(#[source] Box<dyn StdError + Send + Sync>),
 
@@ -149,20 +153,62 @@ impl ServiceError {
                 ErrorCode::RegistrationClosed,
                 Some("Registration is closed"),
             ),
-            Self::InvalidTransition { .. }
-            | Self::TournamentConcluded
-            | Self::NotLive
-            | Self::BracketExists
-            | Self::BracketMissing
-            | Self::BracketLocked
-            | Self::BracketIncomplete
-            | Self::TooFewEntrants(_)
-            | Self::MatchNotReady
-            | Self::NextMatchDecided
-            | Self::UnexpectedWinner
-            | Self::WinnerCannotLeave => (ErrorCode::InvalidState, None),
-            Self::NotAnEntrant(_) => (ErrorCode::NotAnEntrant, None),
-            Self::SeedOrderMismatch => (ErrorCode::UnprocessableRequest, None),
+            Self::InvalidTransition { .. } => (
+                ErrorCode::InvalidState,
+                Some("The tournament cannot move to that status from here"),
+            ),
+            Self::TournamentConcluded => (
+                ErrorCode::InvalidState,
+                Some("The tournament is concluded and takes no more changes"),
+            ),
+            Self::NotLive => (
+                ErrorCode::InvalidState,
+                Some("Go live before you generate the bracket"),
+            ),
+            Self::BracketExists => (
+                ErrorCode::InvalidState,
+                Some("Remove the bracket before you change the entrants"),
+            ),
+            Self::BracketMissing => (ErrorCode::InvalidState, Some("Generate the bracket first")),
+            Self::BracketLocked => (
+                ErrorCode::InvalidState,
+                Some("Clear every result before you change the bracket"),
+            ),
+            Self::BracketIncomplete => {
+                (ErrorCode::InvalidState, Some("The final has no winner yet"))
+            }
+            Self::TooFewEntrants(_) => (
+                ErrorCode::InvalidState,
+                Some("A bracket needs at least two entrants"),
+            ),
+            Self::MatchNotReady => (
+                ErrorCode::InvalidState,
+                Some("The match does not have both entrants yet"),
+            ),
+            Self::NextMatchDecided => (
+                ErrorCode::InvalidState,
+                Some("The next match already has a result. Clear that one first"),
+            ),
+            Self::UnexpectedWinner => (
+                ErrorCode::InvalidState,
+                Some("A winner is named only when a tournament without a bracket concludes"),
+            ),
+            Self::WinnerCannotLeave => (
+                ErrorCode::InvalidState,
+                Some("The winner cannot leave the tournament"),
+            ),
+            Self::CorruptBracket => (
+                ErrorCode::GenericError,
+                Some("An unexpected error occurred"),
+            ),
+            Self::NotAnEntrant(_) => (
+                ErrorCode::NotAnEntrant,
+                Some("That player is not an entrant of this tournament or this match"),
+            ),
+            Self::SeedOrderMismatch => (
+                ErrorCode::UnprocessableRequest,
+                Some("The seed order must list each entrant exactly once"),
+            ),
             Self::HandleTaken(_) => (ErrorCode::HandleTaken, None),
             Self::InvalidCredentials => (
                 ErrorCode::InvalidCredentials,
@@ -211,6 +257,7 @@ impl From<BracketError> for ServiceError {
             BracketError::NotReady(_) => Self::MatchNotReady,
             BracketError::NotAParticipant(entrant, _) => Self::NotAnEntrant(entrant),
             BracketError::NextDecided(_) => Self::NextMatchDecided,
+            BracketError::Malformed => Self::CorruptBracket,
         }
     }
 }

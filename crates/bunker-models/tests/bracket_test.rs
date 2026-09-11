@@ -188,5 +188,137 @@ fn flat_rows_group_back_into_rounds_and_slots() {
     let mut rows: Vec<Match> = generated.flat().cloned().collect();
     rows.reverse();
 
-    assert_eq!(Bracket::from_matches(rows), generated);
+    assert_eq!(Bracket::from_matches(rows).unwrap(), generated);
+}
+
+#[test]
+fn thirty_entrants_fill_five_rounds_with_two_byes() {
+    let ids = entrants(30);
+    let bracket = Bracket::generate(&ids).unwrap();
+
+    assert_eq!(
+        bracket.rounds.iter().map(Vec::len).collect::<Vec<_>>(),
+        [16, 8, 4, 2, 1]
+    );
+    let byes: Vec<EntrantId> = bracket.rounds[0]
+        .iter()
+        .filter(|m| !m.is_ready())
+        .map(|m| m.winner.unwrap())
+        .collect();
+    assert_eq!(byes, [ids[0], ids[1]], "the two byes go to the top seeds");
+    assert_eq!(
+        bracket.rounds[0].iter().filter(|m| m.is_ready()).count(),
+        14
+    );
+    assert!(!bracket.has_results());
+    // Seeds 1 and 2 sit in opposite halves, so they can only meet in the final.
+    assert_eq!(bracket.rounds[1][0].entrant_a, Some(ids[0]));
+    assert_eq!(bracket.rounds[1][4].entrant_a, Some(ids[1]));
+}
+
+#[test]
+fn seventeen_entrants_leave_one_real_match_in_round_one() {
+    let ids = entrants(17);
+    let bracket = Bracket::generate(&ids).unwrap();
+
+    assert_eq!(bracket.rounds.len(), 5);
+    assert_eq!(
+        bracket.rounds[0].iter().filter(|m| !m.is_ready()).count(),
+        15
+    );
+    let played: Vec<&Match> = bracket.rounds[0].iter().filter(|m| m.is_ready()).collect();
+    assert_eq!(played.len(), 1);
+    assert_eq!(played[0].entrant_a, Some(ids[15]));
+    assert_eq!(played[0].entrant_b, Some(ids[16]));
+    // Every round two match but one is already full of bye winners.
+    assert_eq!(bracket.rounds[1].iter().filter(|m| m.is_ready()).count(), 7);
+}
+
+/// Plays every bracket size from 2 to 33 to the end, always picking side a.
+/// Each size must end with a champion, with every playable match played.
+#[test]
+fn every_size_plays_through_to_a_champion() {
+    for count in 2..=33 {
+        let ids = entrants(count);
+        let mut bracket = Bracket::generate(&ids).unwrap();
+        assert_eq!(
+            bracket.rounds.len(),
+            count.next_power_of_two().trailing_zeros() as usize
+        );
+
+        let mut reported = 0;
+        while bracket.champion().is_none() {
+            let next = bracket
+                .flat()
+                .find(|m| m.is_ready() && m.winner.is_none())
+                .cloned()
+                .unwrap_or_else(|| panic!("size {count}: no playable match and no champion"));
+            bracket.report(next.id, next.entrant_a.unwrap()).unwrap();
+            reported += 1;
+        }
+
+        let byes = count.next_power_of_two() - count;
+        assert_eq!(
+            reported,
+            count - 1,
+            "size {count}: a single elimination needs n-1 wins"
+        );
+        assert_eq!(
+            bracket.flat().filter(|m| m.is_ready()).count(),
+            count - 1,
+            "size {count}: the bye matches are the only unplayed ones"
+        );
+        assert_eq!(bracket.flat().filter(|m| !m.is_ready()).count(), byes);
+        assert_eq!(
+            bracket.champion(),
+            Some(ids[0]),
+            "side a always wins, so seed 1 is champion"
+        );
+    }
+}
+
+#[test]
+fn a_bye_takes_no_result() {
+    let ids = entrants(3);
+    let mut bracket = Bracket::generate(&ids).unwrap();
+    let bye = bracket.rounds[0]
+        .iter()
+        .find(|m| !m.is_ready())
+        .unwrap()
+        .clone();
+
+    assert_eq!(
+        bracket.report(bye.id, ids[0]),
+        Err(BracketError::NotReady(bye.id))
+    );
+}
+
+#[test]
+fn rows_that_do_not_form_a_bracket_are_refused() {
+    let ids = entrants(4);
+    let generated = Bracket::generate(&ids).unwrap();
+    let rows: Vec<Match> = generated.flat().cloned().collect();
+
+    let missing_final: Vec<Match> = rows.iter().filter(|m| m.round == 1).cloned().collect();
+    assert_eq!(
+        Bracket::from_matches(missing_final),
+        Err(BracketError::Malformed)
+    );
+
+    let mut skipped_round = rows.clone();
+    for m in &mut skipped_round {
+        if m.round == 2 {
+            m.round = 3;
+        }
+    }
+    assert_eq!(
+        Bracket::from_matches(skipped_round),
+        Err(BracketError::Malformed)
+    );
+
+    let duplicated_slot: Vec<Match> = rows.iter().chain(rows.iter().take(1)).cloned().collect();
+    assert_eq!(
+        Bracket::from_matches(duplicated_slot),
+        Err(BracketError::Malformed)
+    );
 }

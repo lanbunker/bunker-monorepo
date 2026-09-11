@@ -276,6 +276,22 @@ export interface paths {
         patch?: never
         trace?: never
     }
+    "/api/me/registrations": {
+        parameters: {
+            query?: never
+            header?: never
+            path?: never
+            cookie?: never
+        }
+        get: operations["registrations"]
+        put?: never
+        post?: never
+        delete?: never
+        options?: never
+        head?: never
+        patch?: never
+        trace?: never
+    }
     "/api/players": {
         parameters: {
             query?: never
@@ -622,6 +638,13 @@ export interface components {
         }
         /** Format: uuid */
         PlayerId: string
+        /**
+         * @description Answer of `GET /api/me/registrations`: the tournaments the caller entered.
+         *     One call tells a page which apply buttons to turn into retire buttons.
+         */
+        Registrations: {
+            tournaments: components["schemas"]["TournamentId"][]
+        }
         /**
          * @description What a player may do. Admins reach the backoffice and manage players.
          * @enum {string}
@@ -2037,6 +2060,34 @@ export interface operations {
                 }
             }
             422: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+        }
+    }
+    registrations: {
+        parameters: {
+            query?: never
+            header?: never
+            path?: never
+            cookie?: never
+        }
+        requestBody?: never
+        responses: {
+            /** @description The tournaments the caller entered */
+            200: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["Registrations"]
+                }
+            }
+            401: {
                 headers: {
                     [name: string]: unknown
                 }

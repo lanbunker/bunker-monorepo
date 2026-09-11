@@ -2,7 +2,9 @@ use axum::extract::State;
 use axum::http::StatusCode;
 use axum::routing::get;
 use axum::{Json, Router};
-use bunker_models::{Entrant, PageQuery, Paginated, Tournament, TournamentDetail, TournamentId};
+use bunker_models::{
+    Entrant, PageQuery, Paginated, Registrations, Tournament, TournamentDetail, TournamentId,
+};
 use serde::Deserialize;
 
 use crate::internal::http::{ApiError, ApiErrorBody, Authenticated, ValidPath, ValidQuery};
@@ -15,6 +17,7 @@ pub fn tournament_router() -> Router<AppState> {
     Router::new()
         .route("/api/tournaments", get(list_tournaments))
         .route("/api/tournaments/{id}", get(get_tournament))
+        .route("/api/me/registrations", get(registrations))
         .route(
             "/api/tournaments/{id}/registration",
             axum::routing::post(register).delete(retire),
@@ -59,6 +62,23 @@ pub(super) async fn get_tournament(
     ValidPath(path): ValidPath<TournamentPath>,
 ) -> Result<Json<TournamentDetail>, ApiError> {
     Ok(Json(tournaments.detail(path.id, false).await?))
+}
+
+#[utoipa::path(
+    get,
+    path = "/api/me/registrations",
+    tag = "tournaments",
+    security(("bearer" = [])),
+    responses(
+        (status = 200, body = Registrations, description = "The tournaments the caller entered"),
+        (status = 401, body = ApiErrorBody),
+    )
+)]
+pub(super) async fn registrations(
+    State(tournaments): State<TournamentService>,
+    Authenticated(account): Authenticated,
+) -> Result<Json<Registrations>, ApiError> {
+    Ok(Json(tournaments.registrations(account.player.id).await?))
 }
 
 #[utoipa::path(

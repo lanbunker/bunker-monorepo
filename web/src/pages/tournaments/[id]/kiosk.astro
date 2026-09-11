@@ -1,0 +1,24 @@
+---
+import { LiveBracket } from "../../../components/LiveBracket"
+import Layout from "../../../layouts/Layout.astro"
+import { apiClient } from "../../../lib/api"
+
+const id = Astro.params.id ?? ""
+const { data, response } = await apiClient()
+  .GET("/api/tournaments/{id}", { params: { path: { id } } })
+  .catch(() => ({ data: undefined, response: undefined }))
+if (!data && response && response.status < 500) return Astro.rewrite("/404")
+Astro.response.headers.set("Cache-Control", "no-store")
+---
+
+<Layout title={`${data?.tournament.name ?? "kiosk"}//LIVE`} bare noindex>
+  <div class="mx-auto w-full max-w-[90rem] px-6">
+    {
+      data ? (
+        <LiveBracket client:load initial={data} source={`/tournaments/${id}/detail.json`} />
+      ) : (
+        <p class="text-base text-alert">the tournament database is unreachable.</p>
+      )
+    }
+  </div>
+</Layout>

@@ -1,0 +1,68 @@
+---
+import { actions } from "astro:actions"
+import TournamentCard from "../../components/TournamentCard.astro"
+import Prompt from "../../components/ui/Prompt.astro"
+import Layout from "../../layouts/Layout.astro"
+import { apiClient } from "../../lib/api"
+
+// A redirect after each action, so a refresh never applies twice.
+const applied = Astro.getActionResult(actions.applyToTournament)
+if (applied?.data) return Astro.redirect("/tournaments?done=applied")
+const retired = Astro.getActionResult(actions.retireFromTournament)
+if (retired?.data) return Astro.redirect("/tournaments?done=retired")
+const failure = applied?.error ?? retired?.error
+
+// A LAN runs a few tournaments a year, so one page holds them all for a long time.
+const { data } = await apiClient()
+  .GET("/api/tournaments", { params: { query: { page: 1, pageSize: 100 } } })
+  .catch(() => ({ data: undefined }))
+const items = data?.items ?? []
+const running = items.filter(t => t.status !== "concluded")
+const concluded = items.filter(t => t.status === "concluded")
+
+// One call tells which tournaments the viewer is in.
+const me = Astro.locals.player
+const { data: mine } = Astro.locals.token
+  ? await apiClient(Astro.locals.token)
+      .GET("/api/me/registrations")
+      .catch(() => ({ data: undefined }))
+  : { data: undefined }
+const registered = new Set(mine?.tournaments ?? [])
+const notice = { applied: "you are in. see you at the bunker.", retired: "you left the tournament." }[
+  Astro.url.searchParams.get("done") ?? ""
+]
+---
+
+<Layout title="TOURNAMENTS//LAN_BUNKER" active="tournaments">
+  <Prompt command="cat ./tournaments/open" comment="apply with your bunkernet account" />
+
+  {notice && <p class="mb-4 text-xs text-accent" role="status">{notice}</p>}
+  {failure && <p class="mb-4 text-xs text-alert" role="alert">{failure.message}</p>}
+
+  {
+    !data ? (
+      <p class="text-xs text-alert">the tournament database is unreachable.</p>
+    ) : running.length > 0 ? (
+      <div class="flex flex-col gap-6">
+        {running.map(t => (
+          <TournamentCard tournament={t} me={me} registered={registered.has(t.id)} />
+        ))}
+      </div>
+    ) : (
+      <p class="text-xs text-dim">no open tournaments.</p>
+    )
+  }
+
+  {
+    concluded.length > 0 && (
+      <>
+        <Prompt command="cat ./tournaments/archive" comment="hall of fame" />
+        <div class="flex flex-col gap-6">
+          {concluded.map(t => (
+            <TournamentCard tournament={t} />
+          ))}
+        </div>
+      </>
+    )
+  }
+</Layout>

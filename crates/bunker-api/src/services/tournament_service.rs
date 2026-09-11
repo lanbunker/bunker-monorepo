@@ -1,6 +1,7 @@
 use bunker_models::{
-    Bracket, Entrant, EntrantId, MatchId, NewTournament, PageQuery, Paginated, PlayerId, SeedOrder,
-    StatusChange, Tournament, TournamentDetail, TournamentId, TournamentStatus, TournamentUpdate,
+    Bracket, Entrant, EntrantId, MatchId, NewTournament, PageQuery, Paginated, PlayerId,
+    Registrations, SeedOrder, StatusChange, Tournament, TournamentDetail, TournamentId,
+    TournamentStatus, TournamentUpdate,
 };
 use rand::seq::SliceRandom;
 use time::OffsetDateTime;
@@ -101,6 +102,10 @@ impl TournamentService {
     ) -> Result<Tournament, ServiceError> {
         let tournament = self.load(id).await?;
         let (from, to) = (tournament.status, change.status);
+        // A second click on the same button changes nothing and fails nothing.
+        if from == to && change.winner.is_none() {
+            return Ok(tournament);
+        }
         let transition = ServiceError::InvalidTransition { from, to };
 
         use TournamentStatus::{Concluded, Draft, Live, Open};
@@ -146,6 +151,12 @@ impl TournamentService {
         self.storage.set_status(id, to, winner).await?;
 
         self.load(id).await
+    }
+
+    pub async fn registrations(&self, player: PlayerId) -> Result<Registrations, ServiceError> {
+        Ok(Registrations {
+            tournaments: self.storage.tournaments_of(player).await?,
+        })
     }
 
     /// A player enters while registration is open. A second call answers the
@@ -308,7 +319,10 @@ impl TournamentService {
     /// `None` when no match exists: the tournament has no bracket.
     async fn bracket(&self, id: TournamentId) -> Result<Option<Bracket>, ServiceError> {
         let matches = self.storage.matches(id).await?;
-        Ok((!matches.is_empty()).then(|| Bracket::from_matches(matches)))
+        if matches.is_empty() {
+            return Ok(None);
+        }
+        Ok(Some(Bracket::from_matches(matches)?))
     }
 
     /// The bracket of a live tournament, for a result on one of its matches.

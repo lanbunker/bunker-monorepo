@@ -8,7 +8,8 @@ the rules.
 
 LAN BUNKER is a recurring local multiplayer event. The site shows events,
 tournaments and media in a terminal style. The backend holds players, their
-generated glyphs and, later, scores, tournaments and cycles (the points). The
+generated glyphs, tournaments with entrants and brackets, and, later, scores and
+cycles (the points). The
 daemon will run on RetroPie arcade cabinets and post scores to the backend.
 
 ```

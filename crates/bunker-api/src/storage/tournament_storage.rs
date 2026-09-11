@@ -296,6 +296,26 @@ impl TournamentStorage {
         row.map(TryInto::try_into).transpose()
     }
 
+    /// Every tournament the player entered, in any status. The index on
+    /// `player_id` makes this one lookup.
+    pub async fn tournaments_of(
+        &self,
+        player: PlayerId,
+    ) -> Result<Vec<TournamentId>, StorageError> {
+        let player = player.into_inner().to_string();
+        let rows = sqlx::query_scalar!(
+            "select tournament_id from tournament_entrants where player_id = ?1 order by registered_at asc",
+            player,
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(StorageError::from_query)?;
+
+        rows.into_iter()
+            .map(|raw| parse_uuid(ENTRANTS, &raw).map(TournamentId::new))
+            .collect()
+    }
+
     pub async fn add_entrant(&self, entrant: &NewEntrant) -> Result<Enrolled, StorageError> {
         let id = entrant.id.into_inner().to_string();
         let tournament = entrant.tournament.into_inner().to_string();
@@ -402,7 +422,7 @@ impl TournamentStorage {
         for (index, entrant) in order.iter().enumerate() {
             let seed = i64::try_from(index + 1).unwrap_or(i64::MAX);
             let entrant = entrant.into_inner().to_string();
-            sqlx::query!(
+            let updated = sqlx::query!(
                 "update tournament_entrants set seed = ?1 where tournament_id = ?2 and id = ?3",
                 seed,
                 tournament,
@@ -411,6 +431,14 @@ impl TournamentStorage {
             .execute(&mut *tx)
             .await
             .map_err(StorageError::from_query)?;
+            // The service checked the order. A miss here means a match would point
+            // at an entrant without a seed, so the whole write is dropped.
+            if updated.rows_affected() != 1 {
+                return Err(StorageError::malformed_row(
+                    ENTRANTS,
+                    MalformedField("seed"),
+                ));
+            }
         }
         sqlx::query!("delete from matches where tournament_id = ?1", tournament)
             .execute(&mut *tx)

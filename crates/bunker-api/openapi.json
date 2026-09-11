@@ -1849,6 +1849,41 @@
         ]
       }
     },
+    "/api/me/registrations": {
+      "get": {
+        "tags": [
+          "tournaments"
+        ],
+        "operationId": "registrations",
+        "responses": {
+          "200": {
+            "description": "The tournaments the caller entered",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Registrations"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
     "/api/players": {
       "get": {
         "tags": [
@@ -2823,6 +2858,21 @@
       "PlayerId": {
         "type": "string",
         "format": "uuid"
+      },
+      "Registrations": {
+        "type": "object",
+        "description": "Answer of `GET /api/me/registrations`: the tournaments the caller entered.\nOne call tells a page which apply buttons to turn into retire buttons.",
+        "required": [
+          "tournaments"
+        ],
+        "properties": {
+          "tournaments": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TournamentId"
+            }
+          }
+        }
       },
       "Role": {
         "type": "string",

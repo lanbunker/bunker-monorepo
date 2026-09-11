@@ -60,6 +60,9 @@ api-types: openapi ## Generate web/src/lib/api-types.d.ts from openapi.json
 	pnpm -C web exec openapi-typescript ../$(OPENAPI) -o src/lib/api-types.d.ts
 	pnpm -C web exec oxfmt src/lib/api-types.d.ts
 
+seed: ## Fill the running dev API with 30 players and an open tournament of 23 entrants
+	API_URL=http://127.0.0.1:$(PORT) DB_FILE=$(DB_FILE) scripts/seed-dev.sh
+
 dev: ## Build and restart the API after each save (needs cargo install cargo-watch)
 	cargo watch --why --clear --exec 'run -p bunker-api'
 

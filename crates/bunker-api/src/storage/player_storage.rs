@@ -296,8 +296,7 @@ impl PlayerStorage {
     }
 }
 
-/// Separate from [`Player`], because the database holds primitives and the domain
-/// holds validated types.
+/// The player columns plus what a token check needs.
 #[derive(Debug)]
 struct AccountRow {
     id: String,

@@ -6,6 +6,12 @@ import type { components, paths } from "./api-types"
 export type Player = components["schemas"]["Player"]
 export type Glyph = components["schemas"]["Glyph"]
 export type ApiErrorBody = components["schemas"]["ApiErrorBody"]
+export type Tournament = components["schemas"]["Tournament"]
+export type TournamentDetail = components["schemas"]["TournamentDetail"]
+export type TournamentStatus = components["schemas"]["TournamentStatus"]
+export type Entrant = components["schemas"]["Entrant"]
+export type Bracket = components["schemas"]["Bracket"]
+export type Match = components["schemas"]["Match"]
 
 /** The cookie that holds the bearer token. HttpOnly, so scripts never see it. */
 export const SESSION_COOKIE = "bunker_session"

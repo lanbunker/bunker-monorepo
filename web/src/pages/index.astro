@@ -4,10 +4,10 @@ import AsciiBanner from "../components/AsciiBanner.astro"
 import Button from "../components/ui/Button.astro"
 import Kv from "../components/ui/Kv.astro"
 import Panel from "../components/ui/Panel.astro"
-import { isRegistrationOpen, upcomingTournament } from "../data/tournaments"
 import Layout from "../layouts/Layout.astro"
 import { apiClient } from "../lib/api"
 import { formatEurDate, parseEurDate } from "../lib/dates"
+import { isRegistrationOpen, nextOpen } from "../lib/tournaments"
 
 const events = (await getCollection("events")).sort(
   (a, b) => parseEurDate(b.data.date) - parseEurDate(a.data.date),
@@ -16,13 +16,18 @@ const events = (await getCollection("events")).sort(
 // Events sort newest first, so the last upcoming entry is the soonest one.
 const nextEvent = events.findLast(e => e.data.status === "OPEN" || e.data.status === "SOON")
 const prevEvent = events.find(e => e.data.status === "CLOSED")
-const canRegister = upcomingTournament ? isRegistrationOpen(upcomingTournament) : false
-
-// One row is enough: the answer proves the API is up and carries the head count.
-const { data: net } = await apiClient()
-  .GET("/api/players", { params: { query: { page: 1, pageSize: 1 } } })
-  .catch(() => ({ data: undefined }))
+// One row proves the API is up and carries the head count. The tournament list
+// is small, so the first page holds every open one.
+const client = apiClient()
+const [{ data: net }, { data: tournaments }] = await Promise.all([
+  client.GET("/api/players", { params: { query: { page: 1, pageSize: 1 } } }).catch(() => ({ data: undefined })),
+  client
+    .GET("/api/tournaments", { params: { query: { page: 1, pageSize: 100 } } })
+    .catch(() => ({ data: undefined })),
+])
 const netOnline = net !== undefined
+const upcomingTournament = nextOpen(tournaments?.items ?? [])
+const canRegister = upcomingTournament ? isRegistrationOpen(upcomingTournament) : false
 ---
 
 <Layout title="LAN BUNKER" active="home">
@@ -88,7 +93,9 @@ const netOnline = net !== undefined
           {
             upcomingTournament && (
               <Kv label="Tournament" tone={canRegister ? "accent" : "default"}>
-                {upcomingTournament.game} // {upcomingTournament.name}
+                <a href="/tournaments" class="no-underline hover:text-bright">
+                  {upcomingTournament.game} // {upcomingTournament.name}
+                </a>
                 {!canRegister && <span class="text-dim"> // registration closed</span>}
               </Kv>
             )
@@ -96,7 +103,7 @@ const netOnline = net !== undefined
         </div>
         <div class="mt-4 flex flex-wrap gap-3">
           <Button href="/events" variant="ghost">EVENTS</Button>
-          {canRegister && <Button href="/tournaments">REGISTER</Button>}
+          {canRegister && <Button href="/tournaments">APPLY</Button>}
         </div>
       </Panel>
 

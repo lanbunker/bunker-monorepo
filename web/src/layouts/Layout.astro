@@ -71,8 +71,9 @@ const activeIndex = nav.findIndex(item => item.key === active)
 
     <div
       class:list={[
-        "mx-auto max-w-[60rem] px-6 max-[30rem]:px-3.5",
-        bare ? "flex min-h-screen flex-col items-center justify-center py-8" : "pt-5 max-[30rem]:pt-3",
+        "mx-auto px-6 max-[30rem]:px-3.5",
+        // A bare page sets its own width: a signup form is narrow, a kiosk is wide.
+        bare ? "flex min-h-screen w-full flex-col items-center justify-center py-8" : "max-w-[60rem] pt-5 max-[30rem]:pt-3",
       ]}
     >
       {!bare && (

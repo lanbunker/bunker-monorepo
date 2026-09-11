@@ -1,34 +1,6 @@
-import { execFileSync } from "node:child_process"
-
 import { expect, test } from "@playwright/test"
-import type { Page } from "@playwright/test"
 
-const PASSWORD = "correct-horse-battery"
-const handle = (prefix: string) => `${prefix}${Date.now().toString(36).slice(-5)}`
-
-/** The API keeps sessions in a cookie set by the site, so a signup logs in. */
-const signup = async (page: Page, name: string) => {
-    await page.goto("/signup")
-    await page.getByLabel("handle:").fill(name)
-    await page.getByLabel("password:", { exact: true }).fill(PASSWORD)
-    await page.getByLabel("repeat:").fill(PASSWORD)
-    await page.getByRole("button", { name: "ENLIST" }).click()
-    await expect(page).toHaveURL(/\/profile(\?|$)/)
-}
-
-const logout = async (page: Page) => {
-    await page.goto("/profile")
-    await page.getByRole("button", { name: "LOGOUT" }).click()
-    await expect(page).toHaveURL(/\/login(\?|$)/)
-}
-
-/** Promotes with SQL, the way `make admin` does on a real box. */
-const promote = (name: string) => {
-    execFileSync("sqlite3", [
-        "../.dev/e2e.db",
-        `update players set role = 'admin' where handle = '${name}' collate nocase`,
-    ])
-}
+import { PASSWORD, handle, logout, promote, signup } from "./support"
 
 test("signup shows the profile with a generated glyph, then logout and login again", async ({
     page,

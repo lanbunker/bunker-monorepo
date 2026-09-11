@@ -56,6 +56,15 @@ Critical rules for **ALL** packages. **Non-compliance will not be tolerated.**
 - `button` elements carry an explicit `type`
 - PascalCase filename for a component, kebab-case for everything else
 
+## React islands
+
+- Interactivity lives in a React component under `src/components/*.tsx`, mounted with `client:load`. Everything else is an Astro component with no script
+- An island receives its first state as props from the page and never fetches on mount. It calls Astro actions from `astro:actions` for writes and a site route for reads, never the API
+- An island keeps its buttons disabled until it is mounted, so a click on the server-rendered markup cannot get lost
+- The API is the source of truth: an island replaces its state with what an action answers, and computes nothing that the API computes
+- Props are read as `props.x`, never destructured. The props type is `${Name}Props`
+- A component that both Astro and React render, such as the glyph, is written one time in React. The Astro wrapper renders it with no client directive, so it ships no script
+
 ## UI & Styling
 
 - Custom UI components: `src/components/ui/`

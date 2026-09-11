@@ -11,7 +11,9 @@
 mod support;
 
 use axum::http::StatusCode;
-use bunker_models::{Entrant, Paginated, Tournament, TournamentDetail, TournamentStatus};
+use bunker_models::{
+    Entrant, Paginated, Registrations, Tournament, TournamentDetail, TournamentStatus,
+};
 use serde_json::json;
 use support::{TestApi, assert_error, read_json};
 use uuid::Uuid;
@@ -460,4 +462,100 @@ async fn a_tournament_body_is_checked_field_by_field() {
 
     let ok = api.post_as("/api/admin/tournaments", &valid, &admin).await;
     assert_eq!(ok.status(), StatusCode::CREATED);
+}
+
+#[tokio::test]
+async fn a_patch_with_an_empty_description_clears_it() {
+    let api = TestApi::with_database().await;
+    let admin = api.signup_admin("root").await;
+    let created = api.create_tournament(&admin, HOUR).await;
+    assert_eq!(created.description.as_ref(), "One life, one shot.");
+
+    let response = api
+        .patch_as(
+            &format!("/api/admin/tournaments/{}", created.id),
+            &json!({ "description": "" }),
+            &admin,
+        )
+        .await;
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let updated: Tournament = read_json(response).await;
+    assert_eq!(updated.description.as_ref(), "");
+}
+
+#[tokio::test]
+async fn the_same_status_twice_is_not_an_error() {
+    let api = TestApi::with_database().await;
+    let admin = api.signup_admin("root").await;
+    let created = api.create_tournament(&admin, HOUR).await;
+
+    api.set_status(&admin, created.id, "open").await;
+    let again = api.set_status(&admin, created.id, "open").await;
+
+    assert_eq!(again.status, TournamentStatus::Open);
+}
+
+#[tokio::test]
+async fn a_client_message_is_a_sentence_and_names_no_id() {
+    let api = TestApi::with_database().await;
+    let admin = api.signup_admin("root").await;
+    let created = api.create_tournament(&admin, HOUR).await;
+    api.set_status(&admin, created.id, "concluded").await;
+
+    let response = api
+        .post_as(
+            &format!("/api/admin/tournaments/{}/status", created.id),
+            &json!({ "status": "open" }),
+            &admin,
+        )
+        .await;
+    assert_eq!(response.status(), StatusCode::CONFLICT);
+    let body: serde_json::Value = read_json(response).await;
+    let message = body["message"].as_str().unwrap();
+    assert!(message.starts_with(char::is_uppercase), "got {message:?}");
+    assert!(
+        !message.contains(&created.id.to_string()),
+        "got {message:?}"
+    );
+}
+
+#[tokio::test]
+async fn a_player_reads_their_registrations_in_one_call() {
+    let api = TestApi::with_database().await;
+    let admin = api.signup_admin("root").await;
+    let first = api.create_tournament(&admin, HOUR).await;
+    let second = api.create_tournament(&admin, HOUR).await;
+    api.set_status(&admin, first.id, "open").await;
+    api.set_status(&admin, second.id, "open").await;
+    let dave = api.signup("dave").await.token;
+
+    let none: Registrations = read_json(api.get_as("/api/me/registrations", &dave).await).await;
+    assert!(none.tournaments.is_empty());
+
+    api.post_as(
+        &format!("/api/tournaments/{}/registration", first.id),
+        &json!({}),
+        &dave,
+    )
+    .await;
+    api.post_as(
+        &format!("/api/tournaments/{}/registration", second.id),
+        &json!({}),
+        &dave,
+    )
+    .await;
+    let both: Registrations = read_json(api.get_as("/api/me/registrations", &dave).await).await;
+    assert_eq!(both.tournaments, [first.id, second.id]);
+
+    api.delete_as(
+        &format!("/api/tournaments/{}/registration", first.id),
+        &dave,
+    )
+    .await;
+    let one: Registrations = read_json(api.get_as("/api/me/registrations", &dave).await).await;
+    assert_eq!(one.tournaments, [second.id]);
+
+    let anonymous = api.get("/api/me/registrations").await;
+    assert_error(anonymous, StatusCode::UNAUTHORIZED, "Unauthorized").await;
 }

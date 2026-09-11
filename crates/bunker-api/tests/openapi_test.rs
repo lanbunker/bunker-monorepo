@@ -52,6 +52,7 @@ async fn the_document_is_served_and_lists_every_route() {
         "/api/tournaments",
         "/api/tournaments/{id}",
         "/api/tournaments/{id}/registration",
+        "/api/me/registrations",
         "/api/admin/tournaments",
         "/api/admin/tournaments/{id}",
         "/api/admin/tournaments/{id}/status",

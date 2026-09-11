@@ -74,6 +74,8 @@ pub enum BracketError {
     NotAParticipant(EntrantId, MatchId),
     #[error("the match after {0} already has a result")]
     NextDecided(MatchId),
+    #[error("the matches do not form a single elimination bracket")]
+    Malformed,
 }
 
 impl Bracket {
@@ -146,20 +148,40 @@ impl Bracket {
         Ok(bracket)
     }
 
-    /// Groups flat rows by round and slot. Rows as storage returns them.
-    pub fn from_matches(matches: Vec<Match>) -> Self {
+    /// Groups flat rows by round and slot, as storage returns them. The rows must
+    /// form a whole bracket: rounds 1 to k, each half the size of the one before,
+    /// down to one final. Anything else is refused, because `report` and `clear`
+    /// walk the rounds by index.
+    pub fn from_matches(matches: Vec<Match>) -> Result<Self, BracketError> {
         let mut by_round: BTreeMap<u32, Vec<Match>> = BTreeMap::new();
         for m in matches {
             by_round.entry(m.round).or_default().push(m);
         }
-        let rounds = by_round
-            .into_values()
-            .map(|mut slots| {
+        let rounds: Vec<Vec<Match>> = by_round
+            .into_iter()
+            .enumerate()
+            .map(|(index, (round, mut slots))| {
+                if usize::try_from(round).ok() != Some(index + 1) {
+                    return Err(BracketError::Malformed);
+                }
                 slots.sort_by_key(|m| m.slot);
-                slots
+                let in_order = slots
+                    .iter()
+                    .enumerate()
+                    .all(|(slot, m)| usize::try_from(m.slot).ok() == Some(slot));
+                if !in_order {
+                    return Err(BracketError::Malformed);
+                }
+                Ok(slots)
             })
-            .collect();
-        Self { rounds }
+            .collect::<Result<_, _>>()?;
+        let sizes_halve = rounds
+            .windows(2)
+            .all(|pair| pair.first().map(Vec::len) == pair.get(1).map(|next| next.len() * 2));
+        if rounds.last().map(Vec::len) != Some(1) || !sizes_halve {
+            return Err(BracketError::Malformed);
+        }
+        Ok(Self { rounds })
     }
 
     pub fn flat(&self) -> impl Iterator<Item = &Match> {

@@ -225,6 +225,14 @@ pub struct MatchResult {
     pub winner: EntrantId,
 }
 
+/// Answer of `GET /api/me/registrations`: the tournaments the caller entered.
+/// One call tells a page which apply buttons to turn into retire buttons.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct Registrations {
+    pub tournaments: Vec<TournamentId>,
+}
+
 /// One tournament with everything a page needs.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]

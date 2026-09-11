@@ -144,13 +144,3 @@ const players = data?.items
   </div>
   {data && <Pager page={page} totalPages={data.totalPages} total={data.total} href="/admin/players" noun="player" />}
 </AdminLayout>
-
-<script>
-  // One listener for every destructive form. The text lives in a data attribute,
-  // so a handle never lands inside a JavaScript string.
-  for (const form of document.querySelectorAll<HTMLFormElement>("form[data-confirm]")) {
-    form.addEventListener("submit", event => {
-      if (!window.confirm(form.dataset.confirm ?? "are you sure?")) event.preventDefault()
-    })
-  }
-</script>

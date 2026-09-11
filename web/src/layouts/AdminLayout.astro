@@ -15,7 +15,7 @@ const sections: { key: Section; label: string; href: string; ready: boolean }[] 
   { key: "overview", label: "overview", href: "/admin", ready: true },
   { key: "players", label: "players", href: "/admin/players", ready: true },
   { key: "events", label: "events", href: "/admin/events", ready: false },
-  { key: "tournaments", label: "tournaments", href: "/admin/tournaments", ready: false },
+  { key: "tournaments", label: "tournaments", href: "/admin/tournaments", ready: true },
   { key: "scores", label: "scores", href: "/admin/scores", ready: false },
 ]
 ---
@@ -77,6 +77,33 @@ const sections: { key: Section; label: string; href: string; ready: boolean }[] 
     </div>
 
     <div class="hazard fixed inset-x-0 bottom-0 h-1.5"></div>
+  <script>
+      // One listener for every destructive form. The text lives in a data
+      // attribute, so a name never lands inside a JavaScript string.
+      for (const form of document.querySelectorAll<HTMLFormElement>("form[data-confirm]")) {
+        form.addEventListener("submit", event => {
+          if (!window.confirm(form.dataset.confirm ?? "are you sure?")) event.preventDefault()
+        })
+      }
+
+      // The server cannot know the admin's timezone. A local datetime field
+      // writes its instant into the hidden field that the form sends.
+      for (const local of document.querySelectorAll<HTMLInputElement>("input[data-iso-for]")) {
+        const hidden = local.form?.elements.namedItem(local.dataset.isoFor ?? "")
+        if (!(hidden instanceof HTMLInputElement)) continue
+        if (local.dataset.iso) {
+          const at = new Date(local.dataset.iso)
+          const pad = (n: number) => String(n).padStart(2, "0")
+          local.value = `${at.getFullYear()}-${pad(at.getMonth() + 1)}-${pad(at.getDate())}T${pad(at.getHours())}:${pad(at.getMinutes())}`
+        }
+        const sync = () => {
+          if (local.value) hidden.value = new Date(local.value).toISOString()
+        }
+        local.addEventListener("input", sync)
+        local.form?.addEventListener("submit", sync)
+        sync()
+      }
+    </script>
   </body>
 </html>
 

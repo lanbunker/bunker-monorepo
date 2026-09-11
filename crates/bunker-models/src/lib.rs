@@ -33,7 +33,7 @@ pub use role::{Role, RoleUpdate, UnknownRole};
 pub use tournament::{
     DESCRIPTION_MAX_LEN, Description, DescriptionError, Entrant, EntrantAdd, EntrantId,
     GAME_MODE_MAX_LEN, GAME_NAME_MAX_LEN, GameMode, GameModeError, GameName, GameNameError,
-    MatchResult, NewTournament, SeedOrder, StatusChange, TOURNAMENT_NAME_MAX_LEN, Tournament,
-    TournamentDetail, TournamentId, TournamentName, TournamentNameError, TournamentStatus,
-    TournamentUpdate, UnknownStatus,
+    MatchResult, NewTournament, Registrations, SeedOrder, StatusChange, TOURNAMENT_NAME_MAX_LEN,
+    Tournament, TournamentDetail, TournamentId, TournamentName, TournamentNameError,
+    TournamentStatus, TournamentUpdate, UnknownStatus,
 };

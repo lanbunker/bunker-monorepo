@@ -4,6 +4,7 @@ import { z } from "zod"
 
 import { SESSION_COOKIE, apiClient, errorMessage } from "../lib/api"
 import type { ApiErrorBody } from "../lib/api"
+import { tournamentActions } from "./tournaments"
 
 const handleField = z.string().min(3).max(20)
 
@@ -38,6 +39,8 @@ const requireAdmin = (locals: App.Locals): string => {
 }
 
 export const server = {
+    ...tournamentActions,
+
     signup: defineAction({
         accept: "form",
         input: credentials
