@@ -1,11 +1,15 @@
 ---
 import Alert from "../../components/ui/Alert.astro"
+import Button from "../../components/ui/Button.astro"
 import Glyph from "../../components/ui/Glyph.astro"
 import Pager from "../../components/ui/Pager.astro"
 import Panel from "../../components/ui/Panel.astro"
 import Prompt from "../../components/ui/Prompt.astro"
+import RankMark from "../../components/ui/RankMark.astro"
+import Table from "../../components/ui/Table.astro"
 import Layout from "../../layouts/Layout.astro"
 import { call, dataOf, failureOf, messageOf } from "../../lib/api"
+import { formatCycles } from "../../lib/cycles"
 import { formatDate } from "../../lib/dates"
 import { PAGE_SIZE, pageFrom } from "../../lib/paging"
 
@@ -18,13 +22,15 @@ if (roster && page > roster.totalPages && roster.totalPages > 0) {
   return Astro.redirect(`/players?page=${roster.totalPages}`)
 }
 const failure = failureOf(result)
-const offset = (page - 1) * PAGE_SIZE
+const me = Astro.locals.player?.id
 ---
 
 <Layout title="PLAYERS//LAN_BUNKER" active="players">
   <Prompt
-    command="ls /players"
-    comment={roster ? `bunkernet // ${roster.total} enlisted` : "bunkernet offline"}
+    command="sort -rn /players"
+    comment={
+      roster ? `bunkernet // ${roster.total} enlisted, by cycles` : "bunkernet offline"
+    }
   />
 
   <Panel>
@@ -40,42 +46,63 @@ const offset = (page - 1) * PAGE_SIZE
         </a>
       </p>
     ) : (
-      <table class="w-full border-collapse text-xs">
+      <Table label="leaderboard">
         <thead>
           <tr class="text-left text-2xs tracking-wider text-dim">
-            <th class="w-[8%] pb-2 font-normal">#</th>
-            <th class="w-[52%] pb-2 font-normal">player</th>
-            <th class="w-[15%] pb-2 font-normal">role</th>
-            <th class="w-[25%] pb-2 text-right font-normal">enlisted</th>
+            <th class="w-[8%] px-3 pb-2 font-normal">#</th>
+            <th class="w-[40%] pb-2 font-normal">player</th>
+            <th class="w-[22%] pb-2 font-normal">rank</th>
+            <th class="w-[14%] pb-2 text-right font-normal">cycles</th>
+            <th class="hide-narrow w-[16%] px-3 pb-2 text-right font-normal">enlisted</th>
           </tr>
         </thead>
         <tbody>
-          {roster.items.map((player, i) => (
-            <tr class="border-t border-faint hover:bg-faint/40">
-              <td class="py-2 text-mute tabular-nums">
-                {String(offset + i + 1).padStart(2, "0")}
+          {roster.items.map(player => (
+            <tr
+              class:list={[
+                "border-t border-faint hover:bg-faint/40",
+                player.id === me && "bg-accent/5",
+              ]}
+              data-place={player.standing.place}
+            >
+              <td
+                class:list={[
+                  "nowrap px-3 py-2 tabular-nums",
+                  player.standing.place <= 3 && player.standing.cycles > 0
+                    ? "font-bold text-bright"
+                    : "text-mute",
+                ]}
+              >
+                #{String(player.standing.place).padStart(2, "0")}
+              </td>
+              <td class="nowrap py-2">
+                <span class="inline-flex items-center gap-2">
+                  <a
+                    href={`/players/${player.handle}`}
+                    class="inline-flex items-center gap-2 no-underline text-bright hover:text-accent"
+                  >
+                    <Glyph glyph={player.glyph} size="1.1em" />
+                    {player.handle}
+                  </a>
+                  {player.role === "admin" && (
+                    <span class="text-2xs text-warn">admin</span>
+                  )}
+                  {player.id === me && <span class="text-2xs text-accent">you</span>}
+                </span>
               </td>
               <td class="py-2">
-                <a
-                  href={`/players/${player.handle}`}
-                  class="inline-flex items-center gap-2 no-underline text-bright hover:text-accent"
-                >
-                  <Glyph glyph={player.glyph} size="1.1em" />
-                  {player.handle}
-                </a>
+                <RankMark rank={player.standing.rank} labelled />
               </td>
-              <td
-                class:list={["py-2", player.role === "admin" ? "text-warn" : "text-dim"]}
-              >
-                {player.role}
+              <td class="nowrap py-2 text-right text-accent tabular-nums">
+                {formatCycles(player.standing.cycles)}
               </td>
-              <td class="py-2 text-right text-dim">
+              <td class="hide-narrow nowrap px-3 py-2 text-right text-dim">
                 {formatDate(new Date(player.createdAt))}
               </td>
             </tr>
           ))}
         </tbody>
-      </table>
+      </Table>
     )}
     {roster && (
       <Pager
@@ -88,10 +115,9 @@ const offset = (page - 1) * PAGE_SIZE
     )}
   </Panel>
 
-  <Prompt command="cat ./scores.db" comment="all time" />
-
-  <Panel tone="muted" class="text-center">
-    <p class="text-xs tracking-wider text-dim">{"// coming soon"}</p>
-    <p class="mt-2 text-2xs text-mute">records, tournaments and all-time rankings.</p>
-  </Panel>
+  <div class="mt-4">
+    <Button href="/cycles" variant="ghost" size="sm">
+      HOW TO EARN CYCLES
+    </Button>
+  </div>
 </Layout>

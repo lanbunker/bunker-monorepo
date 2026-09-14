@@ -1,9 +1,10 @@
 use bunker_models::{Account, Glyph, Handle, PageQuery, Paginated, Player, PlayerId, Role};
+use sqlx::SqliteConnection;
 use time::OffsetDateTime;
 
 use super::db::DbPool;
 use super::error::StorageError;
-use super::row::{PlayerRow, parse_uuid, to_micros};
+use super::row::{MalformedField, PlayerRow, parse_uuid, to_micros};
 
 const TABLE: &str = "players";
 
@@ -44,6 +45,15 @@ pub struct StoredAccount {
     pub credentials_changed_at: i64,
 }
 
+/// How a list of players is sorted.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ListOrder {
+    /// The leaderboard: first place first.
+    Standing,
+    /// The roster of the backoffice: the last signup first.
+    Newest,
+}
+
 /// The hash never leaves the auth service.
 #[derive(Debug, Clone)]
 pub struct Credentials {
@@ -69,6 +79,7 @@ impl PlayerStorage {
         let created_at = to_micros(TABLE, player.created_at)?;
 
         let role = Role::User.as_str();
+        let mut tx = self.pool.begin().await.map_err(StorageError::from_query)?;
         let inserted = sqlx::query!(
             "insert into players (id, handle, password_hash, glyph_bits, glyph_color, role, created_at)
              values (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
@@ -80,19 +91,20 @@ impl PlayerStorage {
             role,
             created_at,
         )
-        .execute(&self.pool)
+        .execute(&mut *tx)
         .await;
 
-        match inserted {
-            Ok(_) => Ok(Created::Player(Player {
-                id: player.id,
-                handle: player.handle.clone(),
-                glyph: player.glyph,
-                role: Role::User,
-                created_at: player.created_at,
-            })),
-            Err(error) => handle_taken(error).map(|()| Created::HandleTaken),
+        if let Err(error) = inserted {
+            return handle_taken(error).map(|()| Created::HandleTaken);
         }
+        // The standing comes from the view, so the new row is read back instead
+        // of built here. The row was just written on this same transaction.
+        let player = public_by_id(&mut tx, player.id)
+            .await?
+            .ok_or_else(|| StorageError::malformed_row(TABLE, MalformedField("id")))?;
+        tx.commit().await.map_err(StorageError::from_query)?;
+
+        Ok(Created::Player(player))
     }
 
     /// The lookup is case-insensitive, because the unique index is. `Dave` and
@@ -101,8 +113,10 @@ impl PlayerStorage {
         let handle = handle.as_ref();
         let row = sqlx::query_as!(
             PlayerRow,
-            "select id, handle, glyph_bits, glyph_color, role, created_at
-             from players where handle = ?1 collate nocase",
+            r#"select p.id, p.handle, p.glyph_bits, p.glyph_color, p.role, p.created_at,
+                    s.cycles as "cycles!: i64", s.place as "place!: i64", s.players as "players!: i64"
+             from players p join player_standings s on s.player_id = p.id
+             where p.handle = ?1 collate nocase"#,
             handle,
         )
         .fetch_optional(&self.pool)
@@ -112,13 +126,26 @@ impl PlayerStorage {
         row.map(TryInto::try_into).transpose()
     }
 
+    /// The public player with the id, without the account fields.
+    pub async fn get_by_id_public(&self, id: PlayerId) -> Result<Option<Player>, StorageError> {
+        let mut connection = self
+            .pool
+            .acquire()
+            .await
+            .map_err(StorageError::from_query)?;
+
+        public_by_id(&mut connection, id).await
+    }
+
     pub async fn get_by_id(&self, id: PlayerId) -> Result<Option<StoredAccount>, StorageError> {
         let id = id.into_inner().to_string();
         let row = sqlx::query_as!(
             AccountRow,
-            "select id, handle, glyph_bits, glyph_color, role, created_at,
-                    must_change_password, credentials_changed_at
-             from players where id = ?1",
+            r#"select p.id, p.handle, p.glyph_bits, p.glyph_color, p.role, p.created_at,
+                      s.cycles as "cycles!: i64", s.place as "place!: i64", s.players as "players!: i64",
+                      p.must_change_password, p.credentials_changed_at
+               from players p join player_standings s on s.player_id = p.id
+               where p.id = ?1"#,
             id,
         )
         .fetch_optional(&self.pool)
@@ -198,23 +225,34 @@ impl PlayerStorage {
         .transpose()
     }
 
-    /// Newest first, so a roster shows who joined last at the top. The id breaks a
-    /// tie, so two signups in the same microsecond keep one order.
-    ///
     /// The count and the page run in one transaction, so both see the same rows.
-    pub async fn list(&self, query: PageQuery) -> Result<Paginated<Player>, StorageError> {
+    /// The id breaks every tie, so two signups in the same microsecond keep one
+    /// order.
+    pub async fn list(
+        &self,
+        query: PageQuery,
+        order: ListOrder,
+    ) -> Result<Paginated<Player>, StorageError> {
         let limit = query.limit();
         let offset = query.offset();
+        let by_standing = i64::from(matches!(order, ListOrder::Standing));
 
         let mut tx = self.pool.begin().await.map_err(StorageError::from_query)?;
         let total = sqlx::query_scalar!("select count(*) from players")
             .fetch_one(&mut *tx)
             .await
             .map_err(StorageError::from_query)?;
+        // One query for both orders: the leaderboard sorts by place first, and
+        // a shared place falls back to the newest player, like the roster.
         let rows = sqlx::query_as!(
             PlayerRow,
-            "select id, handle, glyph_bits, glyph_color, role, created_at
-             from players order by created_at desc, id asc limit ?1 offset ?2",
+            r#"select p.id, p.handle, p.glyph_bits, p.glyph_color, p.role, p.created_at,
+                      s.cycles as "cycles!: i64", s.place as "place!: i64", s.players as "players!: i64"
+               from players p join player_standings s on s.player_id = p.id
+               order by case when ?1 = 1 then s.place else 0 end asc,
+                        p.created_at desc, p.id asc
+               limit ?2 offset ?3"#,
+            by_standing,
             limit,
             offset,
         )
@@ -235,42 +273,44 @@ impl PlayerStorage {
         ))
     }
 
-    /// `None` when no row has the id.
+    /// `None` when no row has the id. The write and the read back share one
+    /// transaction, so a delete in between cannot turn a done update into a
+    /// missing player.
     pub async fn set_role(&self, id: PlayerId, role: Role) -> Result<Option<Player>, StorageError> {
-        let id = id.into_inner().to_string();
+        let key = id.into_inner().to_string();
         let role = role.as_str();
-        let row = sqlx::query_as!(
-            PlayerRow,
-            "update players set role = ?1 where id = ?2
-             returning id, handle, glyph_bits, glyph_color, role, created_at",
-            role,
-            id,
-        )
-        .fetch_optional(&self.pool)
-        .await
-        .map_err(StorageError::from_query)?;
+        let mut tx = self.pool.begin().await.map_err(StorageError::from_query)?;
+        let result = sqlx::query!("update players set role = ?1 where id = ?2", role, key)
+            .execute(&mut *tx)
+            .await
+            .map_err(StorageError::from_query)?;
+        if result.rows_affected() == 0 {
+            return Ok(None);
+        }
+        let player = public_by_id(&mut tx, id).await?;
+        tx.commit().await.map_err(StorageError::from_query)?;
 
-        row.map(TryInto::try_into).transpose()
+        Ok(player)
     }
 
     pub async fn rename(&self, id: PlayerId, handle: &Handle) -> Result<Renamed, StorageError> {
-        let id = id.into_inner().to_string();
+        let key = id.into_inner().to_string();
         let handle = handle.as_ref();
-        let updated = sqlx::query_as!(
-            PlayerRow,
-            "update players set handle = ?1 where id = ?2
-             returning id, handle, glyph_bits, glyph_color, role, created_at",
-            handle,
-            id,
-        )
-        .fetch_optional(&self.pool)
-        .await;
-
-        match updated {
-            Ok(Some(row)) => Ok(Renamed::Player(row.try_into()?)),
-            Ok(None) => Ok(Renamed::NotFound),
-            Err(error) => handle_taken(error).map(|()| Renamed::HandleTaken),
+        let mut tx = self.pool.begin().await.map_err(StorageError::from_query)?;
+        let updated = sqlx::query!("update players set handle = ?1 where id = ?2", handle, key)
+            .execute(&mut *tx)
+            .await;
+        let result = match updated {
+            Ok(result) => result,
+            Err(error) => return handle_taken(error).map(|()| Renamed::HandleTaken),
+        };
+        if result.rows_affected() == 0 {
+            return Ok(Renamed::NotFound);
         }
+        let player = public_by_id(&mut tx, id).await?;
+        tx.commit().await.map_err(StorageError::from_query)?;
+
+        Ok(player.map_or(Renamed::NotFound, Renamed::Player))
     }
 
     /// `true` when a row was removed.
@@ -305,6 +345,9 @@ struct AccountRow {
     glyph_color: String,
     role: String,
     created_at: i64,
+    cycles: i64,
+    place: i64,
+    players: i64,
     must_change_password: i64,
     credentials_changed_at: i64,
 }
@@ -320,6 +363,9 @@ impl TryFrom<AccountRow> for StoredAccount {
             glyph_color: row.glyph_color,
             role: row.role,
             created_at: row.created_at,
+            cycles: row.cycles,
+            place: row.place,
+            players: row.players,
         }
         .try_into()?;
 
@@ -331,6 +377,28 @@ impl TryFrom<AccountRow> for StoredAccount {
             credentials_changed_at: row.credentials_changed_at,
         })
     }
+}
+
+/// The public columns of one player with the standing, on any connection, so a
+/// write and its read back can share a transaction.
+async fn public_by_id(
+    connection: &mut SqliteConnection,
+    id: PlayerId,
+) -> Result<Option<Player>, StorageError> {
+    let id = id.into_inner().to_string();
+    let row = sqlx::query_as!(
+        PlayerRow,
+        r#"select p.id, p.handle, p.glyph_bits, p.glyph_color, p.role, p.created_at,
+                  s.cycles as "cycles!: i64", s.place as "place!: i64", s.players as "players!: i64"
+           from players p join player_standings s on s.player_id = p.id
+           where p.id = ?1"#,
+        id,
+    )
+    .fetch_optional(&mut *connection)
+    .await
+    .map_err(StorageError::from_query)?;
+
+    row.map(TryInto::try_into).transpose()
 }
 
 /// `Ok` when the write hit the case-insensitive unique index on the handle, so

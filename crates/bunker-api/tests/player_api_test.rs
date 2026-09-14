@@ -99,8 +99,17 @@ async fn a_player_has_the_documented_wire_shape() {
     let object = body.as_object().unwrap();
     let mut keys: Vec<&str> = object.keys().map(String::as_str).collect();
     keys.sort_unstable();
-    assert_eq!(keys, ["createdAt", "glyph", "handle", "id", "role"]);
+    assert_eq!(
+        keys,
+        ["createdAt", "glyph", "handle", "id", "role", "standing"]
+    );
     assert_eq!(body["role"], "user");
+    assert_eq!(body["standing"]["cycles"], 0);
+    assert_eq!(body["standing"]["rank"], "zombie");
+    assert_eq!(body["standing"]["place"], 1);
+    assert_eq!(body["standing"]["players"], 1);
+    assert_eq!(body["standing"]["next"]["rank"], "guest");
+    assert_eq!(body["standing"]["next"]["floor"], 100);
     assert_eq!(body["glyph"]["color"], "#ff6b57");
     assert_eq!(body["glyph"]["bits"], 4_554_623);
     assert!(body["createdAt"].as_str().unwrap().ends_with('Z'));

@@ -106,9 +106,12 @@ or `test`.
 | GET | `/api/me` | bearer | the caller and whether a password change is due |
 | POST | `/api/me/password` | bearer | change the password, current one required. Answers a fresh token, every older token dies |
 | PUT | `/api/me/handle` | bearer | change the handle. The glyph stays |
-| GET | `/api/players` | none | roster, newest first. `?page=1&pageSize=20`, pageSize up to 100 |
-| GET | `/api/players/{handle}` | none | one player |
-| GET | `/api/admin/players` | admin | every player, same paging as `/api/players` |
+| GET | `/api/players` | none | the leaderboard, first place first. `?page=1&pageSize=20`, pageSize up to 100 |
+| GET | `/api/players/{handle}` | none | one player, with cycles, rank and place |
+| GET | `/api/players/{handle}/cycles` | none | the cycles log, newest first, with the totals by kind |
+| GET | `/api/cycles/rules` | none | how cycles are earned, and the ladder |
+| GET | `/api/admin/players` | admin | every player, newest first, same paging as `/api/players` |
+| POST | `/api/admin/players/{id}/cycles` | admin | add or take cycles, with a note |
 | PATCH | `/api/admin/players/{id}` | admin | set the role |
 | PUT | `/api/admin/players/{id}/handle` | admin | rename a player |
 | POST | `/api/admin/players/{id}/password-reset` | admin | temporary password, forces a change at login |
@@ -158,9 +161,39 @@ removed, as long as the tournament is not concluded. With a bracket, the final
 decides the winner. Without one, the admin names the winner among the entrants,
 or nobody.
 
-Matches point at entrants and not at players, so a team can enter one day. The
-placements a bracket implies, second for the loser of the final and so on, are
-the input of a future score system. Nothing is stored for that yet.
+Matches point at entrants and not at players, so a team can enter one day.
+
+## Cycles
+
+Cycles are the points. The ledger is one table, `point_entries`: every gain and
+every loss is a signed row with a kind, and nothing else is stored. The total
+of a player is a sum, the rank is a threshold on the total, and the place is the
+position among all players. A view, `player_standings`, computes the three on
+every read, so they are never stale. A row is never updated or deleted. A
+correction is a new row with the opposite sign and a note.
+
+Two sources write the ledger today. A concluded tournament pays every entrant
+for the entry, every won match, and the placements: champion, finalist and the
+two semifinalists. The entry and a win pay the same in every field. A placement
+follows the size of the field, every entrant counted: small below 8, medium
+below 16, large from 16 on, and the large tier is a cap. Without a bracket only
+the entry and the named winner pay.
+The rows are written in the transaction that concludes the tournament. Every
+row names its source, the tournament or the match, and a unique index on the
+kind, the player and the source makes a second payment a failure and not a
+duplicate. An admin adds or
+takes cycles by hand, with a note that everyone reads.
+A deleted tournament takes its cycles with it, and so does a deleted player.
+
+The amounts and the ladder live in one file, `crates/bunker-models/src/points.rs`.
+`GET /api/cycles/rules` serves them, and the site renders its legend from that
+call, so the page can never disagree with the ledger. The ranks, bottom first:
+zombie, guest at 100, user at 600, sudoer at 1500, daemon at 3000, kernel at 6000.
+
+A future source, such as a check-in at the door or an arcade score, is one
+variant in `PointKind` with its amount, one writer that names its source, and
+one migration that recreates the table with the new kind in the CHECK list,
+because SQLite cannot alter a CHECK in place.
 
 The bracket rules live in `crates/bunker-models/src/bracket.rs` as pure data with
 their own tests. The site shows a bracket on `/tournaments/{id}/bracket`, and

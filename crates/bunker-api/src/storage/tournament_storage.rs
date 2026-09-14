@@ -1,5 +1,5 @@
 use bunker_models::{
-    Bracket, Description, Entrant, EntrantId, GameMode, GameName, Match, MatchId, PageQuery,
+    Award, Bracket, Description, Entrant, EntrantId, GameMode, GameName, Match, MatchId, PageQuery,
     Paginated, Player, PlayerId, SkillLevel, Tournament, TournamentId, TournamentName,
     TournamentStatus, TournamentUpdate,
 };
@@ -8,6 +8,7 @@ use time::{Date, OffsetDateTime};
 
 use super::db::DbPool;
 use super::error::StorageError;
+use super::point_storage::insert_awards;
 use super::row::{MalformedField, PlayerRow, from_micros, parse_uuid, to_micros};
 
 const TOURNAMENTS: &str = "tournaments";
@@ -104,10 +105,12 @@ impl TournamentStorage {
                       w.registered_at as "winner_registered_at?",
                       p.id as "winner_player_id?", p.handle as "winner_handle?",
                       p.glyph_bits as "winner_glyph_bits?", p.glyph_color as "winner_glyph_color?",
-                      p.role as "winner_role?", p.created_at as "winner_player_created_at?"
+                      p.role as "winner_role?", p.created_at as "winner_player_created_at?",
+                      s.cycles as "winner_cycles?: i64", s.place as "winner_place?: i64", s.players as "winner_players?: i64"
                from tournaments t
                left join tournament_entrants w on w.id = t.winner_entrant_id
                left join players p on p.id = w.player_id
+               left join player_standings s on s.player_id = p.id
                where t.id = ?1"#,
             id,
         )
@@ -149,10 +152,12 @@ impl TournamentStorage {
                       w.registered_at as "winner_registered_at?",
                       p.id as "winner_player_id?", p.handle as "winner_handle?",
                       p.glyph_bits as "winner_glyph_bits?", p.glyph_color as "winner_glyph_color?",
-                      p.role as "winner_role?", p.created_at as "winner_player_created_at?"
+                      p.role as "winner_role?", p.created_at as "winner_player_created_at?",
+                      s.cycles as "winner_cycles?: i64", s.place as "winner_place?: i64", s.players as "winner_players?: i64"
                from tournaments t
                left join tournament_entrants w on w.id = t.winner_entrant_id
                left join players p on p.id = w.player_id
+               left join player_standings s on s.player_id = p.id
                where ?1 = 1 or t.status != ?2
                order by t.date desc, t.created_at desc, t.id asc
                limit ?3 offset ?4"#,
@@ -219,25 +224,32 @@ impl TournamentStorage {
         Ok(result.rows_affected() > 0)
     }
 
+    /// The status, the winner and the cycles the conclusion pays, in one
+    /// transaction: a concluded tournament is never half paid.
     pub async fn set_status(
         &self,
         id: TournamentId,
         status: TournamentStatus,
         winner: Option<EntrantId>,
+        awards: &[Award],
+        at: OffsetDateTime,
     ) -> Result<bool, StorageError> {
-        let id = id.into_inner().to_string();
+        let tournament = id.into_inner().to_string();
         let status = status.as_str();
         let winner = winner.map(|w| w.into_inner().to_string());
 
+        let mut tx = self.pool.begin().await.map_err(StorageError::from_query)?;
         let result = sqlx::query!(
             "update tournaments set status = ?1, winner_entrant_id = ?2 where id = ?3",
             status,
             winner,
-            id,
+            tournament,
         )
-        .execute(&self.pool)
+        .execute(&mut *tx)
         .await
         .map_err(StorageError::from_query)?;
+        insert_awards(&mut tx, id, awards, at).await?;
+        tx.commit().await.map_err(StorageError::from_query)?;
 
         Ok(result.rows_affected() > 0)
     }
@@ -260,9 +272,11 @@ impl TournamentStorage {
             EntrantRow,
             r#"select e.id, e.seed, e.skill, e.registered_at,
                       p.id as "player_id?", p.handle as "handle?", p.glyph_bits as "glyph_bits?",
-                      p.glyph_color as "glyph_color?", p.role as "role?", p.created_at as "player_created_at?"
+                      p.glyph_color as "glyph_color?", p.role as "role?", p.created_at as "player_created_at?",
+                      s.cycles as "cycles?: i64", s.place as "place?: i64", s.players as "players?: i64"
                from tournament_entrants e
                left join players p on p.id = e.player_id
+               left join player_standings s on s.player_id = p.id
                where e.tournament_id = ?1
                order by e.seed is null, e.seed asc, e.registered_at asc, e.id asc"#,
             tournament,
@@ -285,9 +299,11 @@ impl TournamentStorage {
             EntrantRow,
             r#"select e.id, e.seed, e.skill, e.registered_at,
                       p.id as "player_id?", p.handle as "handle?", p.glyph_bits as "glyph_bits?",
-                      p.glyph_color as "glyph_color?", p.role as "role?", p.created_at as "player_created_at?"
+                      p.glyph_color as "glyph_color?", p.role as "role?", p.created_at as "player_created_at?",
+                      s.cycles as "cycles?: i64", s.place as "place?: i64", s.players as "players?: i64"
                from tournament_entrants e
                left join players p on p.id = e.player_id
+               left join player_standings s on s.player_id = p.id
                where e.tournament_id = ?1 and e.player_id = ?2"#,
             tournament,
             player,
@@ -590,6 +606,9 @@ struct TournamentRow {
     winner_glyph_color: Option<String>,
     winner_role: Option<String>,
     winner_player_created_at: Option<i64>,
+    winner_cycles: Option<i64>,
+    winner_place: Option<i64>,
+    winner_players: Option<i64>,
 }
 
 impl TryFrom<TournamentRow> for Tournament {
@@ -609,6 +628,9 @@ impl TryFrom<TournamentRow> for Tournament {
                     glyph_color: row.winner_glyph_color,
                     role: row.winner_role,
                     player_created_at: row.winner_player_created_at,
+                    cycles: row.winner_cycles,
+                    place: row.winner_place,
+                    players: row.winner_players,
                 }
                 .try_into()?,
             ),
@@ -652,6 +674,9 @@ struct EntrantRow {
     glyph_color: Option<String>,
     role: Option<String>,
     player_created_at: Option<i64>,
+    cycles: Option<i64>,
+    place: Option<i64>,
+    players: Option<i64>,
 }
 
 impl TryFrom<EntrantRow> for Entrant {
@@ -667,6 +692,9 @@ impl TryFrom<EntrantRow> for Entrant {
             row.glyph_color,
             row.role,
             row.player_created_at,
+            row.cycles,
+            row.place,
+            row.players,
         ) {
             (
                 Some(id),
@@ -675,6 +703,9 @@ impl TryFrom<EntrantRow> for Entrant {
                 Some(glyph_color),
                 Some(role),
                 Some(created_at),
+                Some(cycles),
+                Some(place),
+                Some(players),
             ) => Some(
                 PlayerRow {
                     id,
@@ -683,10 +714,13 @@ impl TryFrom<EntrantRow> for Entrant {
                     glyph_color,
                     role,
                     created_at,
+                    cycles,
+                    place,
+                    players,
                 }
                 .try_into()?,
             ),
-            (None, None, None, None, None, None) => None,
+            (None, None, None, None, None, None, None, None, None) => None,
             _ => {
                 return Err(StorageError::malformed_row(
                     ENTRANTS,

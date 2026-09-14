@@ -3,12 +3,13 @@ use axum::http::StatusCode;
 use axum::routing::{get, post, put};
 use axum::{Json, Router};
 use bunker_models::{
-    HandleChange, PageQuery, Paginated, Player, PlayerId, RoleUpdate, TemporaryPassword,
+    Adjustment, HandleChange, PageQuery, Paginated, Player, PlayerId, PointEntry, RoleUpdate,
+    TemporaryPassword,
 };
 use serde::Deserialize;
 
 use crate::internal::http::{AdminOnly, ApiError, ApiErrorBody, ValidJson, ValidPath, ValidQuery};
-use crate::services::{AuthService, PlayerService};
+use crate::services::{AuthService, PlayerService, PointsService};
 
 use super::AppState;
 
@@ -25,6 +26,7 @@ pub fn admin_router() -> Router<AppState> {
             "/api/admin/players/{id}/password-reset",
             post(reset_password),
         )
+        .route("/api/admin/players/{id}/cycles", post(adjust_cycles))
         .route("/api/admin/players/{id}/handle", put(rename_player))
 }
 
@@ -40,7 +42,7 @@ pub(super) struct PlayerIdPath {
     security(("bearer" = [])),
     params(PageQuery),
     responses(
-        (status = 200, body = Paginated<Player>),
+        (status = 200, body = Paginated<Player>, description = "The last signup first"),
         (status = 400, body = ApiErrorBody),
         (status = 401, body = ApiErrorBody),
         (status = 403, body = ApiErrorBody),
@@ -51,7 +53,34 @@ pub(super) async fn list_players(
     AdminOnly(_admin): AdminOnly,
     ValidQuery(query): ValidQuery<PageQuery>,
 ) -> Result<Json<Paginated<Player>>, ApiError> {
-    Ok(Json(players.list(query).await?))
+    Ok(Json(players.roster(query).await?))
+}
+
+#[utoipa::path(
+    post,
+    path = "/api/admin/players/{id}/cycles",
+    tag = "admin",
+    security(("bearer" = [])),
+    params(PlayerIdPath),
+    request_body = Adjustment,
+    responses(
+        (status = 201, body = PointEntry, description = "The new line of the ledger"),
+        (status = 400, body = ApiErrorBody),
+        (status = 401, body = ApiErrorBody),
+        (status = 403, body = ApiErrorBody, description = "Not an admin, or the admin's own account"),
+        (status = 404, body = ApiErrorBody),
+        (status = 422, body = ApiErrorBody, description = "Zero, out of range, or no note"),
+    )
+)]
+pub(super) async fn adjust_cycles(
+    State(points): State<PointsService>,
+    AdminOnly(admin): AdminOnly,
+    ValidPath(path): ValidPath<PlayerIdPath>,
+    ValidJson(adjustment): ValidJson<Adjustment>,
+) -> Result<(StatusCode, Json<PointEntry>), ApiError> {
+    let entry = points.adjust(admin.player.id, path.id, adjustment).await?;
+
+    Ok((StatusCode::CREATED, Json(entry)))
 }
 
 #[utoipa::path(

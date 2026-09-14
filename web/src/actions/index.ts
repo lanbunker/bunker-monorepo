@@ -5,6 +5,7 @@ import { z } from "zod"
 import { requireAdmin, requireToken, unwrap } from "../lib/action"
 import { SESSION_COOKIE, call, callEmpty } from "../lib/api"
 import {
+    adjustmentInput,
     credentials,
     handle,
     passwordChangeInput,
@@ -151,6 +152,24 @@ export const server = {
                 ),
             )
             return { handle: player.handle, role: player.role }
+        },
+    }),
+
+    adjustCycles: defineAction({
+        accept: "form",
+        input: adjustmentInput,
+        handler: async (input, context) => {
+            const entry = unwrap(
+                await call(
+                    client =>
+                        client.POST("/api/admin/players/{id}/cycles", {
+                            params: { path: { id: input.id } },
+                            body: { amount: input.amount, note: input.note },
+                        }),
+                    requireAdmin(context.locals),
+                ),
+            )
+            return { handle: input.handle, amount: entry.amount }
         },
     }),
 

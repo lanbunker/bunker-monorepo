@@ -1,17 +1,34 @@
 ---
 import { actions } from "astro:actions"
+import CyclesPanel from "../components/CyclesPanel.astro"
 import PlayerCard from "../components/PlayerCard.astro"
+import StandingPanels from "../components/StandingPanels.astro"
 import Button from "../components/ui/Button.astro"
 import Prompt from "../components/ui/Prompt.astro"
 import Layout from "../layouts/Layout.astro"
+import { call, dataOf } from "../lib/api"
+import { RECENT_ENTRIES } from "../lib/paging"
+import { sessionOf } from "../lib/session"
 
 // The middleware read the cookie before the action deleted it, so on a logout
 // the player is still in locals for this one render.
 const loggedOut = Astro.getActionResult(actions.logout)
 if (loggedOut && !loggedOut.error) return Astro.redirect("/login")
 
-const player = Astro.locals.player
-if (!player) return Astro.redirect("/login")
+const session = sessionOf(Astro.locals)
+if (!session) return Astro.redirect("/login")
+const player = session.player
+// The middleware read the player already. The log is the one extra call.
+const log = dataOf(
+  await call(client =>
+    client.GET("/api/players/{handle}/cycles", {
+      params: {
+        path: { handle: player.handle },
+        query: { page: 1, pageSize: RECENT_ENTRIES },
+      },
+    }),
+  ),
+)
 
 // `/password` and `/handle` redirect here after a change. An action result does
 // not survive a redirect, so the flag rides on the query string.
@@ -34,6 +51,9 @@ const notice =
   )}
 
   <PlayerCard player={player} own />
+  <StandingPanels standing={player.standing} totals={log?.totals} />
+
+  <CyclesPanel handle={player.handle} log={log} own />
 
   <div class="mt-6 flex flex-wrap items-center gap-3">
     <Button href={`/players/${player.handle}`} variant="ghost">

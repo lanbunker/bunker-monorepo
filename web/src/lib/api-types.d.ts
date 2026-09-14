@@ -36,6 +36,22 @@ export interface paths {
         patch: operations["set_role"]
         trace?: never
     }
+    "/api/admin/players/{id}/cycles": {
+        parameters: {
+            query?: never
+            header?: never
+            path?: never
+            cookie?: never
+        }
+        get?: never
+        put?: never
+        post: operations["adjust_cycles"]
+        delete?: never
+        options?: never
+        head?: never
+        patch?: never
+        trace?: never
+    }
     "/api/admin/players/{id}/handle": {
         parameters: {
             query?: never
@@ -228,6 +244,22 @@ export interface paths {
         patch?: never
         trace?: never
     }
+    "/api/cycles/rules": {
+        parameters: {
+            query?: never
+            header?: never
+            path?: never
+            cookie?: never
+        }
+        get: operations["cycles_rules"]
+        put?: never
+        post?: never
+        delete?: never
+        options?: never
+        head?: never
+        patch?: never
+        trace?: never
+    }
     "/api/me": {
         parameters: {
             query?: never
@@ -316,6 +348,22 @@ export interface paths {
             cookie?: never
         }
         get: operations["get_player"]
+        put?: never
+        post?: never
+        delete?: never
+        options?: never
+        head?: never
+        patch?: never
+        trace?: never
+    }
+    "/api/players/{handle}/cycles": {
+        parameters: {
+            query?: never
+            header?: never
+            path?: never
+            cookie?: never
+        }
+        get: operations["cycles_history"]
         put?: never
         post?: never
         delete?: never
@@ -417,6 +465,13 @@ export interface components {
             mustChangePassword: boolean
             player: components["schemas"]["Player"]
         }
+        /** @description Body of `POST /api/admin/players/{id}/cycles`. */
+        Adjustment: {
+            amount: components["schemas"]["Amount"]
+            note: components["schemas"]["Note"]
+        }
+        /** @description Signed cycles. Zero is refused. */
+        Amount: number
         /** @description The one shape every failure has on the wire. */
         ApiErrorBody: {
             /** @description The chain of causes. It is absent if a user can see the response. */
@@ -426,12 +481,42 @@ export interface components {
             /** Format: int32 */
             status: number
         }
+        AwardRule: {
+            /** @description One amount per tier, in the order of `tiers`. */
+            cycles: number[]
+            kind: components["schemas"]["PointKind"]
+        }
         /**
          * @description Every match of a tournament, round by round. `rounds[0]` is round 1 and the
          *     last round holds the final alone.
          */
         Bracket: {
             rounds: components["schemas"]["Match"][][]
+        }
+        /**
+         * @description Answer of `GET /api/players/{handle}/cycles`: one page of the log, and the
+         *     total of every kind over the whole log, so a page can show where the
+         *     cycles came from without reading every line.
+         */
+        CyclesLog: {
+            entries: components["schemas"]["Paginated_PointEntry"]
+            /** @description Kinds with at least one line, in the order of `PointKind::ALL`. */
+            totals: components["schemas"]["KindTotal"][]
+        }
+        /**
+         * @description Answer of `GET /api/cycles/rules`: every way to earn cycles, the field tiers
+         *     and the ladder. Built from the same code the ledger pays from, so a legend
+         *     cannot disagree with it.
+         */
+        CyclesRules: {
+            /** Format: int64 */
+            adjustmentMax: number
+            /** @description In the order a player earns them: entry, wins, then placements. */
+            awards: components["schemas"]["AwardRule"][]
+            /** @description Bottom first. */
+            ranks: components["schemas"]["RankRule"][]
+            /** @description Smallest field first. */
+            tiers: components["schemas"]["TierRule"][]
         }
         Description: string
         /**
@@ -487,6 +572,13 @@ export interface components {
             | "PayloadTooLarge"
             | "RouteNotFound"
             | "MethodNotAllowed"
+        /**
+         * @description The size of the field. A placement pays more in a bigger field. The cuts sit
+         *     on bracket sizes, so a tier changes where a round is added, and the top
+         *     tier is a cap: forty players are not twice the cup of twenty.
+         * @enum {string}
+         */
+        FieldTier: "small" | "medium" | "large"
         GameMode: string
         GameName: string
         /**
@@ -529,6 +621,11 @@ export interface components {
             status: string
             version: string
         }
+        KindTotal: {
+            /** Format: int64 */
+            cycles: number
+            kind: components["schemas"]["PointKind"]
+        }
         /** @description Request body of `POST /api/auth/login`. */
         LoginRequest: {
             handle: components["schemas"]["Handle"]
@@ -565,6 +662,12 @@ export interface components {
             /** Format: date-time */
             registrationClosesAt: string
         }
+        NextRank: {
+            /** Format: int64 */
+            floor: number
+            rank: components["schemas"]["Rank"]
+        }
+        Note: string
         /** @description One page of results, and the totals a client needs for a pager. */
         Paginated_Player: {
             items: {
@@ -574,6 +677,36 @@ export interface components {
                 handle: components["schemas"]["Handle"]
                 id: components["schemas"]["PlayerId"]
                 role: components["schemas"]["Role"]
+                /**
+                 * @description Cycles, rank and place. Derived from the ledger on every read, so it is
+                 *     never stale.
+                 */
+                standing: components["schemas"]["Standing"]
+            }[]
+            /** Format: int32 */
+            page: number
+            /** Format: int32 */
+            pageSize: number
+            /**
+             * Format: int64
+             * @description Every row that matches, ignoring the window.
+             */
+            total: number
+            /** Format: int64 */
+            totalPages: number
+        }
+        /** @description One page of results, and the totals a client needs for a pager. */
+        Paginated_PointEntry: {
+            items: {
+                /** Format: int64 */
+                amount: number
+                /** Format: date-time */
+                createdAt: string
+                id: components["schemas"]["PointEntryId"]
+                kind: components["schemas"]["PointKind"]
+                note?: null | components["schemas"]["Note"]
+                tournamentId?: null | components["schemas"]["TournamentId"]
+                tournamentName?: null | components["schemas"]["TournamentName"]
             }[]
             /** Format: int32 */
             page: number
@@ -640,9 +773,55 @@ export interface components {
             handle: components["schemas"]["Handle"]
             id: components["schemas"]["PlayerId"]
             role: components["schemas"]["Role"]
+            /**
+             * @description Cycles, rank and place. Derived from the ledger on every read, so it is
+             *     never stale.
+             */
+            standing: components["schemas"]["Standing"]
         }
         /** Format: uuid */
         PlayerId: string
+        /**
+         * @description One line of the history. `note` is present on an adjustment: the reason an
+         *     admin gave, written for everyone.
+         */
+        PointEntry: {
+            /** Format: int64 */
+            amount: number
+            /** Format: date-time */
+            createdAt: string
+            id: components["schemas"]["PointEntryId"]
+            kind: components["schemas"]["PointKind"]
+            note?: null | components["schemas"]["Note"]
+            tournamentId?: null | components["schemas"]["TournamentId"]
+            tournamentName?: null | components["schemas"]["TournamentName"]
+        }
+        /** Format: uuid */
+        PointEntryId: string
+        /**
+         * @description The source of an entry. A client selects on these names to label the
+         *     history, so they are part of the contract. A placement is its own kind, so
+         *     no client has to read a meaning out of an amount.
+         * @enum {string}
+         */
+        PointKind:
+            | "tournament_entry"
+            | "match_win"
+            | "champion"
+            | "finalist"
+            | "semifinalist"
+            | "adjustment"
+        /**
+         * @description The tiers of the ladder, in order. A rank never goes down on its own: only
+         *     an adjustment can take cycles away.
+         * @enum {string}
+         */
+        Rank: "zombie" | "guest" | "user" | "sudoer" | "daemon" | "kernel"
+        RankRule: {
+            /** Format: int64 */
+            floor: number
+            rank: components["schemas"]["Rank"]
+        }
         /**
          * @description Body of `POST /api/tournaments/{id}/registration`. A player applies with the
          *     level they give themself. A second apply with another level changes it.
@@ -681,6 +860,31 @@ export interface components {
         /** @description How good the player says they are, 1 for a beginner and 5 for a strong player. */
         SkillLevel: number
         /**
+         * @description Where a player stands: the total, the rank it gives, and the place in the
+         *     leaderboard. `next` is absent at the top of the ladder.
+         */
+        Standing: {
+            /** Format: int64 */
+            cycles: number
+            /**
+             * Format: int64
+             * @description The cycles the current rank starts at.
+             */
+            floor: number
+            next?: null | components["schemas"]["NextRank"]
+            /**
+             * Format: int32
+             * @description 1 is the top. Equal totals share a place.
+             */
+            place: number
+            /**
+             * Format: int32
+             * @description How many players the place is among.
+             */
+            players: number
+            rank: components["schemas"]["Rank"]
+        }
+        /**
          * @description Body of `POST /api/admin/tournaments/{id}/status`. A winner is accepted only
          *     with `concluded` and only when the tournament has no bracket.
          */
@@ -694,6 +898,11 @@ export interface components {
          */
         TemporaryPassword: {
             temporaryPassword: string
+        }
+        TierRule: {
+            /** Format: int32 */
+            minEntrants: number
+            tier: components["schemas"]["FieldTier"]
         }
         /** @description The answer to a signup or a login. The token is a bearer JWT. */
         TokenResponse: {
@@ -777,6 +986,7 @@ export interface operations {
         }
         requestBody?: never
         responses: {
+            /** @description The last signup first */
             200: {
                 headers: {
                     [name: string]: unknown
@@ -911,6 +1121,74 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorBody"]
                 }
             }
+            422: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+        }
+    }
+    adjust_cycles: {
+        parameters: {
+            query?: never
+            header?: never
+            path: {
+                id: components["schemas"]["PlayerId"]
+            }
+            cookie?: never
+        }
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Adjustment"]
+            }
+        }
+        responses: {
+            /** @description The new line of the ledger */
+            201: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["PointEntry"]
+                }
+            }
+            400: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            401: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            /** @description Not an admin, or the admin's own account */
+            403: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            404: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            /** @description Zero, out of range, or no note */
             422: {
                 headers: {
                     [name: string]: unknown
@@ -1952,6 +2230,26 @@ export interface operations {
             }
         }
     }
+    cycles_rules: {
+        parameters: {
+            query?: never
+            header?: never
+            path?: never
+            cookie?: never
+        }
+        requestBody?: never
+        responses: {
+            /** @description How cycles are earned, and the ladder. The same values the ledger pays */
+            200: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["CyclesRules"]
+                }
+            }
+        }
+    }
     me: {
         parameters: {
             query?: never
@@ -2123,6 +2421,7 @@ export interface operations {
         }
         requestBody?: never
         responses: {
+            /** @description The leaderboard: first place first */
             200: {
                 headers: {
                     [name: string]: unknown
@@ -2158,6 +2457,47 @@ export interface operations {
                 }
                 content: {
                     "application/json": components["schemas"]["Player"]
+                }
+            }
+            404: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+        }
+    }
+    cycles_history: {
+        parameters: {
+            query?: {
+                page?: number
+                pageSize?: number
+            }
+            header?: never
+            path: {
+                handle: components["schemas"]["Handle"]
+            }
+            cookie?: never
+        }
+        requestBody?: never
+        responses: {
+            /** @description Newest first, with the totals by kind */
+            200: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["CyclesLog"]
+                }
+            }
+            400: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
                 }
             }
             404: {

@@ -1,0 +1,33 @@
+---
+/**
+ * Every data table on the site. The wrapper scrolls sideways when the columns
+ * need more room than the panel gives, so a table can never push past its
+ * border. A column that a phone can do without carries `hide-narrow`, and the
+ * cells that must never wrap, such as a number or a date, carry `nowrap`.
+ */
+interface Props {
+  /** The accessible name, so a test and a screen reader find the table. */
+  label: string
+  class?: string
+}
+
+const { label, class: className } = Astro.props
+---
+
+<div class="data-table overflow-x-auto">
+  <table class:list={["w-full border-collapse text-xs", className]} aria-label={label}>
+    <slot />
+  </table>
+</div>
+
+<style>
+  .data-table :global(.nowrap) {
+    white-space: nowrap;
+  }
+
+  @media (max-width: 40rem) {
+    .data-table :global(.hide-narrow) {
+      display: none;
+    }
+  }
+</style>

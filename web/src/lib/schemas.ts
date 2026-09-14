@@ -64,6 +64,25 @@ export const optionalSkillLevel = z.preprocess(
     skillLevel.optional(),
 )
 
+const AMOUNT_RULE = "An adjustment is a whole number from -10000 to 10000, not zero."
+
+/** A signed number of cycles from the backoffice form. The API holds the same bound. */
+export const adjustmentInput = z.object({
+    id: uuid,
+    handle,
+    amount: z.coerce
+        .number({ error: AMOUNT_RULE })
+        .int(AMOUNT_RULE)
+        .min(-10_000, AMOUNT_RULE)
+        .max(10_000, AMOUNT_RULE)
+        .refine(value => value !== 0, AMOUNT_RULE),
+    note: z
+        .string()
+        .trim()
+        .min(1, "Give a reason for the adjustment.")
+        .max(200, "A note is at most 200 characters."),
+})
+
 export const tournamentFields = {
     name: z.string().trim().min(1, "A tournament needs a name.").max(60),
     game: z.string().trim().min(1, "A tournament needs a game.").max(40),

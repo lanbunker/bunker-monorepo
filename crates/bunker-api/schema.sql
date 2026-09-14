@@ -17,6 +17,15 @@ CREATE TABLE matches (
     foreign key (tournament_id, winner) references tournament_entrants (tournament_id, id)
 ) strict;
 
+CREATE VIEW player_standings as
+select p.id as player_id,
+       coalesce(sum(e.amount), 0) as cycles,
+       rank() over (order by coalesce(sum(e.amount), 0) desc) as place,
+       count(*) over () as players
+from players p
+left join point_entries e on e.player_id = p.id
+group by p.id;
+
 CREATE TABLE players (
     id            text primary key
                   check (length(id) = 36),
@@ -40,6 +49,30 @@ CREATE TABLE players (
     check (role in ('user', 'admin')), must_change_password integer not null default 0
     check (must_change_password in (0, 1)), credentials_changed_at integer not null default 0
     check (credentials_changed_at >= 0)) strict;
+
+CREATE TABLE point_entries (
+    id            text primary key check (length(id) = 36),
+    player_id     text not null references players(id) on delete cascade,
+    amount        integer not null check (amount != 0 and abs(amount) <= 10000),
+    kind          text not null
+                  check (kind in ('tournament_entry', 'match_win', 'champion', 'finalist',
+                                  'semifinalist', 'adjustment')),
+    -- What paid, inside the kind: the tournament for an entry or a placement,
+    -- the match for a win, the row itself for an adjustment. Never null, so the
+    -- unique index below holds for every kind, including the ones to come.
+    source_ref    text not null check (length(source_ref) > 0),
+    tournament_id text references tournaments(id) on delete cascade,
+    note          text check (note is null or length(note) between 1 and 200),
+    created_by    text references players(id) on delete set null,
+    created_at    integer not null check (created_at > 0),
+    -- Only an admin takes cycles away, and only with a reason.
+    check (kind = 'adjustment' or amount > 0),
+    check (kind != 'adjustment' or note is not null),
+    -- A source pays one time however often the write is retried.
+    unique (kind, player_id, source_ref)
+) strict;
+
+CREATE INDEX point_entries_player on point_entries (player_id, created_at desc);
 
 CREATE TABLE tournament_entrants (
     id            text primary key check (length(id) = 36),

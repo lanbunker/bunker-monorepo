@@ -47,6 +47,9 @@ async fn the_document_is_served_and_lists_every_route() {
         "/api/admin/players/{id}/password-reset",
         "/api/players",
         "/api/players/{handle}",
+        "/api/players/{handle}/cycles",
+        "/api/admin/players/{id}/cycles",
+        "/api/cycles/rules",
         "/api/admin/players",
         "/api/admin/players/{id}",
         "/api/tournaments",
@@ -81,7 +84,14 @@ fn the_player_schema_has_the_documented_fields() {
         .collect();
     fields.sort_unstable();
 
-    assert_eq!(fields, ["createdAt", "glyph", "handle", "id", "role"]);
+    assert_eq!(
+        fields,
+        ["createdAt", "glyph", "handle", "id", "role", "standing"]
+    );
+    assert_eq!(
+        document["components"]["schemas"]["Rank"]["enum"],
+        serde_json::json!(["zombie", "guest", "user", "sudoer", "daemon", "kernel"])
+    );
     assert_eq!(
         document["components"]["schemas"]["Role"]["enum"],
         serde_json::json!(["user", "admin"])

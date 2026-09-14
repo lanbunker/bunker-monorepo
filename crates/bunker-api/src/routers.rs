@@ -19,7 +19,7 @@ pub use tournament_router::tournament_router;
 
 use axum::extract::FromRef;
 
-use crate::services::{AuthService, PlayerService, TournamentService};
+use crate::services::{AuthService, PlayerService, PointsService, TournamentService};
 
 /// Given to each handler. It holds services, and never storage or configuration.
 /// A handler with direct database access could skip the business rules.
@@ -30,7 +30,14 @@ use crate::services::{AuthService, PlayerService, TournamentService};
 pub struct AppState {
     pub auth: AuthService,
     pub players: PlayerService,
+    pub points: PointsService,
     pub tournaments: TournamentService,
+}
+
+impl FromRef<AppState> for PointsService {
+    fn from_ref(state: &AppState) -> Self {
+        state.points.clone()
+    }
 }
 
 impl FromRef<AppState> for TournamentService {

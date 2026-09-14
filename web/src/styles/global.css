@@ -15,6 +15,15 @@
     --color-warn: #ffb000;
     --color-alert: #ff3b3b;
 
+    /* The ladder, bottom to top. Grey wakes up into color, and the top is the one
+       magenta on the site, so a KERNEL is seen across the room. */
+    --color-rank-zombie: #5e5e5e;
+    --color-rank-guest: #9c9c9c;
+    --color-rank-user: #7cc4ff;
+    --color-rank-sudoer: #b48cff;
+    --color-rank-daemon: #ffb000;
+    --color-rank-kernel: #ff5cc8;
+
     /* The backoffice palette. Amber on near black, so it never looks like the site. */
     --color-admin-bg: #0a0800;
     --color-admin-ink: #e8dcc0;

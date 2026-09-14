@@ -31,12 +31,24 @@ const glyph = z.object({
     color: z.enum(GLYPH_COLORS),
 })
 
+const rank = z.enum(["zombie", "guest", "user", "sudoer", "daemon", "kernel"])
+
+const standing = z.object({
+    cycles: z.number(),
+    place: z.number(),
+    players: z.number(),
+    rank,
+    floor: z.number(),
+    next: z.object({ rank, floor: z.number() }).nullable().optional(),
+})
+
 const player = z.object({
     id: z.string(),
     handle: z.string(),
     role: z.enum(["user", "admin"]),
     createdAt: z.string(),
     glyph,
+    standing,
 })
 
 const entrant = z.object({

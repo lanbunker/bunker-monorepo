@@ -1,0 +1,41 @@
+---
+import type { Rank } from "../../lib/api"
+import { RANKS, RANK_CELLS } from "../../lib/cycles"
+
+type Size = "sm" | "lg"
+
+interface Props {
+  rank: Rank
+  /** Also print the rank name after the cells. */
+  labelled?: boolean
+  size?: Size
+  class?: string
+}
+
+const { rank, labelled = false, size = "sm", class: className } = Astro.props
+const info = RANKS[rank]
+const cells = "▮".repeat(info.tier) + "▯".repeat(RANK_CELLS - info.tier)
+
+const sizeClass: Record<Size, string> = {
+  sm: "gap-2 text-2xs tracking-[0.15em]",
+  lg: "gap-3 text-sm tracking-[0.2em]",
+}
+---
+
+<span
+  class:list={[
+    "inline-flex items-center whitespace-nowrap",
+    sizeClass[size],
+    info.text,
+    className,
+  ]}
+  title={`rank ${info.label}`}
+  data-rank={rank}
+>
+  <span aria-hidden="true">{cells}</span>
+  {labelled ? (
+    <span class="font-bold">[{info.label}]</span>
+  ) : (
+    <span class="sr-only">{info.label}</span>
+  )}
+</span>

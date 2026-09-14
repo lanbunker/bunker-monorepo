@@ -43,7 +43,7 @@
         ],
         "responses": {
           "200": {
-            "description": "",
+            "description": "The last signup first",
             "content": {
               "application/json": {
                 "schema": {
@@ -225,6 +225,101 @@
           },
           "422": {
             "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/admin/players/{id}/cycles": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "adjust_cycles",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/PlayerId"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Adjustment"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "The new line of the ledger",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PointEntry"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not an admin, or the admin's own account",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Zero, out of range, or no note",
             "content": {
               "application/json": {
                 "schema": {
@@ -1674,6 +1769,26 @@
         }
       }
     },
+    "/api/cycles/rules": {
+      "get": {
+        "tags": [
+          "players"
+        ],
+        "operationId": "cycles_rules",
+        "responses": {
+          "200": {
+            "description": "How cycles are earned, and the ladder. The same values the ledger pays",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CyclesRules"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/me": {
       "get": {
         "tags": [
@@ -1917,7 +2032,7 @@
         ],
         "responses": {
           "200": {
-            "description": "",
+            "description": "The leaderboard: first place first",
             "content": {
               "application/json": {
                 "schema": {
@@ -1962,6 +2077,79 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Player"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/players/{handle}/cycles": {
+      "get": {
+        "tags": [
+          "players"
+        ],
+        "operationId": "cycles_history",
+        "parameters": [
+          {
+            "name": "handle",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Handle"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 1,
+              "minimum": 1
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Newest first, with the totals by kind",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CyclesLog"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
                 }
               }
             }
@@ -2315,6 +2503,29 @@
           }
         }
       },
+      "Adjustment": {
+        "type": "object",
+        "description": "Body of `POST /api/admin/players/{id}/cycles`.",
+        "required": [
+          "amount",
+          "note"
+        ],
+        "properties": {
+          "amount": {
+            "$ref": "#/components/schemas/Amount"
+          },
+          "note": {
+            "$ref": "#/components/schemas/Note"
+          }
+        },
+        "additionalProperties": false
+      },
+      "Amount": {
+        "type": "integer",
+        "description": "Signed cycles. Zero is refused.",
+        "maximum": 10000,
+        "minimum": -10000
+      },
       "ApiErrorBody": {
         "type": "object",
         "description": "The one shape every failure has on the wire.",
@@ -2344,6 +2555,26 @@
           }
         }
       },
+      "AwardRule": {
+        "type": "object",
+        "required": [
+          "kind",
+          "cycles"
+        ],
+        "properties": {
+          "cycles": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int64"
+            },
+            "description": "One amount per tier, in the order of `tiers`."
+          },
+          "kind": {
+            "$ref": "#/components/schemas/PointKind"
+          }
+        }
+      },
       "Bracket": {
         "type": "object",
         "description": "Every match of a tournament, round by round. `rounds[0]` is round 1 and the\nlast round holds the final alone.",
@@ -2359,6 +2590,63 @@
                 "$ref": "#/components/schemas/Match"
               }
             }
+          }
+        }
+      },
+      "CyclesLog": {
+        "type": "object",
+        "description": "Answer of `GET /api/players/{handle}/cycles`: one page of the log, and the\ntotal of every kind over the whole log, so a page can show where the\ncycles came from without reading every line.",
+        "required": [
+          "entries",
+          "totals"
+        ],
+        "properties": {
+          "entries": {
+            "$ref": "#/components/schemas/Paginated_PointEntry"
+          },
+          "totals": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/KindTotal"
+            },
+            "description": "Kinds with at least one line, in the order of `PointKind::ALL`."
+          }
+        }
+      },
+      "CyclesRules": {
+        "type": "object",
+        "description": "Answer of `GET /api/cycles/rules`: every way to earn cycles, the field tiers\nand the ladder. Built from the same code the ledger pays from, so a legend\ncannot disagree with it.",
+        "required": [
+          "tiers",
+          "awards",
+          "adjustmentMax",
+          "ranks"
+        ],
+        "properties": {
+          "adjustmentMax": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "awards": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AwardRule"
+            },
+            "description": "In the order a player earns them: entry, wins, then placements."
+          },
+          "ranks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RankRule"
+            },
+            "description": "Bottom first."
+          },
+          "tiers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TierRule"
+            },
+            "description": "Smallest field first."
           }
         }
       },
@@ -2464,6 +2752,15 @@
           "MethodNotAllowed"
         ]
       },
+      "FieldTier": {
+        "type": "string",
+        "description": "The size of the field. A placement pays more in a bigger field. The cuts sit\non bracket sizes, so a tier changes where a round is added, and the top\ntier is a cap: forty players are not twice the cup of twenty.",
+        "enum": [
+          "small",
+          "medium",
+          "large"
+        ]
+      },
       "GameMode": {
         "type": "string",
         "maxLength": 30,
@@ -2545,6 +2842,22 @@
           },
           "version": {
             "type": "string"
+          }
+        }
+      },
+      "KindTotal": {
+        "type": "object",
+        "required": [
+          "kind",
+          "cycles"
+        ],
+        "properties": {
+          "cycles": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/PointKind"
           }
         }
       },
@@ -2670,6 +2983,27 @@
         },
         "additionalProperties": false
       },
+      "NextRank": {
+        "type": "object",
+        "required": [
+          "rank",
+          "floor"
+        ],
+        "properties": {
+          "floor": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "rank": {
+            "$ref": "#/components/schemas/Rank"
+          }
+        }
+      },
+      "Note": {
+        "type": "string",
+        "maxLength": 200,
+        "minLength": 1
+      },
       "Paginated_Player": {
         "type": "object",
         "description": "One page of results, and the totals a client needs for a pager.",
@@ -2691,6 +3025,7 @@
                 "handle",
                 "glyph",
                 "role",
+                "standing",
                 "createdAt"
               ],
               "properties": {
@@ -2709,6 +3044,104 @@
                 },
                 "role": {
                   "$ref": "#/components/schemas/Role"
+                },
+                "standing": {
+                  "$ref": "#/components/schemas/Standing",
+                  "description": "Cycles, rank and place. Derived from the ledger on every read, so it is\nnever stale."
+                }
+              }
+            }
+          },
+          "page": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 1
+          },
+          "pageSize": {
+            "type": "integer",
+            "format": "int32",
+            "maximum": 100,
+            "minimum": 1
+          },
+          "total": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Every row that matches, ignoring the window.",
+            "minimum": 0
+          },
+          "totalPages": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          }
+        }
+      },
+      "Paginated_PointEntry": {
+        "type": "object",
+        "description": "One page of results, and the totals a client needs for a pager.",
+        "required": [
+          "items",
+          "total",
+          "page",
+          "pageSize",
+          "totalPages"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "description": "One line of the history. `note` is present on an adjustment: the reason an\nadmin gave, written for everyone.",
+              "required": [
+                "id",
+                "amount",
+                "kind",
+                "createdAt"
+              ],
+              "properties": {
+                "amount": {
+                  "type": "integer",
+                  "format": "int64"
+                },
+                "createdAt": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "id": {
+                  "$ref": "#/components/schemas/PointEntryId"
+                },
+                "kind": {
+                  "$ref": "#/components/schemas/PointKind"
+                },
+                "note": {
+                  "oneOf": [
+                    {
+                      "type": "null"
+                    },
+                    {
+                      "$ref": "#/components/schemas/Note"
+                    }
+                  ]
+                },
+                "tournamentId": {
+                  "oneOf": [
+                    {
+                      "type": "null"
+                    },
+                    {
+                      "$ref": "#/components/schemas/TournamentId"
+                    }
+                  ]
+                },
+                "tournamentName": {
+                  "oneOf": [
+                    {
+                      "type": "null"
+                    },
+                    {
+                      "$ref": "#/components/schemas/TournamentName"
+                    }
+                  ]
                 }
               }
             }
@@ -2875,6 +3308,7 @@
           "handle",
           "glyph",
           "role",
+          "standing",
           "createdAt"
         ],
         "properties": {
@@ -2893,12 +3327,116 @@
           },
           "role": {
             "$ref": "#/components/schemas/Role"
+          },
+          "standing": {
+            "$ref": "#/components/schemas/Standing",
+            "description": "Cycles, rank and place. Derived from the ledger on every read, so it is\nnever stale."
           }
         }
       },
       "PlayerId": {
         "type": "string",
         "format": "uuid"
+      },
+      "PointEntry": {
+        "type": "object",
+        "description": "One line of the history. `note` is present on an adjustment: the reason an\nadmin gave, written for everyone.",
+        "required": [
+          "id",
+          "amount",
+          "kind",
+          "createdAt"
+        ],
+        "properties": {
+          "amount": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "id": {
+            "$ref": "#/components/schemas/PointEntryId"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/PointKind"
+          },
+          "note": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Note"
+              }
+            ]
+          },
+          "tournamentId": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/TournamentId"
+              }
+            ]
+          },
+          "tournamentName": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/TournamentName"
+              }
+            ]
+          }
+        }
+      },
+      "PointEntryId": {
+        "type": "string",
+        "format": "uuid"
+      },
+      "PointKind": {
+        "type": "string",
+        "description": "The source of an entry. A client selects on these names to label the\nhistory, so they are part of the contract. A placement is its own kind, so\nno client has to read a meaning out of an amount.",
+        "enum": [
+          "tournament_entry",
+          "match_win",
+          "champion",
+          "finalist",
+          "semifinalist",
+          "adjustment"
+        ]
+      },
+      "Rank": {
+        "type": "string",
+        "description": "The tiers of the ladder, in order. A rank never goes down on its own: only\nan adjustment can take cycles away.",
+        "enum": [
+          "zombie",
+          "guest",
+          "user",
+          "sudoer",
+          "daemon",
+          "kernel"
+        ]
+      },
+      "RankRule": {
+        "type": "object",
+        "required": [
+          "rank",
+          "floor"
+        ],
+        "properties": {
+          "floor": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "rank": {
+            "$ref": "#/components/schemas/Rank"
+          }
+        }
       },
       "RegistrationRequest": {
         "type": "object",
@@ -2988,6 +3526,53 @@
         "maximum": 5,
         "minimum": 1
       },
+      "Standing": {
+        "type": "object",
+        "description": "Where a player stands: the total, the rank it gives, and the place in the\nleaderboard. `next` is absent at the top of the ladder.",
+        "required": [
+          "cycles",
+          "place",
+          "players",
+          "rank",
+          "floor"
+        ],
+        "properties": {
+          "cycles": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "floor": {
+            "type": "integer",
+            "format": "int64",
+            "description": "The cycles the current rank starts at."
+          },
+          "next": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/NextRank"
+              }
+            ]
+          },
+          "place": {
+            "type": "integer",
+            "format": "int32",
+            "description": "1 is the top. Equal totals share a place.",
+            "minimum": 0
+          },
+          "players": {
+            "type": "integer",
+            "format": "int32",
+            "description": "How many players the place is among.",
+            "minimum": 0
+          },
+          "rank": {
+            "$ref": "#/components/schemas/Rank"
+          }
+        }
+      },
       "StatusChange": {
         "type": "object",
         "description": "Body of `POST /api/admin/tournaments/{id}/status`. A winner is accepted only\nwith `concluded` and only when the tournament has no bracket.",
@@ -3020,6 +3605,23 @@
         "properties": {
           "temporaryPassword": {
             "type": "string"
+          }
+        }
+      },
+      "TierRule": {
+        "type": "object",
+        "required": [
+          "tier",
+          "minEntrants"
+        ],
+        "properties": {
+          "minEntrants": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "tier": {
+            "$ref": "#/components/schemas/FieldTier"
           }
         }
       },

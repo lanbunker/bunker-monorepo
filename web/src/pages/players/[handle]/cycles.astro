@@ -1,0 +1,80 @@
+---
+import CyclesLog from "../../../components/CyclesLog.astro"
+import Alert from "../../../components/ui/Alert.astro"
+import Button from "../../../components/ui/Button.astro"
+import Pager from "../../../components/ui/Pager.astro"
+import Panel from "../../../components/ui/Panel.astro"
+import Prompt from "../../../components/ui/Prompt.astro"
+import RankMark from "../../../components/ui/RankMark.astro"
+import Layout from "../../../layouts/Layout.astro"
+import { call, dataOf, failureOf, isMissing } from "../../../lib/api"
+import { formatCycles } from "../../../lib/cycles"
+import { PAGE_SIZE, pageFrom } from "../../../lib/paging"
+
+const handle = Astro.params.handle ?? ""
+const page = pageFrom(Astro.url)
+const [result, logResult] = await Promise.all([
+  call(client => client.GET("/api/players/{handle}", { params: { path: { handle } } })),
+  call(client =>
+    client.GET("/api/players/{handle}/cycles", {
+      params: { path: { handle }, query: { page, pageSize: PAGE_SIZE } },
+    }),
+  ),
+])
+const failure = failureOf(result)
+if (failure && isMissing(failure)) return Astro.rewrite("/404")
+
+const player = dataOf(result)
+const log = dataOf(logResult)
+const entries = log?.entries
+if (entries && page > entries.totalPages && entries.totalPages > 0) {
+  return Astro.redirect(`/players/${handle}/cycles?page=${entries.totalPages}`)
+}
+---
+
+<Layout title={`${player?.handle ?? handle} cycles//LAN_BUNKER`} active="players">
+  <Prompt command={`cat /players/${handle}/cycles`} comment="the whole log" />
+
+  {player && entries ? (
+    <Panel>
+      <div class="flex flex-wrap items-baseline justify-between gap-3 border-b border-faint pb-3">
+        <a
+          href={`/players/${player.handle}`}
+          class="text-base tracking-wider no-underline text-bright hover:text-accent"
+        >
+          {player.handle}
+        </a>
+        <span class="flex flex-wrap items-baseline gap-3 text-xs">
+          <RankMark rank={player.standing.rank} labelled />
+          <span class="text-accent tabular-nums">
+            {formatCycles(player.standing.cycles)} cycles
+          </span>
+          <span class="text-mute tabular-nums">
+            {entries.total} {entries.total === 1 ? "entry" : "entries"}
+          </span>
+        </span>
+      </div>
+      <div class="mt-3">
+        <CyclesLog entries={entries.items} />
+      </div>
+      <Pager
+        page={page}
+        totalPages={entries.totalPages}
+        total={entries.total}
+        href={`/players/${handle}/cycles`}
+        noun="line"
+      />
+    </Panel>
+  ) : (
+    <Alert message="The ledger is unreachable." />
+  )}
+
+  <div class="mt-8 flex flex-wrap gap-3">
+    <Button href={`/players/${handle}`} variant="ghost" size="sm">
+      ← {handle}
+    </Button>
+    <Button href="/cycles" variant="ghost" size="sm">
+      HOW TO EARN CYCLES
+    </Button>
+  </div>
+</Layout>

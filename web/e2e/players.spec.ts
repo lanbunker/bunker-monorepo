@@ -1,6 +1,21 @@
 import { expect, test } from "@playwright/test"
+import { z } from "zod"
 
-import { PASSWORD, handle, logout, promote, signup } from "./support"
+import {
+    API,
+    PASSWORD,
+    cyclesOf,
+    handle,
+    jsonOf,
+    login,
+    logout,
+    promote,
+    readableFailure,
+    rulesSchema,
+    signup,
+    signupAdmin,
+    tokenFor,
+} from "./support"
 
 test("signup shows the profile with a generated glyph, then logout and login again", async ({
     page,
@@ -243,12 +258,14 @@ test("the roster paginates at twenty players", async ({ page, request }) => {
     await expect(page.getByRole("row")).toHaveCount(21)
     await expect(pager.locator("[aria-disabled='true']")).toContainText("PREV")
 
+    // Places are shared, so the second page is told apart by its players.
+    const firstOnPageOne = await page.locator("tbody tr").first().textContent()
     await pager.getByRole("link", { name: "NEXT →" }).click()
     await expect(page).toHaveURL(/\/players\?page=2$/)
     await expect(page.getByRole("navigation", { name: "Pages" })).toContainText(
         "page 2 of",
     )
-    await expect(page.locator("tbody tr").first()).toContainText("21")
+    await expect(page.locator("tbody tr").first()).not.toHaveText(firstOnPageOne ?? "")
 
     await page.goto("/players?page=banana")
     await expect(page.getByRole("navigation", { name: "Pages" })).toContainText(
@@ -348,4 +365,193 @@ test("an admin renames a player from the backoffice", async ({ page }) => {
     await expect(page.getByRole("status")).toContainText(`renamed to ${renamed}`)
     await expect(page.getByRole("row", { name: new RegExp(renamed) })).toBeVisible()
     await expect(page.getByRole("row", { name: new RegExp(user) })).toHaveCount(0)
+})
+
+test("an admin adjusts cycles, and the rank, the bar and the log follow", async ({
+    page,
+}) => {
+    const adminName = await signupAdmin(page)
+    const name = handle("cyc")
+    const created = await page.request.post(`${API}/api/auth/signup`, {
+        data: { handle: name, password: PASSWORD },
+    })
+    expect(created.status()).toBe(201)
+
+    await page.goto("/admin/players")
+    const row = () => page.getByRole("row", { name: new RegExp(name) })
+    await expect(row().locator("[data-cycles]")).toHaveText("0")
+    await row().getByLabel(`cycles for ${name}`).fill("150")
+    await row().getByLabel(`reason for the cycles of ${name}`).fill("carried the fridge")
+    await row().getByRole("button", { name: "adjust" }).click()
+    await expect(page.getByRole("status")).toContainText(`cycles added to ${name}`)
+    await expect(row().locator("[data-cycles]")).toHaveText("150")
+    await expect(row().locator("[data-rank]")).toHaveAttribute("data-rank", "guest")
+
+    // Zero is refused with a sentence, and the reason typed stays in the row.
+    await row().getByLabel(`cycles for ${name}`).fill("0")
+    await row().getByLabel(`reason for the cycles of ${name}`).fill("nothing at all")
+    await row().getByRole("button", { name: "adjust" }).click()
+    await readableFailure(page, /not zero/)
+    await expect(row().getByLabel(`cycles for ${name}`)).toHaveValue("0")
+    await expect(row().getByLabel(`reason for the cycles of ${name}`)).toHaveValue(
+        "nothing at all",
+    )
+
+    // The leaderboard ranks them above a player with nothing.
+    await page.goto("/players")
+    const board = page.getByRole("table", { name: "leaderboard" })
+    const mine = board.getByRole("row", { name: new RegExp(name) })
+    await expect(mine).toContainText("GUEST")
+    await expect(mine).toContainText("150")
+    await expect(mine.getByText("you", { exact: true })).toHaveCount(0)
+    const admin = board.getByRole("row", { name: new RegExp(adminName) })
+    await expect(admin.getByText("you", { exact: true })).toBeVisible()
+    const myPlace = Number(await mine.getAttribute("data-place"))
+    const adminPlace = Number(await admin.getAttribute("data-place"))
+    expect(myPlace).toBeLessThan(adminPlace)
+    // The first place is on the podium, in bold. A place with nothing is not.
+    await expect(board.locator("tbody tr").first().locator("td").first()).toHaveClass(
+        /font-bold/,
+    )
+    await expect(admin.locator("td").first()).not.toHaveClass(/font-bold/)
+
+    // The public page shows the standing and the note.
+    await page.goto(`/players/${name}`)
+    await expect(page.locator("[data-cycles]")).toHaveText("150")
+    // 150 of the way from 100 to 600 is a tenth.
+    await expect(page.locator("[data-progress]")).toHaveAttribute("data-progress", "10")
+    await expect(page.getByText("+150")).toBeVisible()
+    await expect(page.getByText("admin bonus")).toBeVisible()
+    await expect(page.getByText("carried the fridge")).toBeVisible()
+
+    // A stranger reads the note too: an admin writes it for everyone.
+    await logout(page)
+    await page.goto(`/players/${name}`)
+    await expect(page.getByText("+150")).toBeVisible()
+    await expect(page.getByText("carried the fridge")).toBeVisible()
+
+    // The owner reads the note on the profile.
+    await login(page, name)
+    await expect(page.getByText("GUEST")).toBeVisible()
+    await expect(page.getByText("carried the fridge")).toBeVisible()
+    await expect(page.getByRole("link", { name: "HOW TO EARN CYCLES" })).toBeVisible()
+    await expect(page.locator("[data-coming-soon]")).toBeVisible()
+})
+
+test("the two ends of the ladder: a fresh player is called in, a kernel is at the top", async ({
+    page,
+}) => {
+    // A fresh player has no bar, only the way in.
+    const name = handle("end")
+    await signup(page, name)
+    await expect(page.getByText("wakes up at")).toBeVisible()
+    await expect(page.locator("[data-progress]")).toHaveCount(0)
+    await expect(
+        page.getByRole("link", { name: "HOW TO EARN CYCLES" }).first(),
+    ).toBeVisible()
+    await logout(page)
+
+    // Below zero the bar comes back, and the sign stays on every total.
+    const adminName = await signupAdmin(page)
+    const token = await tokenFor(page, adminName)
+    const player = await jsonOf(
+        await page.request.get(`${API}/api/players/${name}`),
+        z.object({ id: z.string() }),
+    )
+    const adjust = async (amount: number, note: string) => {
+        const response = await page.request.post(
+            `${API}/api/admin/players/${player.id}/cycles`,
+            {
+                data: { amount, note },
+                headers: { authorization: `Bearer ${token}` },
+            },
+        )
+        expect(response.status()).toBe(201)
+    }
+    await adjust(-80, "unplugged a cabinet")
+    await page.goto(`/players/${name}`)
+    await expect(page.locator("[data-cycles]")).toHaveText("-80")
+    await expect(page.locator("[data-progress]")).toHaveAttribute("data-progress", "0")
+    await expect(page.getByText("180 to go")).toBeVisible()
+    await expect(page.locator("[data-source=adjustments]")).toHaveText("-80")
+
+    // At the top of the ladder there is nothing left to fill.
+    await adjust(10_000, "founder")
+    await page.goto(`/players/${name}`)
+    await expect(page.getByText("[KERNEL]").first()).toBeVisible()
+    await expect(page.getByText("top of the ladder")).toBeVisible()
+    await expect(page.getByText("to go")).toHaveCount(0)
+    await expect(page.locator("[data-progress]")).toHaveAttribute("data-progress", "100")
+})
+
+test("the cycles legend shows what the api pays", async ({ page }) => {
+    const rules = await jsonOf(
+        await page.request.get(`${API}/api/cycles/rules`),
+        rulesSchema,
+    )
+
+    await page.goto("/cycles")
+    const table = page.getByRole("table", { name: "how to earn cycles" })
+    await expect(table.locator("[data-kind=tournament_entry]")).toContainText(
+        `+${cyclesOf(rules, "tournament_entry", 4)}`,
+    )
+    // A placement is a range from the smallest field to the biggest.
+    const small = cyclesOf(rules, "champion", 4)
+    const large = cyclesOf(rules, "champion", 16)
+    expect(large).toBeGreaterThan(small)
+    await expect(table.locator("[data-kind=champion]")).toContainText(
+        `+${small} to +${large}`,
+    )
+    await expect(page.getByText("16+ players")).toBeVisible()
+    await expect(table.locator("[data-kind=adjustment]")).toContainText("±")
+    const ladder = page.getByRole("list", { name: "the ladder" })
+    const steps = ladder.getByRole("listitem")
+    await expect(steps).toHaveCount(rules.ranks.length)
+    await expect(steps.filter({ hasText: "ZOMBIE" })).toContainText("from nothing")
+    await expect(steps.first()).toContainText("KERNEL")
+})
+
+test("a long log shows its last five lines and pages the rest", async ({ page }) => {
+    const admin = await signupAdmin(page)
+    const token = await tokenFor(page, admin)
+    const name = handle("log")
+    const created = await page.request.post(`${API}/api/auth/signup`, {
+        data: { handle: name, password: PASSWORD },
+    })
+    expect(created.status()).toBe(201)
+    const player = await jsonOf(
+        await page.request.get(`${API}/api/players/${name}`),
+        z.object({ id: z.string() }),
+    )
+    for (let index = 1; index <= 22; index += 1) {
+        const added = await page.request.post(
+            `${API}/api/admin/players/${player.id}/cycles`,
+            {
+                data: { amount: index, note: `line ${index}` },
+                headers: { authorization: `Bearer ${token}` },
+            },
+        )
+        expect(added.status()).toBe(201)
+    }
+
+    await page.goto(`/players/${name}`)
+    await expect(page.locator("[data-cycles-log] li")).toHaveCount(5)
+    await expect(page.locator("[data-cycles-log] li").first()).toContainText("+22")
+    // The totals cover the whole log, not the five lines shown: 1 + 2 + ... + 22.
+    await expect(page.locator("[data-source=adjustments]")).toHaveText("253")
+    await page.getByRole("link", { name: /FULL LOG \(22\)/ }).click()
+
+    await expect(page).toHaveURL(`/players/${name}/cycles`)
+    await expect(page.locator("[data-cycles-log] li")).toHaveCount(20)
+    const pager = page.getByRole("navigation", { name: "Pages" })
+    await expect(pager).toContainText("page 1 of 2")
+    await expect(pager).toContainText("22 lines")
+    await pager.getByRole("link", { name: "NEXT →" }).click()
+    await expect(page).toHaveURL(/\/cycles\?page=2$/)
+    await expect(page.locator("[data-cycles-log] li")).toHaveCount(2)
+    await expect(page.locator("[data-cycles-log] li").last()).toContainText("+1")
+    await expect(page.locator("[data-cycles-log] li").last()).toContainText("line 1")
+
+    await page.goto(`/players/${name}/cycles?page=9`)
+    await expect(page).toHaveURL(/\/cycles\?page=2$/)
 })

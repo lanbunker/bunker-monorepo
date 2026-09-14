@@ -1,7 +1,8 @@
 import { execFileSync } from "node:child_process"
 
 import { expect } from "@playwright/test"
-import type { Locator, Page } from "@playwright/test"
+import type { APIResponse, Locator, Page } from "@playwright/test"
+import { z } from "zod"
 
 export const PASSWORD = "correct-horse-battery"
 export const handle = (prefix: string) => `${prefix}${Date.now().toString(36).slice(-5)}`
@@ -16,6 +17,14 @@ export const signup = async (page: Page, name: string) => {
     await page.getByLabel("password:", { exact: true }).fill(PASSWORD)
     await page.getByLabel("repeat:").fill(PASSWORD)
     await page.getByRole("button", { name: "ENLIST" }).click()
+    await expect(page).toHaveURL(/\/profile(\?|$)/)
+}
+
+export const login = async (page: Page, name: string) => {
+    await page.goto("/login")
+    await page.getByLabel("login:").fill(name)
+    await page.getByLabel("password:", { exact: true }).fill(PASSWORD)
+    await page.getByRole("button", { name: "LOGIN" }).click()
     await expect(page).toHaveURL(/\/profile(\?|$)/)
 }
 
@@ -73,7 +82,7 @@ export const tomorrow = () => {
 /** Creates a draft through the backoffice form and lands on its edit page. */
 export const createDraft = async (page: Page, name: string): Promise<string> => {
     await page.goto("/admin/tournaments")
-    await page.getByLabel("name").fill(name)
+    await page.getByLabel("name", { exact: true }).fill(name)
     await page.getByLabel("game").fill("COD MW2")
     await page.getByLabel("mode").fill("1v1 sniper only")
     await page.getByLabel("date").fill(tomorrow().day)
@@ -87,13 +96,57 @@ export const createDraft = async (page: Page, name: string): Promise<string> => 
 
 /** A bearer token for direct API calls, for setup that the UI would make slow. */
 export const tokenFor = async (page: Page, name: string): Promise<string> => {
-    const login = await page.request.post(`${API}/api/auth/login`, {
+    const response = await page.request.post(`${API}/api/auth/login`, {
         data: { handle: name, password: PASSWORD },
     })
-    expect(login.ok()).toBe(true)
-    const body: unknown = await login.json()
+    expect(response.ok()).toBe(true)
+    const body: unknown = await response.json()
     const token =
         typeof body === "object" && body !== null && "token" in body ? body.token : ""
     expect(typeof token).toBe("string")
     return String(token)
+}
+
+/** The standing of a player, as a test reads it back from the API. */
+export const standingSchema = z.object({
+    standing: z.object({
+        cycles: z.number(),
+        place: z.number(),
+        players: z.number(),
+        rank: z.string(),
+    }),
+})
+
+/** The rules of the ledger, as a test reads them from the API. */
+export const rulesSchema = z.object({
+    tiers: z.array(z.object({ tier: z.string(), minEntrants: z.number() })),
+    awards: z.array(z.object({ kind: z.string(), cycles: z.array(z.number()) })),
+    ranks: z.array(z.object({ rank: z.string(), floor: z.number() })),
+})
+
+/**
+ * A response body parsed with a schema, so a test never reads an `any`. A body
+ * of another shape fails here, with the schema's message, and not deep inside
+ * an assertion.
+ */
+export const jsonOf = async <T>(
+    response: APIResponse,
+    schema: z.ZodType<T>,
+): Promise<T> => {
+    expect(response.ok()).toBe(true)
+    const body: unknown = await response.json()
+    return schema.parse(body)
+}
+
+/** The cycles a kind pays in a field of `entrants`, from the rules. */
+export const cyclesOf = (
+    rules: z.infer<typeof rulesSchema>,
+    kind: string,
+    entrants: number,
+): number => {
+    const tier = rules.tiers.findLastIndex(t => entrants >= t.minEntrants)
+    return (
+        rules.awards.find(award => award.kind === kind)?.cycles[Math.max(tier, 0)] ??
+        Number.NaN
+    )
 }

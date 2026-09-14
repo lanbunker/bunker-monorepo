@@ -4,8 +4,11 @@ import Alert from "../../components/ui/Alert.astro"
 import Button from "../../components/ui/Button.astro"
 import Glyph from "../../components/ui/Glyph.astro"
 import Pager from "../../components/ui/Pager.astro"
+import RankMark from "../../components/ui/RankMark.astro"
+import Table from "../../components/ui/Table.astro"
 import AdminLayout from "../../layouts/AdminLayout.astro"
 import { call, dataOf } from "../../lib/api"
+import { formatCycles } from "../../lib/cycles"
 import { formatDate } from "../../lib/dates"
 import { donePath, firstError, noticeFrom } from "../../lib/form"
 import { PAGE_SIZE, pageFrom } from "../../lib/paging"
@@ -20,6 +23,7 @@ const roleResult = Astro.getActionResult(actions.setRole)
 const deleteResult = Astro.getActionResult(actions.deletePlayer)
 const renameResult = Astro.getActionResult(actions.renamePlayer)
 const resetResult = Astro.getActionResult(actions.resetPassword)
+const adjustResult = Astro.getActionResult(actions.adjustCycles)
 
 /** Where a change sends the admin, with a known key and the handle it touched. */
 const afterChange = (): string | undefined => {
@@ -34,6 +38,14 @@ const afterChange = (): string | undefined => {
   if (deleteResult?.data) return donePath("/admin/players", "deleted")
   const renamed = renameResult?.data
   if (renamed) return donePath("/admin/players", "renamed", renamed.handle)
+  const adjusted = adjustResult?.data
+  if (adjusted) {
+    return donePath(
+      "/admin/players",
+      adjusted.amount < 0 ? "penalized" : "rewarded",
+      adjusted.handle,
+    )
+  }
   return undefined
 }
 const changed = afterChange()
@@ -42,7 +54,15 @@ if (changed) return Astro.redirect(changed)
 // A temporary password is in this response. It belongs to one request only.
 Astro.response.headers.set("Cache-Control", "no-store")
 
-const failure = firstError(roleResult, deleteResult, renameResult, resetResult)
+const failure = firstError(
+  roleResult,
+  deleteResult,
+  renameResult,
+  resetResult,
+  adjustResult,
+)
+// A refused adjustment keeps what was typed in its row.
+const typed = Astro.locals.submitted
 // Only a known key renders. The query string is anyone's to write, and `who`
 // is a handle the API validated before the redirect carried it.
 const who = Astro.url.searchParams.get("who") ?? ""
@@ -51,6 +71,8 @@ const notice = noticeFrom(Astro.url, {
   demoted: `${who} is now user`,
   renamed: `renamed to ${who}`,
   deleted: "player deleted",
+  rewarded: `cycles added to ${who}`,
+  penalized: `cycles taken from ${who}`,
 })
 const temporaryPassword = resetResult?.data?.temporaryPassword
 
@@ -88,17 +110,18 @@ if (roster && page > roster.totalPages && roster.totalPages > 0) {
   )}
   <Alert error={failure} class="mt-3" />
 
-  <div class="mt-4 overflow-x-auto border border-warn/40">
+  <div class="mt-4 border border-warn/40">
     {!roster ? (
       <p class="p-4 text-xs text-alert">the api is unreachable.</p>
     ) : (
-      <table class="w-full border-collapse text-xs">
+      <Table label="players">
         <thead>
           <tr class="bg-warn/10 text-left text-2xs tracking-wider text-admin-dim">
-            <th class="w-[25%] px-3 py-2 font-normal">player</th>
-            <th class="w-[10%] px-3 py-2 font-normal">role</th>
-            <th class="w-[15%] px-3 py-2 font-normal">enlisted</th>
-            <th class="w-[50%] px-3 py-2 text-right font-normal">actions</th>
+            <th class="w-[20%] px-3 py-2 font-normal">player</th>
+            <th class="w-[8%] px-3 py-2 font-normal">role</th>
+            <th class="w-[17%] px-3 py-2 font-normal">cycles</th>
+            <th class="w-[12%] px-3 py-2 font-normal">enlisted</th>
+            <th class="w-[43%] px-3 py-2 text-right font-normal">actions</th>
           </tr>
         </thead>
         <tbody>
@@ -120,6 +143,14 @@ if (roster && page > roster.totalPages && roster.totalPages > 0) {
                 ]}
               >
                 {player.role}
+              </td>
+              <td class="px-3 py-2">
+                <span class="inline-flex flex-wrap items-baseline gap-x-2">
+                  <span class="text-warn tabular-nums" data-cycles>
+                    {formatCycles(player.standing.cycles)}
+                  </span>
+                  <RankMark rank={player.standing.rank} labelled />
+                </span>
               </td>
               <td class="px-3 py-2 text-admin-dim">
                 {formatDate(new Date(player.createdAt))}
@@ -163,6 +194,39 @@ if (roster && page > roster.totalPages && roster.totalPages > 0) {
                     </form>
                     <form
                       method="POST"
+                      action={actions.adjustCycles}
+                      class="flex items-center gap-1"
+                    >
+                      <input type="hidden" name="id" value={player.id} />
+                      <input type="hidden" name="handle" value={player.handle} />
+                      <input
+                        name="amount"
+                        type="number"
+                        required
+                        min="-10000"
+                        max="10000"
+                        step="1"
+                        placeholder="±cycles"
+                        aria-label={`cycles for ${player.handle}`}
+                        value={typed.id === player.id ? typed.amount : undefined}
+                        class="w-20 border-b border-warn/40 bg-transparent px-1 py-0.5 text-2xs text-admin-ink outline-none focus:border-warn"
+                      />
+                      <input
+                        name="note"
+                        type="text"
+                        required
+                        maxlength="200"
+                        placeholder="why"
+                        aria-label={`reason for the cycles of ${player.handle}`}
+                        value={typed.id === player.id ? typed.note : undefined}
+                        class="w-32 border-b border-warn/40 bg-transparent px-1 py-0.5 text-2xs text-admin-ink outline-none focus:border-warn"
+                      />
+                      <Button variant="warn" size="sm">
+                        adjust
+                      </Button>
+                    </form>
+                    <form
+                      method="POST"
                       action={actions.resetPassword}
                       data-confirm={`reset the password of ${player.handle}? the current one stops working.`}
                     >
@@ -187,7 +251,7 @@ if (roster && page > roster.totalPages && roster.totalPages > 0) {
             </tr>
           ))}
         </tbody>
-      </table>
+      </Table>
     )}
   </div>
   {roster && (

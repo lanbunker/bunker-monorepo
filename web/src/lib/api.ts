@@ -13,6 +13,14 @@ export type TournamentStatus = components["schemas"]["TournamentStatus"]
 export type Entrant = components["schemas"]["Entrant"]
 export type Bracket = components["schemas"]["Bracket"]
 export type Match = components["schemas"]["Match"]
+export type Standing = components["schemas"]["Standing"]
+export type Rank = components["schemas"]["Rank"]
+export type PointEntry = components["schemas"]["PointEntry"]
+export type PointKind = components["schemas"]["PointKind"]
+export type CyclesRules = components["schemas"]["CyclesRules"]
+export type CyclesLog = components["schemas"]["CyclesLog"]
+export type KindTotal = components["schemas"]["KindTotal"]
+export type TierRule = components["schemas"]["TierRule"]
 
 /** The cookie that holds the bearer token. HttpOnly, so scripts never see it. */
 export const SESSION_COOKIE = "bunker_session"

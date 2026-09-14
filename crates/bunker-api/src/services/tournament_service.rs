@@ -1,9 +1,9 @@
 use std::cmp::Reverse;
 
 use bunker_models::{
-    Bracket, Entrant, EntrantId, MatchId, NewTournament, PageQuery, Paginated, PlayerId,
+    Award, Bracket, Entrant, EntrantId, MatchId, NewTournament, PageQuery, Paginated, PlayerId,
     Registrations, SeedOrder, SkillLevel, StatusChange, Tournament, TournamentDetail, TournamentId,
-    TournamentStatus, TournamentUpdate,
+    TournamentStatus, TournamentUpdate, tournament_awards,
 };
 use rand::seq::SliceRandom;
 use time::OffsetDateTime;
@@ -96,7 +96,8 @@ impl TournamentService {
     }
 
     /// The state machine. `concluded` is final. A bracket decides the winner;
-    /// without one the admin names the winner, or nobody.
+    /// without one the admin names the winner, or nobody. The conclusion pays
+    /// the cycles of the tournament, in the same write as the status.
     pub async fn change_status(
         &self,
         id: TournamentId,
@@ -111,6 +112,7 @@ impl TournamentService {
         let transition = ServiceError::InvalidTransition { from, to };
 
         use TournamentStatus::{Concluded, Draft, Live, Open};
+        let mut awards: Vec<Award> = Vec::new();
         let winner = match (from, to) {
             (Draft, Open) | (Draft | Open, Live) => {
                 if change.winner.is_some() {
@@ -128,6 +130,7 @@ impl TournamentService {
                 None
             }
             (Draft | Open | Live, Concluded) => {
+                let entrants = self.storage.entrants(id).await?;
                 if tournament.has_bracket {
                     if change.winner.is_some() {
                         return Err(ServiceError::UnexpectedWinner);
@@ -136,21 +139,25 @@ impl TournamentService {
                         .bracket(id)
                         .await?
                         .ok_or(ServiceError::BracketMissing)?;
-                    Some(bracket.champion().ok_or(ServiceError::BracketIncomplete)?)
+                    let champion = bracket.champion().ok_or(ServiceError::BracketIncomplete)?;
+                    awards = tournament_awards(id, &entrants, Some(&bracket), Some(champion));
+                    Some(champion)
                 } else {
-                    match change.winner {
-                        Some(winner) => {
-                            self.require_entrant(id, winner).await?;
-                            Some(winner)
-                        }
-                        None => None,
+                    if let Some(winner) = change.winner
+                        && !entrants.iter().any(|e| e.id == winner)
+                    {
+                        return Err(ServiceError::NotAnEntrant(winner));
                     }
+                    awards = tournament_awards(id, &entrants, None, change.winner);
+                    change.winner
                 }
             }
             _ => return Err(transition),
         };
 
-        self.storage.set_status(id, to, winner).await?;
+        self.storage
+            .set_status(id, to, winner, &awards, OffsetDateTime::now_utc())
+            .await?;
 
         self.load(id).await
     }
@@ -370,19 +377,6 @@ impl TournamentService {
         self.storage.replace_bracket(id, order, &bracket).await?;
 
         Ok(bracket)
-    }
-
-    async fn require_entrant(
-        &self,
-        id: TournamentId,
-        entrant: EntrantId,
-    ) -> Result<(), ServiceError> {
-        let entrants = self.storage.entrants(id).await?;
-        if entrants.iter().any(|e| e.id == entrant) {
-            Ok(())
-        } else {
-            Err(ServiceError::NotAnEntrant(entrant))
-        }
     }
 
     async fn enrol(

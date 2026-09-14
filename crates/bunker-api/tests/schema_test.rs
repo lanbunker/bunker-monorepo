@@ -247,6 +247,160 @@ async fn the_database_refuses_tournament_rows_the_domain_refuses() {
         assert!(result.is_err(), "the database accepted skill {skill}");
     }
 
+    // The ledger. A valid adjustment and a valid award go in, then each bad row
+    // must bounce, and a second row with the same key must bounce too.
+    const P1: &str = "60000000-0000-0000-0000-000000000001";
+    sqlx::query(
+        "insert into players (id, handle, password_hash, glyph_bits, glyph_color, created_at)
+         values (?1, 'ledger', 'x', 1, '#ffb000', 1)",
+    )
+    .bind(P1)
+    .execute(&pool)
+    .await
+    .unwrap();
+    let insert = "insert into point_entries (id, player_id, amount, kind, source_ref, tournament_id, note, created_at)
+                  values (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)";
+    type LedgerRow<'a> = (
+        &'a str,
+        i64,
+        &'a str,
+        &'a str,
+        Option<&'a str>,
+        Option<&'a str>,
+        i64,
+    );
+    let good_entries: [LedgerRow; 2] = [
+        (
+            "70000000-0000-0000-0000-000000000001",
+            -30,
+            "adjustment",
+            "70000000-0000-0000-0000-000000000001",
+            None,
+            Some("late"),
+            1,
+        ),
+        (
+            "70000000-0000-0000-0000-000000000002",
+            40,
+            "tournament_entry",
+            T1,
+            Some(T1),
+            None,
+            1,
+        ),
+    ];
+    let bad_entries: [LedgerRow; 9] = [
+        // Zero changes nothing.
+        (
+            "80000000-0000-0000-0000-000000000001",
+            0,
+            "adjustment",
+            "a",
+            None,
+            Some("x"),
+            1,
+        ),
+        // Past the adjustment range, both ways.
+        (
+            "80000000-0000-0000-0000-000000000002",
+            10_001,
+            "adjustment",
+            "b",
+            None,
+            Some("x"),
+            1,
+        ),
+        (
+            "80000000-0000-0000-0000-000000000003",
+            -10_001,
+            "adjustment",
+            "c",
+            None,
+            Some("x"),
+            1,
+        ),
+        // An adjustment needs a note.
+        (
+            "80000000-0000-0000-0000-000000000004",
+            10,
+            "adjustment",
+            "d",
+            None,
+            None,
+            1,
+        ),
+        // Only an adjustment takes cycles away.
+        (
+            "80000000-0000-0000-0000-000000000005",
+            -10,
+            "match_win",
+            "e",
+            Some(T1),
+            None,
+            1,
+        ),
+        // A kind the model does not know.
+        (
+            "80000000-0000-0000-0000-000000000006",
+            10,
+            "checkin",
+            "f",
+            None,
+            Some("x"),
+            1,
+        ),
+        // The source is never empty.
+        (
+            "80000000-0000-0000-0000-000000000007",
+            10,
+            "champion",
+            "",
+            Some(T1),
+            None,
+            1,
+        ),
+        // A moment before time.
+        (
+            "80000000-0000-0000-0000-000000000008",
+            10,
+            "champion",
+            "h",
+            Some(T1),
+            None,
+            0,
+        ),
+        // The same key as the valid entry row: a source pays one time.
+        (
+            "80000000-0000-0000-0000-000000000009",
+            40,
+            "tournament_entry",
+            T1,
+            Some(T1),
+            None,
+            1,
+        ),
+    ];
+    for (rows, accepted) in [(&good_entries[..], true), (&bad_entries[..], false)] {
+        for (id, amount, kind, source_ref, tournament, note, created_at) in rows {
+            let result = sqlx::query(insert)
+                .bind(id)
+                .bind(P1)
+                .bind(amount)
+                .bind(kind)
+                .bind(source_ref)
+                .bind(tournament)
+                .bind(note)
+                .bind(created_at)
+                .execute(&pool)
+                .await;
+            assert_eq!(
+                result.is_ok(),
+                accepted,
+                "amount {amount}, kind {kind:?}, source {source_ref:?}, note {note:?}, created_at {created_at}: {result:?}"
+            );
+        }
+    }
+
     type MatchRow<'a> = (&'a str, Option<&'a str>, Option<&'a str>, Option<&'a str>);
     let bad_matches: [MatchRow; 2] = [
         // The winner is not one of the two sides.

@@ -2,14 +2,15 @@ use axum::extract::State;
 use axum::routing::{get, post, put};
 use axum::{Json, Router};
 use bunker_models::{
-    Account, Handle, HandleChange, PageQuery, Paginated, PasswordChange, Player, TokenResponse,
+    Account, CyclesLog, CyclesRules, Handle, HandleChange, PageQuery, Paginated, PasswordChange,
+    Player, TokenResponse,
 };
 use serde::Deserialize;
 
 use crate::internal::http::{
     ApiError, ApiErrorBody, Authenticated, ValidJson, ValidPath, ValidQuery,
 };
-use crate::services::{AuthService, PlayerService};
+use crate::services::{AuthService, PlayerService, PointsService};
 
 use super::AppState;
 
@@ -20,6 +21,8 @@ pub fn player_router() -> Router<AppState> {
         .route("/api/me/handle", put(change_handle))
         .route("/api/players", get(list_players))
         .route("/api/players/{handle}", get(get_player))
+        .route("/api/players/{handle}/cycles", get(cycles_history))
+        .route("/api/cycles/rules", get(cycles_rules))
 }
 
 #[derive(Debug, Deserialize, utoipa::IntoParams)]
@@ -88,13 +91,35 @@ pub(super) async fn change_handle(
     path = "/api/players",
     tag = "players",
     params(PageQuery),
-    responses((status = 200, body = Paginated<Player>), (status = 400, body = ApiErrorBody))
+    responses(
+        (status = 200, body = Paginated<Player>, description = "The leaderboard: first place first"),
+        (status = 400, body = ApiErrorBody),
+    )
 )]
 pub(super) async fn list_players(
     State(players): State<PlayerService>,
     ValidQuery(query): ValidQuery<PageQuery>,
 ) -> Result<Json<Paginated<Player>>, ApiError> {
-    Ok(Json(players.list(query).await?))
+    Ok(Json(players.leaderboard(query).await?))
+}
+
+#[utoipa::path(
+    get,
+    path = "/api/players/{handle}/cycles",
+    tag = "players",
+    params(PlayerPath, PageQuery),
+    responses(
+        (status = 200, body = CyclesLog, description = "Newest first, with the totals by kind"),
+        (status = 400, body = ApiErrorBody),
+        (status = 404, body = ApiErrorBody),
+    )
+)]
+pub(super) async fn cycles_history(
+    State(points): State<PointsService>,
+    ValidPath(path): ValidPath<PlayerPath>,
+    ValidQuery(query): ValidQuery<PageQuery>,
+) -> Result<Json<CyclesLog>, ApiError> {
+    Ok(Json(points.history(&path.handle, query).await?))
 }
 
 #[utoipa::path(
@@ -109,4 +134,16 @@ pub(super) async fn get_player(
     ValidPath(path): ValidPath<PlayerPath>,
 ) -> Result<Json<Player>, ApiError> {
     Ok(Json(players.get_by_handle(&path.handle).await?))
+}
+
+#[utoipa::path(
+    get,
+    path = "/api/cycles/rules",
+    tag = "players",
+    responses(
+        (status = 200, body = CyclesRules, description = "How cycles are earned, and the ladder. The same values the ledger pays"),
+    )
+)]
+pub(super) async fn cycles_rules() -> Json<CyclesRules> {
+    Json(CyclesRules::current())
 }

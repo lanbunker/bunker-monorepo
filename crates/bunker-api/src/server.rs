@@ -23,9 +23,12 @@ use crate::routers::{
     player_router, tournament_router,
 };
 use crate::services::{
-    AuthService, ErrorCode, PasswordHasher, PlayerService, TokenIssuer, TournamentService,
+    AuthService, ErrorCode, PasswordHasher, PlayerService, PointsService, TokenIssuer,
+    TournamentService,
 };
-use crate::storage::{DbPool, PlayerStorage, TournamentStorage, connect, run_pending_migrations};
+use crate::storage::{
+    DbPool, PlayerStorage, PointStorage, TournamentStorage, connect, run_pending_migrations,
+};
 
 /// Without this limit, a stopped request holds a connection and a task for ever.
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
@@ -56,7 +59,8 @@ pub fn build_router(pool: DbPool, config: AppConfig, secrets: &Secrets) -> Route
 
     let state = AppState {
         auth: AuthService::new(players.clone(), tokens, hasher),
-        tournaments: TournamentService::new(TournamentStorage::new(pool), players.clone()),
+        tournaments: TournamentService::new(TournamentStorage::new(pool.clone()), players.clone()),
+        points: PointsService::new(PointStorage::new(pool), players.clone()),
         players: PlayerService::new(players),
     };
 

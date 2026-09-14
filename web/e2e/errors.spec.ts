@@ -199,7 +199,7 @@ test("a refused draft keeps every field of the tournament form", async ({ page }
     await signupAdmin(page)
     await page.goto("/admin/tournaments")
     const name = `Keep ${handle("t")}`
-    await page.getByLabel("name").fill(name)
+    await page.getByLabel("name", { exact: true }).fill(name)
     await page.getByLabel("game").fill("COD MW2")
     await page.getByLabel("description").fill("the rules of the cup")
     await page.getByLabel("date").fill("2030-05-05")
@@ -212,7 +212,7 @@ test("a refused draft keeps every field of the tournament form", async ({ page }
     await page.getByRole("button", { name: "CREATE DRAFT" }).click()
 
     await readableFailure(page, "A tournament needs a mode.")
-    await expect(page.getByLabel("name")).toHaveValue(name)
+    await expect(page.getByLabel("name", { exact: true })).toHaveValue(name)
     await expect(page.getByLabel("game")).toHaveValue("COD MW2")
     await expect(page.getByLabel("description")).toHaveValue("the rules of the cup")
     await expect(page.getByLabel("date")).toHaveValue("2030-05-05")
@@ -278,4 +278,26 @@ test("a level outside 1 to 5 is refused with a sentence", async ({ page }) => {
     expect(entered.status()).toBe(422)
     const detail = await page.request.get(`/tournaments/${id}/detail.json`)
     expect((await detail.json()).tournament.entrantCount).toBe(0)
+})
+
+test("a refused cycles adjustment is a sentence for every field", async ({ page }) => {
+    await signupAdmin(page)
+    const post = (form: Record<string, string>) =>
+        page.request.post("/admin/players?_action=adjustCycles", {
+            form,
+            headers: { origin: "http://127.0.0.1:4399" },
+        })
+
+    for (const [form, sentence] of [
+        [{ id: MISSING_ID, handle: "dave", amount: "0", note: "x" }, "not zero"],
+        [{ id: MISSING_ID, handle: "dave", amount: "10", note: "   " }, "Give a reason"],
+        [{ id: MISSING_ID, handle: "d", amount: "10", note: "x" }, "A handle is 3 to 20"],
+        [{ id: "not-a-uuid", handle: "dave", amount: "10", note: "x" }, "not valid"],
+    ] as const) {
+        const refused = await post(form)
+        expect(refused.status(), JSON.stringify(form)).toBe(400)
+        const html = await refused.text()
+        expect(html).toContain(sentence)
+        expect(html).not.toContain("Failed to validate")
+    }
 })

@@ -1,6 +1,6 @@
 use bunker_models::{Handle, PageQuery, Paginated, Player, PlayerId, Role};
 
-use crate::storage::{PlayerStorage, Renamed};
+use crate::storage::{ListOrder, PlayerStorage, Renamed};
 
 use super::error::ServiceError;
 
@@ -21,8 +21,14 @@ impl PlayerService {
             .ok_or_else(|| ServiceError::PlayerNotFound(handle.clone()))
     }
 
-    pub async fn list(&self, query: PageQuery) -> Result<Paginated<Player>, ServiceError> {
-        Ok(self.storage.list(query).await?)
+    /// The public leaderboard: first place first.
+    pub async fn leaderboard(&self, query: PageQuery) -> Result<Paginated<Player>, ServiceError> {
+        Ok(self.storage.list(query, ListOrder::Standing).await?)
+    }
+
+    /// The backoffice roster: the last signup first.
+    pub async fn roster(&self, query: PageQuery) -> Result<Paginated<Player>, ServiceError> {
+        Ok(self.storage.list(query, ListOrder::Newest).await?)
     }
 
     /// `actor` is the admin doing it. Nobody changes their own role, so the last

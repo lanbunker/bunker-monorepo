@@ -1,0 +1,97 @@
+---
+import Alert from "../components/ui/Alert.astro"
+import Button from "../components/ui/Button.astro"
+import Panel from "../components/ui/Panel.astro"
+import Prompt from "../components/ui/Prompt.astro"
+import RankMark from "../components/ui/RankMark.astro"
+import Table from "../components/ui/Table.astro"
+import Layout from "../layouts/Layout.astro"
+import { call, dataOf } from "../lib/api"
+import { KINDS, RANKS, cyclesRange, formatCycles, tierLabel } from "../lib/cycles"
+
+// The amounts come from the API on every render: the page can never say a
+// number the ledger does not pay.
+const rules = dataOf(await call(client => client.GET("/api/cycles/rules")))
+const ladder = rules?.ranks.toReversed() ?? []
+---
+
+<Layout title="CYCLES//LAN_BUNKER" active="players">
+  <Prompt command="man cycles" comment="how the ladder works" />
+
+  {!rules ? (
+    <Alert message="The rules are unreachable." />
+  ) : (
+    <div class="grid gap-6 min-[40rem]:grid-cols-2">
+      <Panel tone="accent">
+        <h2 class="m-0 text-xs tracking-wider text-dim">&gt; earning</h2>
+        <p class="mt-2 text-2xs text-mute">
+          cycles are the points of the bunker. they never expire, and every gain is a line
+          in your log.
+        </p>
+        <Table label="how to earn cycles" class="mt-4">
+          <thead class="sr-only">
+            <tr>
+              <th class="w-[70%]">source</th>
+              <th class="w-[30%]">cycles</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rules.awards.map(award => (
+              <tr class="border-t border-faint first:border-t-0" data-kind={award.kind}>
+                <td class="py-2">
+                  <span class="text-bright">{KINDS[award.kind].label}</span>
+                  <span class="block text-2xs text-dim">{KINDS[award.kind].blurb}</span>
+                </td>
+                <td class="py-2 text-right whitespace-nowrap text-accent tabular-nums">
+                  {cyclesRange(award.cycles)}
+                </td>
+              </tr>
+            ))}
+            <tr class="border-t border-faint" data-kind="adjustment">
+              <td class="py-2">
+                <span class="text-bright">{KINDS.adjustment.label}</span>
+                <span class="block text-2xs text-dim">{KINDS.adjustment.blurb}</span>
+              </td>
+              <td class="py-2 text-right whitespace-nowrap text-warn tabular-nums">
+                ±{formatCycles(rules.adjustmentMax)}
+              </td>
+            </tr>
+          </tbody>
+        </Table>
+        <p class="mt-4 text-2xs text-mute">
+          a placement grows with the field, every entrant counted:{" "}
+          {rules.tiers.map((_, index) => tierLabel(rules.tiers, index)).join(", ")}{" "}
+          players. the biggest field is a cap. a tournament pays when it concludes. a bye
+          is not a win, and a deleted tournament takes its cycles with it.
+        </p>
+      </Panel>
+
+      <Panel>
+        <h2 class="m-0 text-xs tracking-wider text-dim">&gt; ranks</h2>
+        <p class="mt-2 text-2xs text-mute">
+          your rank is what your total makes you. it goes up with the total, and only an
+          admin can take it down.
+        </p>
+        <ol
+          class="m-0 mt-4 flex list-none flex-col gap-2 p-0 text-xs"
+          aria-label="the ladder"
+        >
+          {ladder.map(step => (
+            <li class="flex flex-wrap items-baseline justify-between gap-x-3 border-t border-faint py-2 first:border-t-0">
+              <RankMark rank={step.rank} labelled />
+              <span class:list={["tabular-nums", RANKS[step.rank].text]}>
+                {step.floor === 0 ? "from nothing" : `from ${formatCycles(step.floor)}`}
+              </span>
+            </li>
+          ))}
+        </ol>
+      </Panel>
+    </div>
+  )}
+
+  <div class="mt-8 flex flex-wrap gap-3">
+    <Button href="/players" variant="ghost" size="sm">
+      ← LEADERBOARD
+    </Button>
+  </div>
+</Layout>

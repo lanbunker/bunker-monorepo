@@ -1,6 +1,9 @@
 /** Rows per page on every list. The API allows up to 100. */
 export const PAGE_SIZE = 20
 
+/** Lines of the cycles log a profile shows before it offers the full log. */
+export const RECENT_ENTRIES = 5
+
 /**
  * Reads `?page=` from a URL. Anything that is not a positive integer becomes page
  * 1, so a bad link shows the first page instead of an error.

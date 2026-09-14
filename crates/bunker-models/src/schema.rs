@@ -10,6 +10,7 @@ use crate::bracket::MatchId;
 use crate::glyph::GlyphBits;
 use crate::handle::{HANDLE_MAX_LEN, HANDLE_MIN_LEN, Handle};
 use crate::player::PlayerId;
+use crate::points::{ADJUSTMENT_MAX, Amount, NOTE_MAX_LEN, Note, PointEntryId};
 use crate::tournament::{
     DESCRIPTION_MAX_LEN, Description, EntrantId, GAME_MODE_MAX_LEN, GAME_NAME_MAX_LEN, GameMode,
     GameName, SKILL_LEVEL_MAX, SKILL_LEVEL_MIN, SkillLevel, TOURNAMENT_NAME_MAX_LEN, TournamentId,
@@ -49,13 +50,27 @@ macro_rules! text_schema {
     )+};
 }
 
-uuid_schema!(PlayerId, TournamentId, EntrantId, MatchId);
+uuid_schema!(PlayerId, TournamentId, EntrantId, MatchId, PointEntryId);
 text_schema!(
     TournamentName => 1, TOURNAMENT_NAME_MAX_LEN;
     GameName => 1, GAME_NAME_MAX_LEN;
     GameMode => 1, GAME_MODE_MAX_LEN;
     Description => 0, DESCRIPTION_MAX_LEN;
+    Note => 1, NOTE_MAX_LEN;
 );
+
+impl PartialSchema for Amount {
+    fn schema() -> RefOr<Schema> {
+        ObjectBuilder::new()
+            .schema_type(Type::Integer)
+            .minimum(Some(-ADJUSTMENT_MAX))
+            .maximum(Some(ADJUSTMENT_MAX))
+            .description(Some("Signed cycles. Zero is refused."))
+            .build()
+            .into()
+    }
+}
+impl ToSchema for Amount {}
 
 impl PartialSchema for Handle {
     fn schema() -> RefOr<Schema> {

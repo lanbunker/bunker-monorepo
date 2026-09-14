@@ -4,6 +4,7 @@ import { BracketEditor } from "../../../components/BracketEditor"
 import Alert from "../../../components/ui/Alert.astro"
 import Button from "../../../components/ui/Button.astro"
 import Glyph from "../../../components/ui/Glyph.astro"
+import Table from "../../../components/ui/Table.astro"
 import AdminLayout from "../../../layouts/AdminLayout.astro"
 import { call, dataOf, failureOf, isMissing } from "../../../lib/api"
 import { formatDate, toLocalInput } from "../../../lib/dates"
@@ -247,7 +248,7 @@ const t = detail?.tournament
           entrants <span class="text-admin-mute"># {detail.entrants.length}</span>
         </h2>
         {detail.entrants.length > 0 ? (
-          <table class="w-full border-collapse text-xs" aria-label="entrants">
+          <Table label="entrants">
             <thead>
               <tr class="text-left text-2xs tracking-wider text-admin-dim">
                 <th class="w-[10%] pb-2 font-normal">seed</th>
@@ -295,7 +296,7 @@ const t = detail?.tournament
                 </tr>
               ))}
             </tbody>
-          </table>
+          </Table>
         ) : (
           <p class="m-0 text-xs text-admin-dim">nobody yet.</p>
         )}

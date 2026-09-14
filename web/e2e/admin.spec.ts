@@ -22,7 +22,7 @@ test("an admin edits the details of a tournament and the change survives a reloa
     const id = await createDraft(page, `Edit ${handle("t")}`)
 
     const renamed = `Renamed ${handle("t")}`
-    await page.getByLabel("name").fill(renamed)
+    await page.getByLabel("name", { exact: true }).fill(renamed)
     await page.getByLabel("mode").fill("2v2 team")
     await page.getByLabel("description").fill("a longer description of the rules")
     await page.getByRole("button", { name: "save" }).click()
@@ -31,7 +31,7 @@ test("an admin edits the details of a tournament and the change survives a reloa
     await expect(page.getByRole("status")).toContainText("saved")
 
     await page.reload()
-    await expect(page.getByLabel("name")).toHaveValue(renamed)
+    await expect(page.getByLabel("name", { exact: true })).toHaveValue(renamed)
     await expect(page.getByLabel("mode")).toHaveValue("2v2 team")
     await expect(page.getByLabel("description")).toHaveValue(
         "a longer description of the rules",

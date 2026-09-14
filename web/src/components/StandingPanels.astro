@@ -1,0 +1,114 @@
+---
+import type { KindTotal, Standing } from "../lib/api"
+import {
+  RANKS,
+  SOURCES,
+  asciiBar,
+  formatCycles,
+  progressOf,
+  sourceTotals,
+  toGo,
+} from "../lib/cycles"
+import Button from "./ui/Button.astro"
+import Kv from "./ui/Kv.astro"
+import Panel from "./ui/Panel.astro"
+
+interface Props {
+  standing: Standing
+  /** The totals by kind from the log. Absent when the ledger did not answer. */
+  totals?: KindTotal[] | undefined
+}
+
+const { standing, totals } = Astro.props
+const rank = RANKS[standing.rank]
+const progress = progressOf(standing)
+const missing = toGo(standing)
+const sources = totals ? sourceTotals(totals) : undefined
+// A player with nothing yet gets the way in, not an empty bar. A player in the
+// negative gets the bar: they have a log to explain it.
+const fresh =
+  standing.cycles === 0 && standing.next !== null && standing.next !== undefined
+// 24 cells at text-sm is about 14rem. The panels go side by side only past 48rem,
+// so a half panel is always wider than the bar and the brackets stay on its line.
+const BAR_WIDTH = 24
+---
+
+<div class="mt-4 grid gap-4 min-[48rem]:grid-cols-2">
+  <Panel>
+    <h2 class="m-0 text-2xs font-normal tracking-wider text-dim">rank</h2>
+    {fresh && standing.next ? (
+      <div class="mt-3 flex flex-col gap-3 text-xs">
+        <p class="m-0 text-dim">
+          no cycles yet. a <span class={rank.text}>[{rank.label}]</span> wakes up at{" "}
+          <span class="text-ink">{formatCycles(standing.next.floor)}</span> cycles.
+        </p>
+        <div>
+          <Button href="/cycles" size="sm">
+            HOW TO EARN CYCLES
+          </Button>
+        </div>
+      </div>
+    ) : (
+      <div
+        class="mt-3 flex flex-col gap-2 text-xs"
+        data-progress={Math.round(progress * 100)}
+        role="img"
+        aria-label={
+          standing.next
+            ? `${formatCycles(standing.cycles)} of ${formatCycles(standing.next.floor)} cycles to ${RANKS[standing.next.rank].label}`
+            : "top of the ladder"
+        }
+      >
+        <div
+          class="text-sm leading-none whitespace-nowrap tabular-nums"
+          aria-hidden="true"
+        >
+          <span class="text-dim">[</span>
+          <span class={rank.text}>{asciiBar(progress, BAR_WIDTH)}</span>
+          <span class="text-dim">]</span>
+        </div>
+        {standing.next ? (
+          <>
+            <p class="m-0 text-dim tabular-nums">
+              <span class="text-ink">{formatCycles(standing.cycles)}</span> →{" "}
+              <span class={RANKS[standing.next.rank].text}>
+                [{RANKS[standing.next.rank].label}]
+              </span>{" "}
+              at {formatCycles(standing.next.floor)}
+            </p>
+            <p class="m-0 text-sm text-bright tabular-nums">
+              {formatCycles(missing ?? 0)} to go
+            </p>
+          </>
+        ) : (
+          <p class="m-0 text-sm text-rank-kernel">top of the ladder. nothing above.</p>
+        )}
+      </div>
+    )}
+  </Panel>
+
+  <Panel>
+    <h2 class="m-0 text-2xs font-normal tracking-wider text-dim">cycles</h2>
+    <div class="mt-3 flex flex-col gap-1">
+      {sources ? (
+        SOURCES.map(source => (
+          <Kv label={source}>
+            <span class="tabular-nums" data-source={source}>
+              {formatCycles(sources[source])}
+            </span>
+          </Kv>
+        ))
+      ) : (
+        <p class="m-0 text-xs text-alert">the ledger is unreachable.</p>
+      )}
+      <Kv label="arcade">
+        <span class="text-mute">coming soon</span>
+      </Kv>
+      <div class="mt-2 border-t border-faint pt-2">
+        <Kv label="total" tone="accent">
+          <span class="text-sm tabular-nums">{formatCycles(standing.cycles)}</span>
+        </Kv>
+      </div>
+    </div>
+  </Panel>
+</div>

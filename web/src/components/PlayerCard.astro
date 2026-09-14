@@ -1,10 +1,12 @@
 ---
 import type { Player } from "../lib/api"
+import { RANKS, formatCycles } from "../lib/cycles"
 import { formatDate } from "../lib/dates"
 import Badge from "./ui/Badge.astro"
 import Glyph from "./ui/Glyph.astro"
 import Kv from "./ui/Kv.astro"
 import Panel from "./ui/Panel.astro"
+import RankMark from "./ui/RankMark.astro"
 
 interface Props {
   player: Player
@@ -13,14 +15,22 @@ interface Props {
 }
 
 const { player, own = false } = Astro.props
+const standing = player.standing
+const rank = RANKS[standing.rank]
 ---
 
 <Panel tone={own ? "accent" : "default"}>
   <div class="flex flex-wrap gap-6" style={`--player:${player.glyph.color}`}>
     <Glyph glyph={player.glyph} size="7.5rem" framed />
     <div class="min-w-[16rem] flex-1">
-      <div class="flex flex-wrap items-center gap-3">
+      <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
         <h1 class="m-0 text-[1.75rem] leading-none text-(--player)">{player.handle}</h1>
+        <span
+          class="text-xs tracking-wider text-dim tabular-nums"
+          data-place={standing.place}
+        >
+          #{standing.place} <span class="text-mute">of {standing.players}</span>
+        </span>
         <div class="flex items-center gap-2">
           {player.role === "admin" && <Badge tone="warn">admin</Badge>}
           {own && (
@@ -31,6 +41,15 @@ const { player, own = false } = Astro.props
         </div>
       </div>
       <div class="mt-5 flex flex-col gap-1">
+        <Kv label="Rank">
+          <RankMark rank={standing.rank} labelled />
+          <span class="ml-2 text-dim">// lvl {rank.tier}</span>
+        </Kv>
+        <Kv label="Cycles" tone="accent">
+          <span class="text-sm" data-cycles>
+            {formatCycles(standing.cycles)}
+          </span>
+        </Kv>
         <Kv label="Enlisted">{formatDate(new Date(player.createdAt))}</Kv>
         <Kv label="Glyph">
           <span class="text-dim">bits</span>{" "}

@@ -11,6 +11,7 @@ mod glyph;
 mod handle;
 mod pagination;
 mod player;
+mod points;
 mod role;
 mod schema;
 mod tournament;
@@ -29,6 +30,12 @@ pub use pagination::{
     PAGE_SIZE_MAX, PageNumber, PageNumberError, PageQuery, PageSize, PageSizeError, Paginated,
 };
 pub use player::{Account, Player, PlayerId};
+pub use points::{
+    ADJUSTMENT_MAX, Adjustment, Amount, AmountError, Award, AwardRule, CyclesLog, CyclesRules,
+    ENTRY_CYCLES, FieldTier, KindTotal, MATCH_WIN_CYCLES, NOTE_MAX_LEN, NextRank, Note, NoteError,
+    PointEntry, PointEntryId, PointKind, Rank, RankRule, Standing, TierRule, UnknownPointKind,
+    tournament_awards,
+};
 pub use role::{Role, RoleUpdate, UnknownRole};
 pub use tournament::{
     DESCRIPTION_MAX_LEN, Description, DescriptionError, Entrant, EntrantAdd, EntrantId,

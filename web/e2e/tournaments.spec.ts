@@ -5,10 +5,14 @@ import {
     API,
     PASSWORD,
     createDraft,
+    cyclesOf,
     handle,
+    jsonOf,
     logout,
+    rulesSchema,
     signup,
     signupAdmin,
+    standingSchema,
     tokenFor,
 } from "./support"
 
@@ -278,6 +282,26 @@ test("a bracket runs from generation to a champion, live on the kiosk", async ({
     await expect(kiosk.getByText("■ concluded")).toBeVisible({ timeout: 10_000 })
     await expect(kiosk.locator("[data-champion]").getByText(winner)).toBeVisible()
     await kiosk.close()
+
+    // The conclusion paid the champion: the entry, one win at least, the cup.
+    const rules = await jsonOf(
+        await page.request.get(`${API}/api/cycles/rules`),
+        rulesSchema,
+    )
+    const champion = await jsonOf(
+        await page.request.get(`${API}/api/players/${winner}`),
+        standingSchema,
+    )
+    // Three entrants: a small field.
+    expect(champion.standing.cycles).toBeGreaterThanOrEqual(
+        cyclesOf(rules, "tournament_entry", 3) +
+            cyclesOf(rules, "match_win", 3) +
+            cyclesOf(rules, "champion", 3),
+    )
+    await page.goto(`/players/${winner}`)
+    await expect(page.getByText("champion", { exact: true })).toBeVisible()
+    // Every line of the log links the cup, so any one of them proves the join.
+    await expect(page.getByRole("link", { name }).first()).toBeVisible()
 
     await page.goto("/tournaments")
     const card = page.locator(`[data-tournament="${id}"]`)

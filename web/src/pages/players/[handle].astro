@@ -1,19 +1,28 @@
 ---
+import CyclesPanel from "../../components/CyclesPanel.astro"
 import PlayerCard from "../../components/PlayerCard.astro"
+import StandingPanels from "../../components/StandingPanels.astro"
 import Alert from "../../components/ui/Alert.astro"
 import Button from "../../components/ui/Button.astro"
 import Prompt from "../../components/ui/Prompt.astro"
 import Layout from "../../layouts/Layout.astro"
 import { call, dataOf, failureOf, isMissing } from "../../lib/api"
+import { RECENT_ENTRIES } from "../../lib/paging"
 
 const handle = Astro.params.handle ?? ""
-const result = await call(client =>
-  client.GET("/api/players/{handle}", { params: { path: { handle } } }),
-)
+const [result, logResult] = await Promise.all([
+  call(client => client.GET("/api/players/{handle}", { params: { path: { handle } } })),
+  call(client =>
+    client.GET("/api/players/{handle}/cycles", {
+      params: { path: { handle }, query: { page: 1, pageSize: RECENT_ENTRIES } },
+    }),
+  ),
+])
 const failure = failureOf(result)
 if (failure && isMissing(failure)) return Astro.rewrite("/404")
 
 const player = dataOf(result)
+const log = dataOf(logResult)
 const own = player !== undefined && Astro.locals.player?.id === player.id
 ---
 
@@ -21,7 +30,12 @@ const own = player !== undefined && Astro.locals.player?.id === player.id
   <Prompt command={`cat /players/${handle}`} />
 
   {player ? (
-    <PlayerCard player={player} own={own} />
+    <>
+      <PlayerCard player={player} own={own} />
+      <StandingPanels standing={player.standing} totals={log?.totals} />
+
+      <CyclesPanel handle={handle} log={log} own={own} />
+    </>
   ) : (
     <Alert message="The player database is unreachable." />
   )}

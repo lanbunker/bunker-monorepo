@@ -1,7 +1,7 @@
 //! Conversions every row type needs. Each one names the table, so a malformed
 //! value points at the place to look.
 
-use bunker_models::{Glyph, GlyphBits, GlyphColor, Handle, Player, PlayerId};
+use bunker_models::{Glyph, GlyphBits, GlyphColor, Handle, Player, PlayerId, Standing};
 use time::OffsetDateTime;
 use uuid::Uuid;
 
@@ -32,7 +32,9 @@ pub(super) fn parse_uuid(table: &'static str, raw: &str) -> Result<Uuid, Storage
     Uuid::parse_str(raw).map_err(|error| StorageError::malformed_row(table, error))
 }
 
-/// The public columns of a player, as every query that joins players selects them.
+/// The public columns of a player, as every query that reads players selects
+/// them: the row of `players` joined with `player_standings`, the view that
+/// sums the ledger. The join is what keeps the total on every player current.
 #[derive(Debug)]
 pub(super) struct PlayerRow {
     pub(super) id: String,
@@ -41,6 +43,9 @@ pub(super) struct PlayerRow {
     pub(super) glyph_color: String,
     pub(super) role: String,
     pub(super) created_at: i64,
+    pub(super) cycles: i64,
+    pub(super) place: i64,
+    pub(super) players: i64,
 }
 
 impl TryFrom<PlayerRow> for Player {
@@ -54,6 +59,11 @@ impl TryFrom<PlayerRow> for Player {
         let color = GlyphColor::from_hex(&row.glyph_color)
             .ok_or_else(|| StorageError::malformed_row(PLAYERS, MalformedField("glyph_color")))?;
 
+        let place = u32::try_from(row.place)
+            .map_err(|error| StorageError::malformed_row(PLAYERS, error))?;
+        let players = u32::try_from(row.players)
+            .map_err(|error| StorageError::malformed_row(PLAYERS, error))?;
+
         Ok(Self {
             id: PlayerId::new(parse_uuid(PLAYERS, &row.id)?),
             handle: Handle::try_new(row.handle)
@@ -63,6 +73,7 @@ impl TryFrom<PlayerRow> for Player {
                 .role
                 .parse()
                 .map_err(|error| StorageError::malformed_row(PLAYERS, error))?,
+            standing: Standing::new(row.cycles, place, players),
             created_at: from_micros(PLAYERS, row.created_at)?,
         })
     }

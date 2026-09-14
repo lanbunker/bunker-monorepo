@@ -1,0 +1,56 @@
+---
+import type { PointEntry } from "../lib/api"
+import { entryLabel, signed } from "../lib/cycles"
+import { formatDate } from "../lib/dates"
+
+interface Props {
+  entries: PointEntry[]
+  /** The sentence for an empty log. */
+  empty?: string
+}
+
+const { entries, empty = "no cycles yet." } = Astro.props
+---
+
+{entries.length === 0 ? (
+  <p class="m-0 text-xs text-mute">{empty}</p>
+) : (
+  <ol class="m-0 flex list-none flex-col p-0 text-xs" data-cycles-log>
+    {entries.map(entry => (
+      <li class="grid grid-cols-[4.5rem_minmax(0,1fr)_auto] items-baseline gap-x-3 border-t border-faint py-2 first:border-t-0 hover:bg-faint/40">
+        <span
+          class:list={[
+            "text-right font-bold tabular-nums",
+            entry.amount < 0 ? "text-alert" : "text-accent",
+          ]}
+        >
+          {signed(entry.amount)}
+        </span>
+        <span class="min-w-0">
+          <span class="text-bright">{entryLabel(entry)}</span>
+          {entry.tournamentName && (
+            <span class="text-dim">
+              {" // "}
+              {entry.tournamentId ? (
+                <a
+                  href={`/tournaments/${entry.tournamentId}/bracket`}
+                  class="text-dim no-underline hover:text-accent"
+                >
+                  {entry.tournamentName}
+                </a>
+              ) : (
+                entry.tournamentName
+              )}
+            </span>
+          )}
+          {entry.note && (
+            <span class="block text-2xs text-dim italic">"{entry.note}"</span>
+          )}
+        </span>
+        <span class="text-2xs text-mute tabular-nums">
+          {formatDate(new Date(entry.createdAt))}
+        </span>
+      </li>
+    ))}
+  </ol>
+)}

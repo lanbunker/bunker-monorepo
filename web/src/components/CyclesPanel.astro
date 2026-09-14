@@ -1,0 +1,58 @@
+---
+import type { CyclesLog as Log } from "../lib/api"
+import { RECENT_ENTRIES } from "../lib/paging"
+import CyclesLog from "./CyclesLog.astro"
+import Button from "./ui/Button.astro"
+import Panel from "./ui/Panel.astro"
+import Prompt from "./ui/Prompt.astro"
+
+interface Props {
+  handle: string
+  /** The first page of the log, or nothing when the ledger did not answer. */
+  log: Log | undefined
+  /** The profile speaks to the player; a public page speaks about them. */
+  own?: boolean
+}
+
+const { handle, log, own = false } = Astro.props
+const path = own ? "~/.cycles" : `/players/${handle}/cycles`
+---
+
+<Prompt
+  command={`tail -n ${RECENT_ENTRIES} ${path}`}
+  comment={own ? "how you got here" : undefined}
+/>
+<Panel>
+  {log ? (
+    <CyclesLog
+      entries={log.entries.items}
+      empty={own ? "no cycles yet. enter a tournament." : "no cycles yet."}
+    />
+  ) : (
+    <p class="m-0 text-xs text-alert">the ledger is unreachable.</p>
+  )}
+  <div class="mt-4 flex flex-wrap gap-3">
+    {log && log.entries.total > RECENT_ENTRIES && (
+      <Button href={`/players/${handle}/cycles`} variant="ghost" size="sm">
+        FULL LOG ({log.entries.total}) →
+      </Button>
+    )}
+    <Button href="/cycles" variant="ghost" size="sm">
+      HOW TO EARN CYCLES
+    </Button>
+  </div>
+</Panel>
+
+<Prompt
+  command={own ? "cat ~/.scores" : `cat /players/${handle}/scores`}
+  comment="best per game"
+/>
+<Panel tone="muted">
+  <p class="m-0 text-xs tracking-wider text-dim" data-coming-soon>
+    {"// coming soon"}
+  </p>
+  <p class="m-0 mt-2 text-2xs text-mute">
+    the arcade cabinets will post {own ? "your" : "the"} scores here, and pay cycles for
+    them.
+  </p>
+</Panel>

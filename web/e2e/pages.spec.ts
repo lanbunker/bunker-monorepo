@@ -9,6 +9,7 @@ const PUBLIC_PAGES = [
     { path: "/events", heading: /upcoming/i, title: /EVENTS/ },
     { path: "/tournaments", heading: /tournaments/i, title: /TOURNAMENTS/ },
     { path: "/players", heading: /players/i, title: /PLAYERS/ },
+    { path: "/cycles", heading: /man cycles/i, title: /CYCLES/ },
     { path: "/media", heading: /media/i, title: /MEDIA/ },
     { path: "/shop", heading: /shop/i, title: /SHOP/ },
     { path: "/about", heading: /cat /i, title: /ABOUT/ },
