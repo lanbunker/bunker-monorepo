@@ -177,3 +177,54 @@ async fn the_default_window_is_page_one_of_twenty() {
     assert_eq!(page.page.into_inner(), 1);
     assert_eq!(page.page_size.into_inner(), 20);
 }
+
+/// The search is a substring match without case. `total` follows the filter,
+/// so a pager over a search counts the matches and not the roster.
+#[tokio::test]
+async fn the_roster_search_matches_part_of_a_handle_without_case() {
+    let api = TestApi::with_database().await;
+    for handle in ["dave", "BigDave", "ziopera"] {
+        api.signup_player(handle).await;
+    }
+
+    let response = api.get("/api/players?q=DAV").await;
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let page: Paginated<Player> = read_json(response).await;
+    let mut handles: Vec<&str> = page.items.iter().map(|p| p.handle.as_ref()).collect();
+    handles.sort_unstable();
+    assert_eq!(handles, ["BigDave", "dave"]);
+    assert_eq!(page.total, 2);
+    assert_eq!(page.total_pages, 1);
+}
+
+/// `_` is a handle character. A `like` match would read it as any character
+/// and return `ziopera` for `z_o`.
+#[tokio::test]
+async fn an_underscore_in_a_search_term_is_a_character() {
+    let api = TestApi::with_database().await;
+    for handle in ["z_opera", "ziopera"] {
+        api.signup_player(handle).await;
+    }
+
+    let response = api.get("/api/players?q=z_o").await;
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let page: Paginated<Player> = read_json(response).await;
+    let handles: Vec<&str> = page.items.iter().map(|p| p.handle.as_ref()).collect();
+    assert_eq!(handles, ["z_opera"]);
+}
+
+#[tokio::test]
+async fn a_search_with_no_match_is_an_empty_page() {
+    let api = TestApi::with_database().await;
+    api.signup_player("dave").await;
+
+    let response = api.get("/api/players?q=nobody").await;
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let page: Paginated<Player> = read_json(response).await;
+    assert!(page.items.is_empty());
+    assert_eq!(page.total, 0);
+    assert_eq!(page.total_pages, 0);
+}

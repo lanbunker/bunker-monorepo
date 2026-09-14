@@ -14,6 +14,7 @@ import {
     rulesSchema,
     signup,
     signupAdmin,
+    signupMany,
     tokenFor,
 } from "./support"
 
@@ -118,6 +119,91 @@ test("the roster, the old scores link and the public player page show the player
     await expect(page).toHaveURL(new RegExp(`/players/${name}$`))
     await expect(page.getByRole("heading", { level: 1, name, exact: true })).toBeVisible()
     await expect(page.getByText("you", { exact: true })).toHaveCount(0)
+})
+
+test("the roster search finds a player by a piece of the handle, in any case", async ({
+    page,
+}) => {
+    const name = handle("srch")
+    const other = handle("othr")
+    await signup(page, name)
+    await logout(page)
+    await signup(page, other)
+    await logout(page)
+
+    await page.goto("/players")
+    const field = page.getByLabel("search players by name")
+    await field.fill(name.slice(0, 6).toUpperCase())
+    await field.press("Enter")
+    await expect(page).toHaveURL(/\/players\?q=/)
+    await expect(page.getByRole("link", { name })).toBeVisible()
+    await expect(page.getByRole("link", { name: other })).toHaveCount(0)
+    await expect(page.getByRole("search")).toContainText("1 match")
+
+    await page.getByRole("link", { name: "CLEAR" }).click()
+    await expect(page).toHaveURL(/\/players$/)
+    await expect(page.getByRole("link", { name: other })).toBeVisible()
+})
+
+test("a search with no match says so instead of an empty table", async ({ page }) => {
+    await page.goto("/players?q=nobody-has-this")
+    await expect(page.getByText("no handle contains")).toBeVisible()
+    await expect(page.getByRole("search")).toContainText("0 matches")
+    await expect(page.getByRole("table")).toHaveCount(0)
+})
+
+test("the pager keeps the search, and a page past its end comes back to the last one", async ({
+    page,
+    request,
+}) => {
+    const prefix = handle("pq")
+    await signupMany(request, prefix, 21)
+
+    await page.goto(`/players?q=${prefix}`)
+    const pager = page.getByRole("navigation", { name: "Pages" })
+    await expect(pager).toContainText("page 1 of 2")
+    await expect(pager).toContainText("21 players")
+    await expect(page.locator("tbody tr")).toHaveCount(20)
+
+    await pager.getByRole("link", { name: "NEXT →" }).click()
+    await expect(page).toHaveURL(new RegExp(`/players\\?q=${prefix}&page=2$`))
+    await expect(page.locator("tbody tr")).toHaveCount(1)
+    await expect(page.getByLabel("search players by name")).toHaveValue(prefix)
+
+    await page.goto(`/players?q=${prefix}&page=9`)
+    await expect(page).toHaveURL(new RegExp(`/players\\?q=${prefix}&page=2$`))
+})
+
+test("a blank search lists everyone, and a long term is cut to the length of a handle", async ({
+    page,
+}) => {
+    await page.goto("/players")
+    const field = page.getByLabel("search players by name")
+    await field.fill("   ")
+    await field.press("Enter")
+    await expect(page).toHaveURL(/\/players\?q=/)
+    await expect(page.getByRole("link", { name: "CLEAR" })).toHaveCount(0)
+    await expect(page.getByRole("search")).toContainText("enlisted")
+    expect(await page.locator("tbody tr").count()).toBeGreaterThan(0)
+
+    await page.goto(`/players?q=${"a".repeat(25)}`)
+    await expect(page.getByRole("alert")).toHaveCount(0)
+    await expect(field).toHaveValue("a".repeat(20))
+    await expect(page.getByText("no handle contains")).toBeVisible()
+})
+
+test("an underscore in a search term is a character, not a wildcard", async ({
+    page,
+    request,
+}) => {
+    const prefix = handle("us")
+    await signupMany(request, `${prefix}_o`, 1)
+    await signupMany(request, `${prefix}io`, 1)
+
+    await page.goto(`/players?q=${prefix}_o`)
+    await expect(page.getByRole("search")).toContainText("1 match")
+    await expect(page.getByRole("link", { name: `${prefix}_o0` })).toBeVisible()
+    await expect(page.getByRole("link", { name: `${prefix}io0` })).toHaveCount(0)
 })
 
 test("an unknown player is a 404", async ({ page }) => {

@@ -1,4 +1,5 @@
 ---
+import { listPath } from "../../lib/paging"
 import Button from "./Button.astro"
 
 interface Props {
@@ -7,12 +8,14 @@ interface Props {
   total: number
   /** The path the page links point at. The `page` query parameter is added. */
   href: string
+  /** The search the pages are of, so a page link keeps it. */
+  q?: string | undefined
   /** Singular noun for the count, such as "player". */
   noun: string
 }
 
-const { page, totalPages, total, href, noun } = Astro.props
-const link = (to: number) => (to === 1 ? href : `${href}?page=${to}`)
+const { page, totalPages, total, href, q, noun } = Astro.props
+const link = (to: number) => listPath(href, q, to)
 ---
 
 {totalPages > 1 && (

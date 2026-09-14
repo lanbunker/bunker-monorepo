@@ -28,6 +28,7 @@ pub use glyph::{
 pub use handle::{HANDLE_MAX_LEN, HANDLE_MIN_LEN, Handle, HandleChange, HandleError};
 pub use pagination::{
     PAGE_SIZE_MAX, PageNumber, PageNumberError, PageQuery, PageSize, PageSizeError, Paginated,
+    RosterQuery, SearchTerm, SearchTermError,
 };
 pub use player::{Account, Player, PlayerId};
 pub use points::{

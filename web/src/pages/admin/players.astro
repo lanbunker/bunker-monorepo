@@ -5,13 +5,14 @@ import Button from "../../components/ui/Button.astro"
 import Glyph from "../../components/ui/Glyph.astro"
 import Pager from "../../components/ui/Pager.astro"
 import RankMark from "../../components/ui/RankMark.astro"
+import SearchBar from "../../components/ui/SearchBar.astro"
 import Table from "../../components/ui/Table.astro"
 import AdminLayout from "../../layouts/AdminLayout.astro"
 import { call, dataOf } from "../../lib/api"
 import { formatCycles } from "../../lib/cycles"
 import { formatDate } from "../../lib/dates"
 import { donePath, firstError, noticeFrom } from "../../lib/form"
-import { PAGE_SIZE, pageFrom } from "../../lib/paging"
+import { PAGE_SIZE, listPath, pageFrom, searchFrom } from "../../lib/paging"
 import { adminSessionOf } from "../../lib/session"
 
 const session = adminSessionOf(Astro.locals)
@@ -77,24 +78,35 @@ const notice = noticeFrom(Astro.url, {
 const temporaryPassword = resetResult?.data?.temporaryPassword
 
 const page = pageFrom(Astro.url)
+const q = searchFrom(Astro.url)
 const result = await call(
   client =>
     client.GET("/api/admin/players", {
-      params: { query: { page, pageSize: PAGE_SIZE } },
+      params: { query: { page, pageSize: PAGE_SIZE, q } },
     }),
   session.token,
 )
 const roster = dataOf(result)
 if (roster && page > roster.totalPages && roster.totalPages > 0) {
-  return Astro.redirect(`/admin/players?page=${roster.totalPages}`)
+  return Astro.redirect(listPath("/admin/players", q, roster.totalPages))
 }
 ---
 
 <AdminLayout title="BACKOFFICE//players" active="players">
-  <h1 class="m-0 text-sm tracking-wider text-warn">
-    root@bunker:~# players{" "}
-    <span class="text-admin-dim"># {roster?.total ?? "?"} rows</span>
-  </h1>
+  <SearchBar
+    action="/admin/players"
+    command="players |"
+    value={q}
+    comment={
+      !roster
+        ? "? rows"
+        : q === undefined
+          ? `${roster.total} rows`
+          : `${roster.total} ${roster.total === 1 ? "match" : "matches"}`
+    }
+    tone="admin"
+    heading="h1"
+  />
 
   <Alert message={notice} tone="warn" class="mt-3" />
   {temporaryPassword && (
@@ -262,6 +274,7 @@ if (roster && page > roster.totalPages && roster.totalPages > 0) {
       totalPages={roster.totalPages}
       total={roster.total}
       href="/admin/players"
+      q={q}
       noun="player"
     />
   )}

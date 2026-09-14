@@ -3,7 +3,7 @@ use axum::routing::{get, post, put};
 use axum::{Json, Router};
 use bunker_models::{
     Account, CyclesLog, CyclesRules, Handle, HandleChange, PageQuery, Paginated, PasswordChange,
-    Player, TokenResponse,
+    Player, RosterQuery, TokenResponse,
 };
 use serde::Deserialize;
 
@@ -90,7 +90,7 @@ pub(super) async fn change_handle(
     get,
     path = "/api/players",
     tag = "players",
-    params(PageQuery),
+    params(RosterQuery),
     responses(
         (status = 200, body = Paginated<Player>, description = "The leaderboard: first place first"),
         (status = 400, body = ApiErrorBody),
@@ -98,9 +98,9 @@ pub(super) async fn change_handle(
 )]
 pub(super) async fn list_players(
     State(players): State<PlayerService>,
-    ValidQuery(query): ValidQuery<PageQuery>,
+    ValidQuery(query): ValidQuery<RosterQuery>,
 ) -> Result<Json<Paginated<Player>>, ApiError> {
-    Ok(Json(players.leaderboard(query).await?))
+    Ok(Json(players.leaderboard(&query).await?))
 }
 
 #[utoipa::path(

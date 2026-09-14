@@ -2,6 +2,8 @@ use nutype::nutype;
 use serde::{Deserialize, Serialize};
 use utoipa::{IntoParams, ToSchema};
 
+use crate::handle::HANDLE_MAX_LEN;
+
 /// The largest page a client can ask for.
 pub const PAGE_SIZE_MAX: u32 = 100;
 
@@ -42,6 +44,46 @@ impl PageQuery {
 
     pub fn offset(self) -> i64 {
         (i64::from(self.page.into_inner()) - 1) * i64::from(self.page_size.into_inner())
+    }
+}
+
+/// A piece of a handle to look for, matched without case. A term longer than a
+/// handle can match nothing, so it is refused like an empty one.
+#[nutype(
+    sanitize(trim),
+    validate(len_char_min = 1, len_char_max = HANDLE_MAX_LEN),
+    derive(Debug, Clone, PartialEq, Eq, AsRef, Deserialize)
+)]
+pub struct SearchTerm(String);
+
+/// The query string of a player list: a page and an optional search. It is
+/// not [`PageQuery`] with a field added, because `deny_unknown_fields` does not
+/// work through `serde(flatten)`.
+#[derive(Debug, Clone, Default, Deserialize, IntoParams)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+#[into_params(parameter_in = Query)]
+pub struct RosterQuery {
+    #[serde(default)]
+    #[param(value_type = u32, minimum = 1, default = 1)]
+    pub page: PageNumber,
+    #[serde(default)]
+    #[param(value_type = u32, minimum = 1, maximum = 100, default = 20)]
+    pub page_size: PageSize,
+    /// A piece of a handle. The match ignores case.
+    #[param(value_type = Option<String>, min_length = 1, max_length = 20)]
+    pub q: Option<SearchTerm>,
+}
+
+impl RosterQuery {
+    pub fn page(&self) -> PageQuery {
+        PageQuery {
+            page: self.page,
+            page_size: self.page_size,
+        }
+    }
+
+    pub fn term(&self) -> Option<&str> {
+        self.q.as_ref().map(AsRef::as_ref)
     }
 }
 

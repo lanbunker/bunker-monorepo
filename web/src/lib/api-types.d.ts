@@ -979,6 +979,8 @@ export interface operations {
             query?: {
                 page?: number
                 pageSize?: number
+                /** @description A piece of a handle. The match ignores case. */
+                q?: string
             }
             header?: never
             path?: never
@@ -2414,6 +2416,8 @@ export interface operations {
             query?: {
                 page?: number
                 pageSize?: number
+                /** @description A piece of a handle. The match ignores case. */
+                q?: string
             }
             header?: never
             path?: never

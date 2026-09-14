@@ -39,6 +39,17 @@
               "maximum": 100,
               "minimum": 1
             }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "description": "A piece of a handle. The match ignores case.",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 20,
+              "minLength": 1
+            }
           }
         ],
         "responses": {
@@ -2027,6 +2038,17 @@
               "default": 20,
               "maximum": 100,
               "minimum": 1
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "description": "A piece of a handle. The match ignores case.",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 20,
+              "minLength": 1
             }
           }
         ],

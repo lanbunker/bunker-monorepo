@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process"
 
 import { expect } from "@playwright/test"
-import type { APIResponse, Locator, Page } from "@playwright/test"
+import type { APIRequestContext, APIResponse, Locator, Page } from "@playwright/test"
 import { z } from "zod"
 
 export const PASSWORD = "correct-horse-battery"
@@ -92,6 +92,20 @@ export const createDraft = async (page: Page, name: string): Promise<string> => 
     await page.getByRole("button", { name: "CREATE DRAFT" }).click()
     await expect(page).toHaveURL(/\/admin\/tournaments\/[0-9a-f-]{36}$/)
     return page.url().split("/").at(-1) ?? ""
+}
+
+/** Signs up `count` players named `prefix0`, `prefix1`, ... through the API. */
+export const signupMany = async (
+    request: APIRequestContext,
+    prefix: string,
+    count: number,
+) => {
+    for (let index = 0; index < count; index += 1) {
+        const response = await request.post(`${API}/api/auth/signup`, {
+            data: { handle: `${prefix}${index}`, password: PASSWORD },
+        })
+        expect(response.status()).toBe(201)
+    }
 }
 
 /** A bearer token for direct API calls, for setup that the UI would make slow. */

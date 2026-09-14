@@ -1,6 +1,14 @@
 import { expect, test } from "@playwright/test"
 
-import { API, PASSWORD, createDraft, handle, signupAdmin, tokenFor } from "./support"
+import {
+    API,
+    PASSWORD,
+    createDraft,
+    handle,
+    signupAdmin,
+    signupMany,
+    tokenFor,
+} from "./support"
 
 test("the overview counts the rows and reports the api as up", async ({ page }) => {
     await signupAdmin(page)
@@ -13,6 +21,55 @@ test("the overview counts the rows and reports the api as up", async ({ page }) 
     // value sits on its own line in the markup, so the match allows the space.
     await expect(page.locator("[data-stat=players]")).toHaveText(/^\s*\d+\s*$/)
     await expect(page.locator("[data-stat=tournaments]")).toHaveText(/^\s*\d+\s*$/)
+})
+
+test("the backoffice roster is searchable by handle, in any case, and clears", async ({
+    page,
+    request,
+}) => {
+    const admin = await signupAdmin(page)
+    const other = handle("oth")
+    await signupMany(request, other, 1)
+
+    await page.goto("/admin/players")
+    await expect(page.getByRole("heading", { level: 1 })).toContainText(
+        "root@bunker:~# players",
+    )
+    const field = page.getByLabel("search players by name")
+    await field.fill(admin.slice(-5).toUpperCase())
+    await field.press("Enter")
+    await expect(page).toHaveURL(/\/admin\/players\?q=/)
+    await expect(page.getByRole("row", { name: new RegExp(admin) })).toBeVisible()
+    await expect(page.getByRole("row", { name: new RegExp(other) })).toHaveCount(0)
+    await expect(page.getByRole("search")).toContainText("1 match")
+
+    await page.getByRole("link", { name: "CLEAR" }).click()
+    await expect(page).toHaveURL(/\/admin\/players$/)
+    await expect(page.getByRole("row", { name: new RegExp(other) })).toBeVisible()
+    await expect(page.getByRole("search")).toContainText("rows")
+})
+
+test("a backoffice search with no match shows an empty table and a zero count", async ({
+    page,
+}) => {
+    await signupAdmin(page)
+    await page.goto("/admin/players?q=nobody-has-this")
+    await expect(page.getByRole("search")).toContainText("0 matches")
+    await expect(page.locator("tbody tr")).toHaveCount(0)
+})
+
+test("the backoffice pager keeps the search", async ({ page, request }) => {
+    await signupAdmin(page)
+    const prefix = handle("apq")
+    await signupMany(request, prefix, 21)
+
+    await page.goto(`/admin/players?q=${prefix}`)
+    const pager = page.getByRole("navigation", { name: "Pages" })
+    await expect(pager).toContainText("page 1 of 2")
+    await expect(page.locator("tbody tr")).toHaveCount(20)
+    await pager.getByRole("link", { name: "NEXT →" }).click()
+    await expect(page).toHaveURL(new RegExp(`/admin/players\\?q=${prefix}&page=2$`))
+    await expect(page.locator("tbody tr")).toHaveCount(1)
 })
 
 test("an admin edits the details of a tournament and the change survives a reload", async ({

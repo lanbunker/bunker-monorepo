@@ -3,7 +3,7 @@ use axum::http::StatusCode;
 use axum::routing::{get, post, put};
 use axum::{Json, Router};
 use bunker_models::{
-    Adjustment, HandleChange, PageQuery, Paginated, Player, PlayerId, PointEntry, RoleUpdate,
+    Adjustment, HandleChange, Paginated, Player, PlayerId, PointEntry, RoleUpdate, RosterQuery,
     TemporaryPassword,
 };
 use serde::Deserialize;
@@ -40,7 +40,7 @@ pub(super) struct PlayerIdPath {
     path = "/api/admin/players",
     tag = "admin",
     security(("bearer" = [])),
-    params(PageQuery),
+    params(RosterQuery),
     responses(
         (status = 200, body = Paginated<Player>, description = "The last signup first"),
         (status = 400, body = ApiErrorBody),
@@ -51,9 +51,9 @@ pub(super) struct PlayerIdPath {
 pub(super) async fn list_players(
     State(players): State<PlayerService>,
     AdminOnly(_admin): AdminOnly,
-    ValidQuery(query): ValidQuery<PageQuery>,
+    ValidQuery(query): ValidQuery<RosterQuery>,
 ) -> Result<Json<Paginated<Player>>, ApiError> {
-    Ok(Json(players.roster(query).await?))
+    Ok(Json(players.roster(&query).await?))
 }
 
 #[utoipa::path(

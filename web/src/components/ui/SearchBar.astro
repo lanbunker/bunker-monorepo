@@ -1,0 +1,94 @@
+---
+/**
+ * The heading of a player list, with a handle search in it: the prompt, the
+ * command, `grep -i` and the field on one line, as one shell command. It is a
+ * GET form, so a search is a URL a player can share, and the pager keeps it.
+ * A blank submit lists everyone.
+ */
+import { SEARCH_MAX } from "../../lib/paging"
+import Button from "./Button.astro"
+
+type Tone = "site" | "admin"
+type Level = "h1" | "h2"
+
+interface Props {
+  /** The list path the form submits to. */
+  action: string
+  /** The command the search filters, such as `sort -rn /players |`. */
+  command: string
+  value?: string | undefined
+  /** What follows the command, such as a count. */
+  comment?: string | undefined
+  tone?: Tone
+  heading?: Level
+  class?: string
+}
+
+const {
+  action,
+  command,
+  value,
+  comment,
+  tone = "site",
+  heading = "h2",
+  class: className,
+} = Astro.props
+const Heading = heading
+
+const prompt: Record<Tone, string> = {
+  site: "bunker@office:~$",
+  admin: "root@bunker:~#",
+}
+const promptClass: Record<Tone, string> = {
+  site: "text-dim",
+  admin: "text-admin-dim",
+}
+const commandClass: Record<Tone, string> = {
+  site: "text-accent-soft",
+  admin: "text-warn tracking-wider",
+}
+const fieldClass: Record<Tone, string> = {
+  site: "border-border text-ink focus:border-accent",
+  admin: "border-warn/40 text-admin-ink focus:border-warn",
+}
+const muteClass: Record<Tone, string> = {
+  site: "text-mute",
+  admin: "text-admin-dim",
+}
+const buttonVariant = tone === "admin" ? "warn" : "ghost"
+---
+
+<form
+  method="get"
+  action={action}
+  role="search"
+  class:list={["flex flex-wrap items-baseline gap-x-2 gap-y-2 text-sm", className]}
+>
+  <Heading class="m-0 flex flex-wrap items-baseline gap-x-2 text-sm font-normal">
+    <span class:list={["max-[30rem]:hidden", promptClass[tone]]}>{prompt[tone]}</span>
+    <span class={commandClass[tone]}>{command} grep -i</span>
+  </Heading>
+  <input
+    id="q"
+    name="q"
+    type="text"
+    value={value ?? ""}
+    maxlength={SEARCH_MAX}
+    placeholder="player name"
+    autocomplete="off"
+    autocapitalize="off"
+    spellcheck="false"
+    enterkeyhint="search"
+    aria-label="search players by name"
+    class:list={["w-40 border-b bg-transparent px-1 outline-none", fieldClass[tone]]}
+  />
+  <Button variant={buttonVariant} size="sm">
+    SEARCH
+  </Button>
+  {value !== undefined && (
+    <Button href={action} variant={buttonVariant} size="sm">
+      CLEAR
+    </Button>
+  )}
+  {comment && <span class={muteClass[tone]}># {comment}</span>}
+</form>

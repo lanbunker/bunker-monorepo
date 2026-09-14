@@ -228,9 +228,13 @@ impl PlayerStorage {
     /// The count and the page run in one transaction, so both see the same rows.
     /// The id breaks every tie, so two signups in the same microsecond keep one
     /// order.
+    /// `term` keeps the rows whose handle contains it, without case. The match
+    /// is `instr` and not `like`, so `_` in a term means the character and not
+    /// any character.
     pub async fn list(
         &self,
         query: PageQuery,
+        term: Option<&str>,
         order: ListOrder,
     ) -> Result<Paginated<Player>, StorageError> {
         let limit = query.limit();
@@ -238,10 +242,14 @@ impl PlayerStorage {
         let by_standing = i64::from(matches!(order, ListOrder::Standing));
 
         let mut tx = self.pool.begin().await.map_err(StorageError::from_query)?;
-        let total = sqlx::query_scalar!("select count(*) from players")
-            .fetch_one(&mut *tx)
-            .await
-            .map_err(StorageError::from_query)?;
+        let total = sqlx::query_scalar!(
+            "select count(*) from players
+             where ?1 is null or instr(lower(handle), lower(?1)) > 0",
+            term,
+        )
+        .fetch_one(&mut *tx)
+        .await
+        .map_err(StorageError::from_query)?;
         // One query for both orders: the leaderboard sorts by place first, and
         // a shared place falls back to the newest player, like the roster.
         let rows = sqlx::query_as!(
@@ -249,12 +257,14 @@ impl PlayerStorage {
             r#"select p.id, p.handle, p.glyph_bits, p.glyph_color, p.role, p.created_at,
                       s.cycles as "cycles!: i64", s.place as "place!: i64", s.players as "players!: i64"
                from players p join player_standings s on s.player_id = p.id
+               where ?4 is null or instr(lower(p.handle), lower(?4)) > 0
                order by case when ?1 = 1 then s.place else 0 end asc,
                         p.created_at desc, p.id asc
                limit ?2 offset ?3"#,
             by_standing,
             limit,
             offset,
+            term,
         )
         .fetch_all(&mut *tx)
         .await

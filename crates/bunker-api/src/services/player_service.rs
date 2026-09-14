@@ -1,4 +1,4 @@
-use bunker_models::{Handle, PageQuery, Paginated, Player, PlayerId, Role};
+use bunker_models::{Handle, Paginated, Player, PlayerId, Role, RosterQuery};
 
 use crate::storage::{ListOrder, PlayerStorage, Renamed};
 
@@ -22,13 +22,22 @@ impl PlayerService {
     }
 
     /// The public leaderboard: first place first.
-    pub async fn leaderboard(&self, query: PageQuery) -> Result<Paginated<Player>, ServiceError> {
-        Ok(self.storage.list(query, ListOrder::Standing).await?)
+    pub async fn leaderboard(
+        &self,
+        query: &RosterQuery,
+    ) -> Result<Paginated<Player>, ServiceError> {
+        Ok(self
+            .storage
+            .list(query.page(), query.term(), ListOrder::Standing)
+            .await?)
     }
 
     /// The backoffice roster: the last signup first.
-    pub async fn roster(&self, query: PageQuery) -> Result<Paginated<Player>, ServiceError> {
-        Ok(self.storage.list(query, ListOrder::Newest).await?)
+    pub async fn roster(&self, query: &RosterQuery) -> Result<Paginated<Player>, ServiceError> {
+        Ok(self
+            .storage
+            .list(query.page(), query.term(), ListOrder::Newest)
+            .await?)
     }
 
     /// `actor` is the admin doing it. Nobody changes their own role, so the last

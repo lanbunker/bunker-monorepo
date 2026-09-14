@@ -196,6 +196,26 @@ async fn a_page_size_past_the_maximum_is_rejected() {
     assert_error(response, StatusCode::BAD_REQUEST, "InvalidRequest").await;
 }
 
+#[tokio::test]
+async fn an_empty_search_term_is_rejected() {
+    let response = TestApi::without_database()
+        .await
+        .get("/api/players?q=%20")
+        .await;
+
+    assert_error(response, StatusCode::BAD_REQUEST, "InvalidRequest").await;
+}
+
+#[tokio::test]
+async fn a_search_term_longer_than_a_handle_is_rejected() {
+    let response = TestApi::without_database()
+        .await
+        .get("/api/players?q=abcdefghijklmnopqrstu")
+        .await;
+
+    assert_error(response, StatusCode::BAD_REQUEST, "InvalidRequest").await;
+}
+
 /// A server that accepts the key and ignores it answers page 1 of 20, and the
 /// answer looks correct.
 #[tokio::test]

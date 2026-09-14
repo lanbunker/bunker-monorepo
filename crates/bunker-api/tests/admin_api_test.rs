@@ -59,6 +59,23 @@ async fn an_admin_lists_every_player() {
 }
 
 #[tokio::test]
+async fn an_admin_searches_the_roster_by_handle() {
+    let api = TestApi::with_database().await;
+    let admin = api.signup_admin("root").await;
+    for handle in ["dave", "davide", "ziopera"] {
+        api.signup_player(handle).await;
+    }
+
+    let response = api.get_as("/api/admin/players?q=dav", &admin).await;
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let page: Paginated<Player> = read_json(response).await;
+    let handles: Vec<&str> = page.items.iter().map(|p| p.handle.as_ref()).collect();
+    assert_eq!(handles, ["davide", "dave"]);
+    assert_eq!(page.total, 2);
+}
+
+#[tokio::test]
 async fn an_admin_promotes_and_demotes_a_player() {
     let api = TestApi::with_database().await;
     let admin = api.signup_admin("root").await;
