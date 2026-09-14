@@ -24,7 +24,12 @@ const rank = RANKS[standing.rank]
     <Glyph glyph={player.glyph} size="7.5rem" framed />
     <div class="min-w-[16rem] flex-1">
       <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-        <h1 class="m-0 text-[1.75rem] leading-none text-(--player)">{player.handle}</h1>
+        <h1
+          class="handle m-0 text-[1.75rem] leading-none text-(--player)"
+          title={player.handle}
+        >
+          {player.handle}
+        </h1>
         <span
           class="text-xs tracking-wider text-dim tabular-nums"
           data-place={standing.place}

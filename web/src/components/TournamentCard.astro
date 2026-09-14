@@ -99,7 +99,9 @@ const winner = t.winner?.player
                 href={`/players/${winner.handle}`}
                 class="mt-1 block text-[1.375rem] leading-tight tracking-wider text-accent no-underline hover:text-bright"
               >
-                {winner.handle}
+                <span class="handle" title={winner.handle}>
+                  {winner.handle}
+                </span>
               </a>
               <div class="mt-1 text-2xs tracking-wider text-dim">
                 rank: <span class="text-accent">champion</span>

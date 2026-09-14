@@ -230,7 +230,8 @@ export const BracketView = (props: BracketViewProps) => {
                                     framed
                                 />
                                 <span
-                                    className={`${props.kiosk ? "text-2xl" : "text-base"} text-accent tracking-wider`}
+                                    className={`handle ${props.kiosk ? "text-2xl" : "text-base"} text-accent tracking-wider`}
+                                    title={champion.player.handle}
                                 >
                                     {champion.player.handle}
                                 </span>

@@ -40,7 +40,8 @@ if (entries && page > entries.totalPages && entries.totalPages > 0) {
       <div class="flex flex-wrap items-baseline justify-between gap-3 border-b border-faint pb-3">
         <a
           href={`/players/${player.handle}`}
-          class="text-base tracking-wider no-underline text-bright hover:text-accent"
+          class="handle text-base tracking-wider no-underline text-bright hover:text-accent"
+          title={player.handle}
         >
           {player.handle}
         </a>

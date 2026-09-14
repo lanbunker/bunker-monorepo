@@ -32,7 +32,10 @@ const sizeClass: Record<Size, string> = {
   title={`rank ${info.label}`}
   data-rank={rank}
 >
-  <span aria-hidden="true">{cells}</span>
+  <!-- A phone shows the name only. The cells repeat what the name says. -->
+  <span aria-hidden="true" class:list={[labelled && "max-[40rem]:hidden"]}>
+    {cells}
+  </span>
   {labelled ? (
     <span class="font-bold">[{info.label}]</span>
   ) : (

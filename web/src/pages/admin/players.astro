@@ -133,7 +133,9 @@ if (roster && page > roster.totalPages && roster.totalPages > 0) {
                   class="inline-flex items-center gap-2 no-underline text-admin-ink hover:text-warn"
                 >
                   <Glyph glyph={player.glyph} size="1.1em" />
-                  {player.handle}
+                  <span class="handle" title={player.handle}>
+                    {player.handle}
+                  </span>
                 </a>
               </td>
               <td

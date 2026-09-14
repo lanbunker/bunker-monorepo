@@ -17,7 +17,6 @@ const events = (await getCollection("events")).toSorted(
 const nextEvent = events.findLast(
   e => e.data.status === "OPEN" || e.data.status === "SOON",
 )
-const prevEvent = events.find(e => e.data.status === "CLOSED")
 // One row proves the API is up and carries the head count. The tournament list
 // is small, so the first page holds every open one.
 const [roster, tournaments] = await Promise.all([
@@ -40,10 +39,6 @@ const canRegister = upcomingTournament ? isRegistrationOpen(upcomingTournament) 
     hollow="NET"
     class="h-40 max-[30rem]:h-28 min-[62.5rem]:h-60"
   />
-
-  <div class="-mt-2 text-center text-2xs tracking-wider text-dim">
-    ── local area network party ──
-  </div>
 
   <div class="mt-8">
     <div class="flex flex-wrap items-baseline gap-x-2 text-sm">
@@ -87,13 +82,6 @@ const canRegister = upcomingTournament ? isRegistrationOpen(upcomingTournament) 
               "to be announced"
             )}
           </Kv>
-          {prevEvent && (
-            <Kv label="Previous event">
-              <a href="/events" class="text-bright no-underline hover:text-accent">
-                {formatEurDate(prevEvent.data.date)} // {prevEvent.data.name}
-              </a>
-            </Kv>
-          )}
           {upcomingTournament && (
             <Kv label="Tournament" tone={canRegister ? "accent" : "default"}>
               <a href="/tournaments" class="no-underline hover:text-bright">

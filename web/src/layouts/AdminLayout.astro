@@ -29,6 +29,20 @@ const sections: { key: Section; label: string; href: string; ready: boolean }[] 
     <meta name="color-scheme" content="dark" />
     <meta name="theme-color" content="#0a0800" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link
+      rel="preload"
+      href="/fonts/terminus-regular.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+    <link
+      rel="preload"
+      href="/fonts/terminus-bold.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
     <title>{title}</title>
   </head>
   <body class="min-h-screen bg-admin-bg font-mono text-sm text-admin-ink">
@@ -45,7 +59,10 @@ const sections: { key: Section; label: string; href: string; ready: boolean }[] 
         <div class="flex items-center gap-4 text-2xs tracking-wider text-admin-dim">
           {player && (
             <span>
-              operator <span class="text-admin-ink">{player.handle}</span>
+              operator{" "}
+              <span class="handle text-admin-ink" title={player.handle}>
+                {player.handle}
+              </span>
             </span>
           )}
           <a

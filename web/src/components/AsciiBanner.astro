@@ -71,7 +71,6 @@ if (hollow && !text.toUpperCase().endsWith(hollow.toUpperCase())) {
   const NOISE_CHARS = [".", ":", "·", "'", "`"]
   const FPS = 30
   const MIN_FONT_PX = 8
-  const CHAR_ASPECT = 0.6
 
   // Deterministic per-cell noise so the background does not flicker at random.
   const hash = (x: number, y: number, seed: number) => {
@@ -130,6 +129,14 @@ if (hollow && !text.toUpperCase().endsWith(hollow.toUpperCase())) {
     let glitchUntil = 0
 
     const layout = () => {
+      // The art font is a theme token, and the cell aspect is measured from it, so
+      // a change to the token needs no change here.
+      const family =
+        getComputedStyle(document.documentElement)
+          .getPropertyValue("--font-ascii")
+          .trim() || "monospace"
+      ctx.font = `100px ${family}`
+      const charAspect = ctx.measureText("M").width / 100
       const w = root.clientWidth
       const h = root.clientHeight
       const dpr = Math.min(window.devicePixelRatio || 1, 2)
@@ -137,25 +144,28 @@ if (hollow && !text.toUpperCase().endsWith(hollow.toUpperCase())) {
       canvas.height = Math.floor(h * dpr)
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
 
-      // Pick the densest glyph scale that keeps characters readable.
+      // Pick the densest glyph scale that keeps characters readable. The letters
+      // fill the column, with two percent kept so a glitch shift stays inside.
       const fit = (sy: number) => {
         const sx = sy * 2
         const byH = (0.62 * h) / (mask.rows.length * sy)
-        const byW = (0.92 * w) / (mask.cols * sx * CHAR_ASPECT)
+        const byW = (0.98 * w) / (mask.cols * sx * charAspect)
         return { sy, sx, font: Math.min(byH, byW) }
       }
       const chosen = [3, 2, 1].map(fit).find(f => f.font >= MIN_FONT_PX) ?? fit(1)
-      const font = Math.max(MIN_FONT_PX * 0.75, Math.floor(chosen.font))
+      // Below the readable size the characters are texture, so the font follows
+      // the width instead of a floor. A floor would push the letters past the edges.
+      const font = Math.max(3, chosen.font)
       scaleX = chosen.sx
       scaleY = chosen.sy
-      cellW = font * CHAR_ASPECT
+      cellW = font * charAspect
       cellH = font
       cols = Math.ceil(w / cellW)
       rows = Math.ceil(h / cellH)
       originC = Math.floor((cols - mask.cols * scaleX) / 2)
       originR = Math.floor((rows - mask.rows.length * scaleY) / 2)
 
-      ctx.font = `${font}px "Courier New", Courier, monospace`
+      ctx.font = `${font}px ${family}`
       ctx.textBaseline = "top"
     }
 

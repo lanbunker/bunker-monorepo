@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# Fills the local database with players and one tournament to click through.
-# Needs the API up (make run or make dev). Safe to run again: existing handles
-# are skipped, and a new tournament is added each time.
+# Fills the local database with players, cycles over every rank, and one open
+# tournament to click through. Needs the API up (make run or make dev). Safe
+# to run again: existing handles are skipped, a player with cycles keeps them,
+# and an open Seed Cup is not created twice.
 #
 #   make seed
 set -euo pipefail
@@ -48,6 +49,32 @@ for i in $(seq 1 "$PLAYERS"); do
     handles+=("$handle")
 done
 echo "$PLAYERS players: player01 .. $(printf 'player%02d' "$PLAYERS"), password $PASSWORD"
+
+# Cycles from one adjustment each, so the leaderboard shows every rank: the
+# floors are 100, 600, 1500, 3000 and 6000. Amounts stay under the 10 000 cap
+# of one adjustment. A player who already has cycles is left alone.
+amounts=(9400 7200 4500 3300 2100 1600 900 650 300 120)
+granted=0
+for i in "${!amounts[@]}"; do
+    handle=${handles[$i]:-}
+    [ -n "$handle" ] || break
+    cycles=$(curl -fsS "$API_URL/api/players/$handle" | jq -r .standing.cycles)
+    [ "$cycles" = 0 ] || continue
+    player=$(curl -fsS "$API_URL/api/players/$handle" | jq -r .id)
+    curl -fsS -o /dev/null -X POST "$API_URL/api/admin/players/$player/cycles" \
+        -H 'content-type: application/json' -H "authorization: Bearer $admin" \
+        -d "{\"amount\":${amounts[$i]},\"note\":\"seed: past seasons\"}"
+    granted=$((granted + 1))
+done
+echo "cycles: $granted players granted, from ${amounts[0]} down to ${amounts[-1]}"
+
+open_cup=$(curl -fsS "$API_URL/api/tournaments" \
+    | jq -r '[.items[] | select(.name == "Seed Cup" and .status == "open")][0].id // empty')
+if [ -n "$open_cup" ]; then
+    echo "tournament $open_cup: Seed Cup is already open, none added"
+    echo "admin: seedadmin / $PASSWORD, backoffice at /admin/tournaments/$open_cup"
+    exit 0
+fi
 
 closes_at=$(date -u -v+30d +%Y-%m-%dT20:00:00Z 2>/dev/null || date -u -d '+30 days' +%Y-%m-%dT20:00:00Z)
 day=${closes_at%%T*}

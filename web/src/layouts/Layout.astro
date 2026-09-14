@@ -69,6 +69,20 @@ const activeIndex = nav.findIndex(item => item.key === active)
     <link rel="shortcut icon" href="/favicon.ico" />
     <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
     <link rel="manifest" href="/site.webmanifest" />
+    <link
+      rel="preload"
+      href="/fonts/terminus-regular.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+    <link
+      rel="preload"
+      href="/fonts/terminus-bold.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
     <title>{title}</title>
   </head>
   <body class:list={["min-h-screen bg-bg font-mono text-sm text-ink", !bare && "pb-12"]}>
@@ -107,7 +121,9 @@ const activeIndex = nav.findIndex(item => item.key === active)
                 title="your profile"
               >
                 <Glyph glyph={player.glyph} size="1.2em" />
-                {player.handle}
+                <span class="handle" title={player.handle}>
+                  {player.handle}
+                </span>
               </a>
             ) : (
               <Button href="/login" variant="ghost" size="sm">
@@ -121,7 +137,7 @@ const activeIndex = nav.findIndex(item => item.key === active)
       {!bare && (
         <nav
           aria-label="Sections"
-          class="flex flex-wrap gap-y-1 border-y border-border py-2 text-xs max-[30rem]:text-2xs"
+          class="scroll-row flex border-y border-border py-2 text-xs whitespace-nowrap"
         >
           {nav.map((item, i) => (
             <a
@@ -129,13 +145,18 @@ const activeIndex = nav.findIndex(item => item.key === active)
               data-nav-index={i + 1}
               aria-current={active === item.key ? "page" : undefined}
               class:list={[
-                "px-2.5 py-1 no-underline tracking-wide max-[30rem]:px-1.5",
+                "shrink-0 px-2.5 py-1 no-underline tracking-wide",
                 active === item.key
                   ? "bg-accent font-bold text-black"
                   : "text-ink hover:bg-faint hover:text-accent",
               ]}
             >
-              <span class:list={[active === item.key ? "text-black/60" : "text-dim"]}>
+              <span
+                class:list={[
+                  "max-[40rem]:hidden",
+                  active === item.key ? "text-black/60" : "text-dim",
+                ]}
+              >
                 {i + 1}:
               </span>
               {item.label}
@@ -230,6 +251,14 @@ const activeIndex = nav.findIndex(item => item.key === active)
       }
       updateClock()
       setInterval(updateClock, 1000)
+
+      // On a phone the nav scrolls sideways. The current section starts centered,
+      // so the items to its left and right both show that there is more.
+      const nav = document.querySelector<HTMLElement>("nav[aria-label='Sections']")
+      const current = nav?.querySelector<HTMLElement>("[aria-current='page']")
+      if (nav && current) {
+        nav.scrollLeft = current.offsetLeft - (nav.clientWidth - current.offsetWidth) / 2
+      }
 
       // Number keys jump between sections, like tmux windows. Only when nothing
       // has focus: a digit typed into any field, button or link stays there.

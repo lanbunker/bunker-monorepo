@@ -1,5 +1,29 @@
 @import "tailwindcss";
 
+/* Terminus, subset to Latin plus box drawing. The internal family name differs
+   from "Terminus" because the OFL reserves that name for the unmodified font. */
+@font-face {
+    font-family: "Terminus Bunker";
+    font-style: normal;
+    font-weight: 400;
+    font-display: swap;
+    src: url("/fonts/terminus-regular.woff2") format("woff2");
+}
+@font-face {
+    font-family: "Terminus Bunker";
+    font-style: normal;
+    font-weight: 700;
+    font-display: swap;
+    src: url("/fonts/terminus-bold.woff2") format("woff2");
+}
+@font-face {
+    font-family: "Terminus Bunker";
+    font-style: italic;
+    font-weight: 400;
+    font-display: swap;
+    src: url("/fonts/terminus-italic.woff2") format("woff2");
+}
+
 @theme {
     /* Palette: phosphor green on near-black, amber for pending, red for expired. */
     --color-bg: #050505;
@@ -30,16 +54,21 @@
     --color-admin-dim: #a89c80;
     --color-admin-mute: #5e5644;
 
-    --font-mono: "Courier New", Courier, "Lucida Console", monospace;
+    --font-mono: "Terminus Bunker", "Courier New", Courier, monospace;
+    /* The ASCII art keeps Courier. Its shade blocks are dot patterns, so a ramp of
+       four blocks reads as four tones. The Terminus blocks blur into one. */
+    --font-ascii: "Courier New", Courier, "Lucida Console", monospace;
 
-    /* Type scale in rem. Courier is light at small sizes, so 2xs = 11px, xs = 13px, sm = 15px. */
-    --text-2xs: 0.6875rem;
-    --text-2xs--line-height: 1rem;
-    --text-xs: 0.8125rem;
-    --text-xs--line-height: 1.25rem;
-    --text-sm: 0.9375rem;
-    --text-sm--line-height: 1.5rem;
-    --text-base: 1.0625rem;
+    /* Type scale in rem. Terminus is a bitmap font with cuts at 12, 14, 16 and 18 px,
+       so each step sits on one: 2xs = 12px, xs = 14px, sm = 16px, base = 18px. Line
+       heights are whole pixels, so the glyph grid never straddles a device pixel. */
+    --text-2xs: 0.75rem;
+    --text-2xs--line-height: 1.125rem;
+    --text-xs: 0.875rem;
+    --text-xs--line-height: 1.375rem;
+    --text-sm: 1rem;
+    --text-sm--line-height: 1.625rem;
+    --text-base: 1.125rem;
     --text-base--line-height: 1.75rem;
 
     --tracking-wide: 0.1em;
@@ -126,6 +155,33 @@ summary {
         transparent 55%,
         rgba(0, 0, 0, 0.55) 100%
     );
+}
+
+/* A handle is at most 20 characters, but a row gives it less room. The cap keeps
+   a column readable, and the title attribute holds the full name. */
+.handle {
+    display: inline-block;
+    max-width: 16ch;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    vertical-align: bottom;
+}
+
+@media (max-width: 30rem) {
+    .handle {
+        max-width: 12ch;
+    }
+}
+
+/* A row that scrolls sideways with no visible bar. The nav uses it on a phone,
+   where a bar would sit on the border line under the items. */
+.scroll-row {
+    overflow-x: auto;
+    scrollbar-width: none;
+}
+.scroll-row::-webkit-scrollbar {
+    display: none;
 }
 
 /* Dotted leader between a key and a value. */

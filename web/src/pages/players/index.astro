@@ -82,7 +82,9 @@ const me = Astro.locals.player?.id
                     class="inline-flex items-center gap-2 no-underline text-bright hover:text-accent"
                   >
                     <Glyph glyph={player.glyph} size="1.1em" />
-                    {player.handle}
+                    <span class="handle" title={player.handle}>
+                      {player.handle}
+                    </span>
                   </a>
                   {player.role === "admin" && (
                     <span class="text-2xs text-warn">admin</span>
