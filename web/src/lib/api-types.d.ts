@@ -448,10 +448,15 @@ export interface components {
              * @description Set by the bracket. Seed 1 is the first in the generated order.
              */
             seed?: number | null
+            skill?: null | components["schemas"]["SkillLevel"]
         }
-        /** @description Body of `POST /api/admin/tournaments/{id}/entrants`. */
+        /**
+         * @description Body of `POST /api/admin/tournaments/{id}/entrants`. The level is optional:
+         *     an admin backfills players who never applied.
+         */
         EntrantAdd: {
             playerId: components["schemas"]["PlayerId"]
+            skill?: null | components["schemas"]["SkillLevel"]
         }
         /** Format: uuid */
         EntrantId: string
@@ -639,6 +644,13 @@ export interface components {
         /** Format: uuid */
         PlayerId: string
         /**
+         * @description Body of `POST /api/tournaments/{id}/registration`. A player applies with the
+         *     level they give themself. A second apply with another level changes it.
+         */
+        RegistrationRequest: {
+            skill: components["schemas"]["SkillLevel"]
+        }
+        /**
          * @description Answer of `GET /api/me/registrations`: the tournaments the caller entered.
          *     One call tells a page which apply buttons to turn into retire buttons.
          */
@@ -666,6 +678,8 @@ export interface components {
             handle: components["schemas"]["Handle"]
             password: components["schemas"]["Password"]
         }
+        /** @description How good the player says they are, 1 for a beginner and 5 for a strong player. */
+        SkillLevel: number
         /**
          * @description Body of `POST /api/admin/tournaments/{id}/status`. A winner is accepted only
          *     with `concluded` and only when the tournament has no bracket.
@@ -1309,7 +1323,7 @@ export interface operations {
         }
         requestBody?: never
         responses: {
-            /** @description A fresh random bracket. Replaces one without results */
+            /** @description A bracket seeded by level. Replaces one without results */
             200: {
                 headers: {
                     [name: string]: unknown
@@ -2234,9 +2248,13 @@ export interface operations {
             }
             cookie?: never
         }
-        requestBody?: never
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RegistrationRequest"]
+            }
+        }
         responses: {
-            /** @description The caller's entry. A second call answers the same one */
+            /** @description The caller's entry. A second call answers the same one, with the new level */
             200: {
                 headers: {
                     [name: string]: unknown
@@ -2271,6 +2289,15 @@ export interface operations {
             }
             /** @description Registration is not open */
             409: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            /** @description The level is not 1 to 5 */
+            422: {
                 headers: {
                     [name: string]: unknown
                 }

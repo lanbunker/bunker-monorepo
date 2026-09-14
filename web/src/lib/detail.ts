@@ -43,6 +43,7 @@ const entrant = z.object({
     id: z.string(),
     player: player.nullable().optional(),
     seed: z.number().nullable().optional(),
+    skill: z.number().nullable().optional(),
     registeredAt: z.string(),
 })
 

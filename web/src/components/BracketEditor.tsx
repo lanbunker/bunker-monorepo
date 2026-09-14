@@ -3,6 +3,7 @@ import { useState } from "react"
 
 import type { Bracket, Entrant, Match } from "../lib/api"
 import { errorMessage } from "../lib/form"
+import { UNRATED_SKILL } from "../lib/tournaments"
 import { useHydrated } from "../lib/use-hydrated"
 import { BracketView } from "./BracketView"
 import type { BracketEditing } from "./BracketView"
@@ -131,7 +132,13 @@ export const BracketEditor = (props: BracketEditorProps) => {
                         <span className="text-2xs text-admin-dim">
                             {hasResults
                                 ? "click a side to set the winner, click the winner to clear it. clear every result to regenerate or reorder."
-                                : "drag a player onto another to swap their seeds. click a side to set the winner."}
+                                : "drag a player onto another to swap their seeds. click a side to set the winner. regenerate redraws only among entrants of one level."}
+                        </span>
+                    )}
+                    {!bracket && entrants.length >= 2 && (
+                        <span className="text-2xs text-admin-dim">
+                            seeded by level: neighbours meet in round one. no level counts
+                            as a {UNRATED_SKILL}.
                         </span>
                     )}
                     {!bracket && entrants.length < 2 && (

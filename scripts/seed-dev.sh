@@ -56,11 +56,14 @@ tournament=$(curl -fsS -X POST "$API_URL/api/admin/tournaments" \
     -d "{\"name\":\"Seed Cup\",\"game\":\"COD Modern Warfare 2\",\"mode\":\"1v1 sniper only\",\"description\":\"Seeded for development. Rust map, one life.\",\"date\":\"$day\",\"registrationClosesAt\":\"$closes_at\"}" \
     | jq -r .id)
 
+# A level from 1 to 5 for each entrant, so the seeded bracket has something to
+# work with.
 for handle in "${handles[@]:0:$ENTRANTS}"; do
     player=$(curl -fsS "$API_URL/api/players/$handle" | jq -r .id)
+    skill=$((RANDOM % 5 + 1))
     curl -fsS -o /dev/null -X POST "$API_URL/api/admin/tournaments/$tournament/entrants" \
         -H 'content-type: application/json' -H "authorization: Bearer $admin" \
-        -d "{\"playerId\":\"$player\"}"
+        -d "{\"playerId\":\"$player\",\"skill\":$skill}"
 done
 curl -fsS -o /dev/null -X POST "$API_URL/api/admin/tournaments/$tournament/status" \
     -H 'content-type: application/json' -H "authorization: Bearer $admin" \

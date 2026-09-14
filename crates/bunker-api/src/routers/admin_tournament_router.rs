@@ -228,7 +228,9 @@ pub(super) async fn add_entrant(
     ValidPath(path): ValidPath<TournamentPath>,
     ValidJson(add): ValidJson<EntrantAdd>,
 ) -> Result<axum::response::Response, ApiError> {
-    let (entrant, enrolled) = tournaments.add_entrant(path.id, add.player_id).await?;
+    let (entrant, enrolled) = tournaments
+        .add_entrant(path.id, add.player_id, add.skill)
+        .await?;
     let status = match enrolled {
         Enrolled::New => StatusCode::CREATED,
         Enrolled::Already => StatusCode::OK,
@@ -269,7 +271,7 @@ pub(super) async fn remove_entrant(
     security(("bearer" = [])),
     params(TournamentPath),
     responses(
-        (status = 200, body = Bracket, description = "A fresh random bracket. Replaces one without results"),
+        (status = 200, body = Bracket, description = "A bracket seeded by level. Replaces one without results"),
         (status = 400, body = ApiErrorBody),
         (status = 401, body = ApiErrorBody),
         (status = 403, body = ApiErrorBody),

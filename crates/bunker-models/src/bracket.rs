@@ -80,31 +80,30 @@ pub enum BracketError {
 
 impl Bracket {
     /// Builds every match from the entrants in seed order: the first is seed 1.
-    /// The size is the next power of two, and the missing entrants are byes
-    /// that go to the top seeds. A bye match already holds its winner and that
-    /// winner already sits in round 2.
+    /// Neighbours in that order meet in round one, seed 1 against seed 2, seed
+    /// 3 against seed 4, and so on. The service orders the entrants by skill, so
+    /// a round one match is between players of the same level, and the two
+    /// halves of the bracket only meet in the final.
+    ///
+    /// The size is the next power of two. The missing entrants are byes, one
+    /// per match at most, and they go to the top seeds: the first `byes` matches
+    /// hold one entrant each, the rest hold a pair. A bye match already holds its
+    /// winner, and that winner already sits in round 2.
     pub fn generate(seeded: &[EntrantId]) -> Result<Self, BracketError> {
         let count = seeded.len();
         if count < 2 {
             return Err(BracketError::TooFewEntrants(count));
         }
         let size = count.next_power_of_two();
-        let positions = seeding_order(size);
+        let byes = size - count;
+        let mut seeds = seeded.iter().copied();
 
-        let first_round: Vec<Match> = positions
-            .chunks(2)
-            .enumerate()
-            .map(|(slot, pair)| {
-                let entrant = |index: usize| {
-                    pair.get(index)
-                        .and_then(|seed| seeded.get(seed - 1))
-                        .copied()
-                };
-                let (entrant_a, entrant_b) = (entrant(0), entrant(1));
-                let winner = match (entrant_a, entrant_b) {
-                    (Some(lone), None) | (None, Some(lone)) => Some(lone),
-                    _ => None,
-                };
+        // `count > size / 2`, so `byes < size / 2` and every match has a side a.
+        let first_round: Vec<Match> = (0..size / 2)
+            .map(|slot| {
+                let entrant_a = seeds.next();
+                let entrant_b = if slot < byes { None } else { seeds.next() };
+                let winner = if entrant_b.is_none() { entrant_a } else { None };
                 Match {
                     id: MatchId::generate(),
                     round: 1,
@@ -297,21 +296,6 @@ impl Bracket {
             .cloned()
             .collect()
     }
-}
-
-/// Seeds by position for a bracket of `size`, so that seed 1 meets seed `size`
-/// and the two best seeds can only meet in the final. Size 8 gives
-/// `[1, 8, 4, 5, 2, 7, 3, 6]`.
-fn seeding_order(size: usize) -> Vec<usize> {
-    let mut order = vec![1];
-    while order.len() < size {
-        let len = order.len();
-        order = order
-            .iter()
-            .flat_map(|&seed| [seed, 2 * len + 1 - seed])
-            .collect();
-    }
-    order
 }
 
 /// A slot index is bounded by the bracket size, which a `u32` holds with room.

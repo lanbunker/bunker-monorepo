@@ -816,7 +816,7 @@
         ],
         "responses": {
           "200": {
-            "description": "A fresh random bracket. Replaces one without results",
+            "description": "A bracket seeded by level. Replaces one without results",
             "content": {
               "application/json": {
                 "schema": {
@@ -2100,9 +2100,19 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegistrationRequest"
+              }
+            }
+          },
+          "required": true
+        },
         "responses": {
           "200": {
-            "description": "The caller's entry. A second call answers the same one",
+            "description": "The caller's entry. A second call answers the same one, with the new level",
             "content": {
               "application/json": {
                 "schema": {
@@ -2143,6 +2153,16 @@
           },
           "409": {
             "description": "Registration is not open",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The level is not 1 to 5",
             "content": {
               "application/json": {
                 "schema": {
@@ -2380,18 +2400,39 @@
             "format": "int32",
             "description": "Set by the bracket. Seed 1 is the first in the generated order.",
             "minimum": 0
+          },
+          "skill": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/SkillLevel",
+                "description": "What the player said when they applied. Absent when an admin added them\nwithout a level."
+              }
+            ]
           }
         }
       },
       "EntrantAdd": {
         "type": "object",
-        "description": "Body of `POST /api/admin/tournaments/{id}/entrants`.",
+        "description": "Body of `POST /api/admin/tournaments/{id}/entrants`. The level is optional:\nan admin backfills players who never applied.",
         "required": [
           "playerId"
         ],
         "properties": {
           "playerId": {
             "$ref": "#/components/schemas/PlayerId"
+          },
+          "skill": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/SkillLevel"
+              }
+            ]
           }
         },
         "additionalProperties": false
@@ -2859,6 +2900,19 @@
         "type": "string",
         "format": "uuid"
       },
+      "RegistrationRequest": {
+        "type": "object",
+        "description": "Body of `POST /api/tournaments/{id}/registration`. A player applies with the\nlevel they give themself. A second apply with another level changes it.",
+        "required": [
+          "skill"
+        ],
+        "properties": {
+          "skill": {
+            "$ref": "#/components/schemas/SkillLevel"
+          }
+        },
+        "additionalProperties": false
+      },
       "Registrations": {
         "type": "object",
         "description": "Answer of `GET /api/me/registrations`: the tournaments the caller entered.\nOne call tells a page which apply buttons to turn into retire buttons.",
@@ -2927,6 +2981,12 @@
           }
         },
         "additionalProperties": false
+      },
+      "SkillLevel": {
+        "type": "integer",
+        "description": "How good the player says they are, 1 for a beginner and 5 for a strong player.",
+        "maximum": 5,
+        "minimum": 1
       },
       "StatusChange": {
         "type": "object",

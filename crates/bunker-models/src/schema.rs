@@ -12,7 +12,8 @@ use crate::handle::{HANDLE_MAX_LEN, HANDLE_MIN_LEN, Handle};
 use crate::player::PlayerId;
 use crate::tournament::{
     DESCRIPTION_MAX_LEN, Description, EntrantId, GAME_MODE_MAX_LEN, GAME_NAME_MAX_LEN, GameMode,
-    GameName, TOURNAMENT_NAME_MAX_LEN, TournamentId, TournamentName,
+    GameName, SKILL_LEVEL_MAX, SKILL_LEVEL_MIN, SkillLevel, TOURNAMENT_NAME_MAX_LEN, TournamentId,
+    TournamentName,
 };
 
 /// A uuid newtype on the wire is a string with the uuid format.
@@ -81,6 +82,21 @@ impl PartialSchema for Password {
     }
 }
 impl ToSchema for Password {}
+
+impl PartialSchema for SkillLevel {
+    fn schema() -> RefOr<Schema> {
+        ObjectBuilder::new()
+            .schema_type(Type::Integer)
+            .minimum(Some(SKILL_LEVEL_MIN))
+            .maximum(Some(SKILL_LEVEL_MAX))
+            .description(Some(
+                "How good the player says they are, 1 for a beginner and 5 for a strong player.",
+            ))
+            .build()
+            .into()
+    }
+}
+impl ToSchema for SkillLevel {}
 
 impl PartialSchema for GlyphBits {
     fn schema() -> RefOr<Schema> {

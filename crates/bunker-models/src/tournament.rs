@@ -11,6 +11,8 @@ pub const TOURNAMENT_NAME_MAX_LEN: usize = 60;
 pub const GAME_NAME_MAX_LEN: usize = 40;
 pub const GAME_MODE_MAX_LEN: usize = 30;
 pub const DESCRIPTION_MAX_LEN: usize = 1000;
+pub const SKILL_LEVEL_MIN: u8 = 1;
+pub const SKILL_LEVEL_MAX: u8 = 5;
 
 #[nutype(derive(
     Debug,
@@ -81,6 +83,37 @@ pub struct GameMode(String);
     default = ""
 )]
 pub struct Description(String);
+
+/// How good a player says they are at the game, from 1 to 5. The bracket is
+/// seeded from it: neighbours on this scale meet in round one, so a beginner
+/// plays a beginner and a strong player plays a strong player.
+#[nutype(
+    validate(greater_or_equal = SKILL_LEVEL_MIN, less_or_equal = SKILL_LEVEL_MAX),
+    derive(
+        Debug,
+        Clone,
+        Copy,
+        PartialEq,
+        Eq,
+        PartialOrd,
+        Ord,
+        Hash,
+        Display,
+        Serialize,
+        Deserialize
+    )
+)]
+pub struct SkillLevel(u8);
+
+impl SkillLevel {
+    /// The level an entrant without a level is seeded at: the middle of the
+    /// scale. An admin can add a player who never said how good they are.
+    pub const UNRATED: u8 = 3;
+
+    pub fn value(self) -> u8 {
+        self.into_inner()
+    }
+}
 
 /// The life of a tournament. `Draft` is visible to admins only. `Open` takes
 /// registrations until the deadline. `Live` freezes the entrants for the
@@ -198,16 +231,30 @@ pub struct Entrant {
     pub player: Option<Player>,
     /// Set by the bracket. Seed 1 is the first in the generated order.
     pub seed: Option<u32>,
+    /// What the player said when they applied. Absent when an admin added them
+    /// without a level.
+    pub skill: Option<SkillLevel>,
     #[serde(with = "time::serde::rfc3339")]
     #[schema(value_type = String, format = DateTime)]
     pub registered_at: OffsetDateTime,
 }
 
-/// Body of `POST /api/admin/tournaments/{id}/entrants`.
+/// Body of `POST /api/admin/tournaments/{id}/entrants`. The level is optional:
+/// an admin backfills players who never applied.
 #[derive(Debug, Clone, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct EntrantAdd {
     pub player_id: PlayerId,
+    #[serde(default)]
+    pub skill: Option<SkillLevel>,
+}
+
+/// Body of `POST /api/tournaments/{id}/registration`. A player applies with the
+/// level they give themself. A second apply with another level changes it.
+#[derive(Debug, Clone, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct RegistrationRequest {
+    pub skill: SkillLevel,
 }
 
 /// Body of `PUT /api/admin/tournaments/{id}/seeds`: every entrant exactly once,

@@ -3,11 +3,14 @@ use axum::http::StatusCode;
 use axum::routing::get;
 use axum::{Json, Router};
 use bunker_models::{
-    Entrant, PageQuery, Paginated, Registrations, Tournament, TournamentDetail, TournamentId,
+    Entrant, PageQuery, Paginated, RegistrationRequest, Registrations, Tournament,
+    TournamentDetail, TournamentId,
 };
 use serde::Deserialize;
 
-use crate::internal::http::{ApiError, ApiErrorBody, Authenticated, ValidPath, ValidQuery};
+use crate::internal::http::{
+    ApiError, ApiErrorBody, Authenticated, ValidJson, ValidPath, ValidQuery,
+};
 use crate::services::TournamentService;
 
 use super::AppState;
@@ -87,21 +90,26 @@ pub(super) async fn registrations(
     tag = "tournaments",
     security(("bearer" = [])),
     params(TournamentPath),
+    request_body = RegistrationRequest,
     responses(
-        (status = 200, body = Entrant, description = "The caller's entry. A second call answers the same one"),
+        (status = 200, body = Entrant, description = "The caller's entry. A second call answers the same one, with the new level"),
         (status = 400, body = ApiErrorBody),
         (status = 401, body = ApiErrorBody),
         (status = 404, body = ApiErrorBody),
         (status = 409, body = ApiErrorBody, description = "Registration is not open"),
+        (status = 422, body = ApiErrorBody, description = "The level is not 1 to 5"),
     )
 )]
 pub(super) async fn register(
     State(tournaments): State<TournamentService>,
     Authenticated(account): Authenticated,
     ValidPath(path): ValidPath<TournamentPath>,
+    ValidJson(registration): ValidJson<RegistrationRequest>,
 ) -> Result<Json<Entrant>, ApiError> {
     Ok(Json(
-        tournaments.register(path.id, account.player.id).await?,
+        tournaments
+            .register(path.id, account.player.id, registration.skill)
+            .await?,
     ))
 }
 

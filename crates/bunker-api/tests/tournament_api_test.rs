@@ -12,7 +12,7 @@ mod support;
 
 use axum::http::StatusCode;
 use bunker_models::{
-    Entrant, Paginated, Registrations, Tournament, TournamentDetail, TournamentStatus,
+    Entrant, Paginated, Registrations, SkillLevel, Tournament, TournamentDetail, TournamentStatus,
 };
 use serde_json::json;
 use support::{TestApi, assert_error, read_json};
@@ -233,19 +233,26 @@ async fn a_player_applies_and_retires_while_registration_is_open() {
     let dave = api.signup("dave").await.token;
     let path = format!("/api/tournaments/{}/registration", created.id);
 
-    let response = api.post_as(&path, &json!({}), &dave).await;
+    let response = api.post_as(&path, &json!({ "skill": 2 }), &dave).await;
     assert_eq!(response.status(), StatusCode::OK);
     let entrant: Entrant = read_json(response).await;
     assert_eq!(entrant.player.as_ref().unwrap().handle.as_ref(), "dave");
     assert!(entrant.seed.is_none());
+    assert_eq!(entrant.skill.map(SkillLevel::value), Some(2));
 
-    let again: Entrant = read_json(api.post_as(&path, &json!({}), &dave).await).await;
+    let again: Entrant = read_json(api.post_as(&path, &json!({ "skill": 5 }), &dave).await).await;
     assert_eq!(again.id, entrant.id, "a second apply is the same entry");
+    assert_eq!(
+        again.skill.map(SkillLevel::value),
+        Some(5),
+        "a second apply changes the level"
+    );
 
     let detail: TournamentDetail =
         read_json(api.get(&format!("/api/tournaments/{}", created.id)).await).await;
     assert_eq!(detail.tournament.entrant_count, 1);
     assert_eq!(detail.entrants.len(), 1);
+    assert_eq!(detail.entrants[0].skill.map(SkillLevel::value), Some(5));
 
     assert_eq!(
         api.delete_as(&path, &dave).await.status(),
@@ -271,7 +278,7 @@ async fn registration_needs_an_open_tournament_before_its_deadline() {
     let hidden = api
         .post_as(
             &format!("/api/tournaments/{}/registration", draft.id),
-            &json!({}),
+            &json!({ "skill": 3 }),
             &dave,
         )
         .await;
@@ -282,7 +289,7 @@ async fn registration_needs_an_open_tournament_before_its_deadline() {
     let late = api
         .post_as(
             &format!("/api/tournaments/{}/registration", expired.id),
-            &json!({}),
+            &json!({ "skill": 3 }),
             &dave,
         )
         .await;
@@ -293,7 +300,7 @@ async fn registration_needs_an_open_tournament_before_its_deadline() {
     let frozen = api
         .post_as(
             &format!("/api/tournaments/{}/registration", live.id),
-            &json!({}),
+            &json!({ "skill": 3 }),
             &dave,
         )
         .await;
@@ -306,7 +313,7 @@ async fn registration_needs_an_open_tournament_before_its_deadline() {
     let anonymous = api
         .post(
             &format!("/api/tournaments/{}/registration", live.id),
-            &json!({}),
+            &json!({ "skill": 3 }),
         )
         .await;
     assert_error(anonymous, StatusCode::UNAUTHORIZED, "Unauthorized").await;
@@ -320,16 +327,43 @@ async fn an_admin_adds_and_removes_entrants_in_any_status() {
     let path = format!("/api/admin/tournaments/{}/entrants", created.id);
 
     let dave = api.add_entrant(&admin, created.id, "dave").await;
+    assert!(
+        dave.skill.is_none(),
+        "an admin can add a player with no level"
+    );
     let again = api
         .post_as(
             &path,
-            &json!({ "playerId": dave.player.as_ref().unwrap().id }),
+            &json!({ "playerId": dave.player.as_ref().unwrap().id, "skill": 4 }),
             &admin,
         )
         .await;
     assert_eq!(again.status(), StatusCode::OK, "already in answers 200");
     let same: Entrant = read_json(again).await;
     assert_eq!(same.id, dave.id);
+    assert_eq!(
+        same.skill.map(SkillLevel::value),
+        Some(4),
+        "an admin add with a level corrects the level"
+    );
+    let untouched = api
+        .post_as(
+            &path,
+            &json!({ "playerId": dave.player.as_ref().unwrap().id }),
+            &admin,
+        )
+        .await;
+    let kept: Entrant = read_json(untouched).await;
+    assert_eq!(
+        kept.skill.map(SkillLevel::value),
+        Some(4),
+        "an admin add without a level leaves the level alone"
+    );
+
+    let erin = api
+        .add_rated_entrant(&admin, created.id, "erin", Some(5))
+        .await;
+    assert_eq!(erin.skill.map(SkillLevel::value), Some(5));
 
     let ghost = api
         .post_as(&path, &json!({ "playerId": Uuid::new_v4() }), &admin)
@@ -340,6 +374,8 @@ async fn an_admin_adds_and_removes_entrants_in_any_status() {
     assert_eq!(removed.status(), StatusCode::NO_CONTENT);
     let removed_again = api.delete_as(&format!("{path}/{}", dave.id), &admin).await;
     assert_eq!(removed_again.status(), StatusCode::NO_CONTENT);
+    let removed_erin = api.delete_as(&format!("{path}/{}", erin.id), &admin).await;
+    assert_eq!(removed_erin.status(), StatusCode::NO_CONTENT);
 
     let detail: TournamentDetail = read_json(
         api.get_as(&format!("/api/admin/tournaments/{}", created.id), &admin)
@@ -535,13 +571,13 @@ async fn a_player_reads_their_registrations_in_one_call() {
 
     api.post_as(
         &format!("/api/tournaments/{}/registration", first.id),
-        &json!({}),
+        &json!({ "skill": 3 }),
         &dave,
     )
     .await;
     api.post_as(
         &format!("/api/tournaments/{}/registration", second.id),
-        &json!({}),
+        &json!({ "skill": 3 }),
         &dave,
     )
     .await;
@@ -558,4 +594,44 @@ async fn a_player_reads_their_registrations_in_one_call() {
 
     let anonymous = api.get("/api/me/registrations").await;
     assert_error(anonymous, StatusCode::UNAUTHORIZED, "Unauthorized").await;
+}
+
+#[tokio::test]
+async fn an_apply_needs_a_level_from_one_to_five() {
+    let api = TestApi::with_database().await;
+    let admin = api.signup_admin("root").await;
+    let created = api.create_tournament(&admin, HOUR).await;
+    api.set_status(&admin, created.id, "open").await;
+    let dave = api.signup("dave").await.token;
+    let path = format!("/api/tournaments/{}/registration", created.id);
+
+    for (label, body) in [
+        ("no level", json!({})),
+        ("level 0", json!({ "skill": 0 })),
+        ("level 6", json!({ "skill": 6 })),
+        ("a text level", json!({ "skill": "3" })),
+        ("a seed", json!({ "skill": 3, "seed": 1 })),
+    ] {
+        let refused = api.post_as(&path, &body, &dave).await;
+        assert_eq!(
+            refused.status(),
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "{label} was accepted"
+        );
+        let error: serde_json::Value = read_json(refused).await;
+        assert_eq!(error["code"], "UnprocessableRequest", "{label}");
+    }
+
+    let detail: TournamentDetail =
+        read_json(api.get(&format!("/api/tournaments/{}", created.id)).await).await;
+    assert_eq!(
+        detail.tournament.entrant_count, 0,
+        "a refused apply enters nobody"
+    );
+
+    for level in 1..=5 {
+        let entrant: Entrant =
+            read_json(api.post_as(&path, &json!({ "skill": level }), &dave).await).await;
+        assert_eq!(entrant.skill.map(SkillLevel::value), Some(level));
+    }
 }

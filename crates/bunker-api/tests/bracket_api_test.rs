@@ -213,9 +213,9 @@ async fn seeds_follow_the_given_order() {
     assert_eq!(response.status(), StatusCode::OK);
     let bracket: Bracket = read_json(response).await;
     assert_eq!(bracket.rounds[0][0].entrant_a, Some(ids[0]));
-    assert_eq!(bracket.rounds[0][0].entrant_b, Some(ids[3]));
-    assert_eq!(bracket.rounds[0][1].entrant_a, Some(ids[1]));
-    assert_eq!(bracket.rounds[0][1].entrant_b, Some(ids[2]));
+    assert_eq!(bracket.rounds[0][0].entrant_b, Some(ids[1]));
+    assert_eq!(bracket.rounds[0][1].entrant_a, Some(ids[2]));
+    assert_eq!(bracket.rounds[0][1].entrant_b, Some(ids[3]));
 
     let detail: TournamentDetail = read_json(
         api.get(&format!("/api/tournaments/{}", tournament.id))
@@ -720,4 +720,80 @@ async fn every_admin_route_refuses_a_user() {
     for response in refused {
         assert_error(response, StatusCode::FORBIDDEN, "Forbidden").await;
     }
+}
+
+#[tokio::test]
+async fn the_bracket_is_seeded_by_level_and_neighbours_meet_in_round_one() {
+    let api = TestApi::with_database().await;
+    let admin = api.signup_admin("root").await;
+    let created = api.create_tournament(&admin, HOUR).await;
+    // Distinct levels, so the order has no random part. The unrated entrant
+    // counts as a 3.
+    let rookie = api
+        .add_rated_entrant(&admin, created.id, "rookie", Some(1))
+        .await;
+    let menace = api
+        .add_rated_entrant(&admin, created.id, "menace", Some(5))
+        .await;
+    let casual = api
+        .add_rated_entrant(&admin, created.id, "casual", Some(2))
+        .await;
+    let unrated = api.add_entrant(&admin, created.id, "unrated").await;
+    let sharp = api
+        .add_rated_entrant(&admin, created.id, "sharp", Some(4))
+        .await;
+    api.set_status(&admin, created.id, "live").await;
+
+    let bracket = generate(&api, &admin, created.id).await;
+
+    // Five entrants: the three top seeds get the byes, seeds 4 and 5 play.
+    assert_eq!(bracket.rounds[0][0].winner, Some(menace.id));
+    assert_eq!(bracket.rounds[0][1].winner, Some(sharp.id));
+    assert_eq!(bracket.rounds[0][2].winner, Some(unrated.id));
+    assert_eq!(bracket.rounds[0][3].entrant_a, Some(casual.id));
+    assert_eq!(bracket.rounds[0][3].entrant_b, Some(rookie.id));
+
+    let detail: TournamentDetail = read_json(
+        api.get_as(&format!("/api/admin/tournaments/{}", created.id), &admin)
+            .await,
+    )
+    .await;
+    let seed_of = |id: EntrantId| detail.entrants.iter().find(|e| e.id == id).unwrap().seed;
+    assert_eq!(seed_of(menace.id), Some(1));
+    assert_eq!(seed_of(sharp.id), Some(2));
+    assert_eq!(seed_of(unrated.id), Some(3));
+    assert_eq!(seed_of(casual.id), Some(4));
+    assert_eq!(seed_of(rookie.id), Some(5));
+    // The entrants come seeded first, in seed order.
+    let handles: Vec<&str> = detail
+        .entrants
+        .iter()
+        .map(|e| e.player.as_ref().unwrap().handle.as_ref())
+        .collect();
+    assert_eq!(handles, ["menace", "sharp", "unrated", "casual", "rookie"]);
+}
+
+#[tokio::test]
+async fn entrants_of_one_level_are_drawn_at_random() {
+    let api = TestApi::with_database().await;
+    let admin = api.signup_admin("root").await;
+    let created = api.create_tournament(&admin, HOUR).await;
+    for number in 0..8 {
+        api.add_rated_entrant(&admin, created.id, &format!("even{number}"), Some(3))
+            .await;
+    }
+    api.set_status(&admin, created.id, "live").await;
+
+    let mut draws = std::collections::HashSet::new();
+    for _ in 0..12 {
+        let bracket = generate(&api, &admin, created.id).await;
+        let order: Vec<EntrantId> = bracket.rounds[0]
+            .iter()
+            .flat_map(|m| [m.entrant_a.unwrap(), m.entrant_b.unwrap()])
+            .collect();
+        draws.insert(order);
+    }
+    // Twelve draws of eight equal entrants: 40320 orders exist, so two runs
+    // that agree every time would mean the shuffle is gone.
+    assert!(draws.len() > 1, "every regeneration gave the same bracket");
 }

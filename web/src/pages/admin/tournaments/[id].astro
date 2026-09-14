@@ -10,7 +10,7 @@ import { formatDate, toLocalInput } from "../../../lib/dates"
 import { firstError, noticeFrom } from "../../../lib/form"
 import { adminSessionOf } from "../../../lib/session"
 import { ADMIN_FIELD, ADMIN_FIELD_INLINE } from "../../../lib/styles"
-import { entrantName } from "../../../lib/tournaments"
+import { SKILL_LEVELS, entrantName, skillMeter } from "../../../lib/tournaments"
 
 const session = adminSessionOf(Astro.locals)
 if (!session) return Astro.rewrite("/404")
@@ -41,6 +41,8 @@ if (deleted?.data) return Astro.redirect("/admin/tournaments?done=deleted")
 
 const failure = firstError(saved, status, added, removed, deleted)
 const notice = noticeFrom(Astro.url, NOTICES)
+// A refused add keeps the handle and the level that were typed.
+const typed = Astro.locals.submitted
 
 const result = await call(
   client => client.GET("/api/admin/tournaments/{id}", { params: { path: { id } } }),
@@ -249,9 +251,10 @@ const t = detail?.tournament
             <thead>
               <tr class="text-left text-2xs tracking-wider text-admin-dim">
                 <th class="w-[10%] pb-2 font-normal">seed</th>
-                <th class="w-[45%] pb-2 font-normal">player</th>
-                <th class="w-[25%] pb-2 font-normal">registered</th>
-                <th class="w-[20%] pb-2 text-right font-normal" />
+                <th class="w-[35%] pb-2 font-normal">player</th>
+                <th class="w-[15%] pb-2 font-normal">level</th>
+                <th class="w-[22%] pb-2 font-normal">registered</th>
+                <th class="w-[18%] pb-2 text-right font-normal" />
               </tr>
             </thead>
             <tbody>
@@ -263,6 +266,13 @@ const t = detail?.tournament
                       {e.player && <Glyph glyph={e.player.glyph} size="1.1em" />}
                       {entrantName(e)}
                     </span>
+                  </td>
+                  <td
+                    class="py-1.5 text-warn tabular-nums"
+                    data-skill={e.skill ?? ""}
+                    title={e.skill ? `level ${e.skill}` : "no level given"}
+                  >
+                    {skillMeter(e.skill)}
                   </td>
                   <td class="py-1.5 text-admin-dim">
                     {formatDate(new Date(e.registeredAt))}
@@ -303,8 +313,21 @@ const t = detail?.tournament
               maxlength="20"
               placeholder="handle"
               aria-label="handle of the player to add"
+              value={typed.handle ?? ""}
               class:list={["w-40", ADMIN_FIELD_INLINE]}
             />
+            <select
+              name="skill"
+              aria-label="level of the player to add"
+              class={ADMIN_FIELD_INLINE}
+            >
+              <option value="">no level</option>
+              {SKILL_LEVELS.map(l => (
+                <option value={l.level} selected={String(l.level) === typed.skill}>
+                  {l.level} {l.name}
+                </option>
+              ))}
+            </select>
             <Button variant="warn" size="sm">
               add entrant
             </Button>

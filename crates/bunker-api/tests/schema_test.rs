@@ -231,6 +231,22 @@ async fn the_database_refuses_tournament_rows_the_domain_refuses() {
         );
     }
 
+    for (id, skill) in [
+        ("50000000-0000-0000-0000-000000000001", 0),
+        ("50000000-0000-0000-0000-000000000002", 6),
+    ] {
+        let result = sqlx::query(
+            "insert into tournament_entrants (id, tournament_id, player_id, skill, registered_at)
+             values (?1, ?2, null, ?3, 1)",
+        )
+        .bind(id)
+        .bind(T1)
+        .bind(skill)
+        .execute(&pool)
+        .await;
+        assert!(result.is_err(), "the database accepted skill {skill}");
+    }
+
     type MatchRow<'a> = (&'a str, Option<&'a str>, Option<&'a str>, Option<&'a str>);
     let bad_matches: [MatchRow; 2] = [
         // The winner is not one of the two sides.

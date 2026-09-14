@@ -10,10 +10,13 @@ import { sessionOf } from "../../lib/session"
 
 const NOTICES = {
   applied: "you are in. see you at the bunker.",
+  registered: "you are already in. retire first to change your level.",
   retired: "you left the tournament.",
 }
 
-// A redirect after each action, so a refresh never applies twice.
+// A redirect after each action, so a refresh never applies twice. The apply
+// form lives on its own page, but its action stays routable here, so a
+// failure posted here still gets its sentence.
 const applied = Astro.getActionResult(actions.applyToTournament)
 if (applied?.data) return Astro.redirect("/tournaments?done=applied")
 const retired = Astro.getActionResult(actions.retireFromTournament)

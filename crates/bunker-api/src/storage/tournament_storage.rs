@@ -1,7 +1,7 @@
 use bunker_models::{
     Bracket, Description, Entrant, EntrantId, GameMode, GameName, Match, MatchId, PageQuery,
-    Paginated, Player, PlayerId, Tournament, TournamentId, TournamentName, TournamentStatus,
-    TournamentUpdate,
+    Paginated, Player, PlayerId, SkillLevel, Tournament, TournamentId, TournamentName,
+    TournamentStatus, TournamentUpdate,
 };
 use time::macros::format_description;
 use time::{Date, OffsetDateTime};
@@ -38,6 +38,7 @@ pub struct NewEntrant {
     pub id: EntrantId,
     pub tournament: TournamentId,
     pub player: PlayerId,
+    pub skill: Option<SkillLevel>,
     pub registered_at: OffsetDateTime,
 }
 
@@ -99,7 +100,8 @@ impl TournamentStorage {
                       t.registration_closes_at, t.status, t.created_at,
                       (select count(*) from tournament_entrants e where e.tournament_id = t.id) as "entrant_count!: i64",
                       exists(select 1 from matches m where m.tournament_id = t.id) as "has_bracket!: i64",
-                      w.id as "winner_id?", w.seed as "winner_seed?", w.registered_at as "winner_registered_at?",
+                      w.id as "winner_id?", w.seed as "winner_seed?", w.skill as "winner_skill?",
+                      w.registered_at as "winner_registered_at?",
                       p.id as "winner_player_id?", p.handle as "winner_handle?",
                       p.glyph_bits as "winner_glyph_bits?", p.glyph_color as "winner_glyph_color?",
                       p.role as "winner_role?", p.created_at as "winner_player_created_at?"
@@ -143,7 +145,8 @@ impl TournamentStorage {
                       t.registration_closes_at, t.status, t.created_at,
                       (select count(*) from tournament_entrants e where e.tournament_id = t.id) as "entrant_count!: i64",
                       exists(select 1 from matches m where m.tournament_id = t.id) as "has_bracket!: i64",
-                      w.id as "winner_id?", w.seed as "winner_seed?", w.registered_at as "winner_registered_at?",
+                      w.id as "winner_id?", w.seed as "winner_seed?", w.skill as "winner_skill?",
+                      w.registered_at as "winner_registered_at?",
                       p.id as "winner_player_id?", p.handle as "winner_handle?",
                       p.glyph_bits as "winner_glyph_bits?", p.glyph_color as "winner_glyph_color?",
                       p.role as "winner_role?", p.created_at as "winner_player_created_at?"
@@ -255,7 +258,7 @@ impl TournamentStorage {
         let tournament = tournament.into_inner().to_string();
         let rows = sqlx::query_as!(
             EntrantRow,
-            r#"select e.id, e.seed, e.registered_at,
+            r#"select e.id, e.seed, e.skill, e.registered_at,
                       p.id as "player_id?", p.handle as "handle?", p.glyph_bits as "glyph_bits?",
                       p.glyph_color as "glyph_color?", p.role as "role?", p.created_at as "player_created_at?"
                from tournament_entrants e
@@ -280,7 +283,7 @@ impl TournamentStorage {
         let player = player.into_inner().to_string();
         let row = sqlx::query_as!(
             EntrantRow,
-            r#"select e.id, e.seed, e.registered_at,
+            r#"select e.id, e.seed, e.skill, e.registered_at,
                       p.id as "player_id?", p.handle as "handle?", p.glyph_bits as "glyph_bits?",
                       p.glyph_color as "glyph_color?", p.role as "role?", p.created_at as "player_created_at?"
                from tournament_entrants e
@@ -320,14 +323,16 @@ impl TournamentStorage {
         let id = entrant.id.into_inner().to_string();
         let tournament = entrant.tournament.into_inner().to_string();
         let player = entrant.player.into_inner().to_string();
+        let skill = entrant.skill.map(skill_column);
         let registered_at = to_micros(ENTRANTS, entrant.registered_at)?;
 
         let inserted = sqlx::query!(
-            "insert into tournament_entrants (id, tournament_id, player_id, registered_at)
-             values (?1, ?2, ?3, ?4)",
+            "insert into tournament_entrants (id, tournament_id, player_id, skill, registered_at)
+             values (?1, ?2, ?3, ?4, ?5)",
             id,
             tournament,
             player,
+            skill,
             registered_at,
         )
         .execute(&self.pool)
@@ -344,6 +349,29 @@ impl TournamentStorage {
                 other => Err(other),
             },
         }
+    }
+
+    /// The level of the entry of `player`. An absent entry changes nothing.
+    pub async fn set_skill(
+        &self,
+        tournament: TournamentId,
+        player: PlayerId,
+        skill: SkillLevel,
+    ) -> Result<(), StorageError> {
+        let tournament = tournament.into_inner().to_string();
+        let player = player.into_inner().to_string();
+        let skill = skill_column(skill);
+        sqlx::query!(
+            "update tournament_entrants set skill = ?1 where tournament_id = ?2 and player_id = ?3",
+            skill,
+            tournament,
+            player,
+        )
+        .execute(&self.pool)
+        .await
+        .map_err(StorageError::from_query)?;
+
+        Ok(())
     }
 
     /// `true` when a row was removed.
@@ -519,6 +547,17 @@ impl TournamentStorage {
     }
 }
 
+fn skill_column(skill: SkillLevel) -> i64 {
+    i64::from(skill.value())
+}
+
+fn parse_skill(raw: i64) -> Result<SkillLevel, StorageError> {
+    u8::try_from(raw)
+        .ok()
+        .and_then(|level| SkillLevel::try_new(level).ok())
+        .ok_or_else(|| StorageError::malformed_row(ENTRANTS, MalformedField("skill")))
+}
+
 fn format_day(date: Date) -> Result<String, StorageError> {
     date.format(DAY)
         .map_err(|error| StorageError::malformed_row(TOURNAMENTS, error))
@@ -543,6 +582,7 @@ struct TournamentRow {
     has_bracket: i64,
     winner_id: Option<String>,
     winner_seed: Option<i64>,
+    winner_skill: Option<i64>,
     winner_registered_at: Option<i64>,
     winner_player_id: Option<String>,
     winner_handle: Option<String>,
@@ -561,6 +601,7 @@ impl TryFrom<TournamentRow> for Tournament {
                 EntrantRow {
                     id,
                     seed: row.winner_seed,
+                    skill: row.winner_skill,
                     registered_at,
                     player_id: row.winner_player_id,
                     handle: row.winner_handle,
@@ -603,6 +644,7 @@ impl TryFrom<TournamentRow> for Tournament {
 struct EntrantRow {
     id: String,
     seed: Option<i64>,
+    skill: Option<i64>,
     registered_at: i64,
     player_id: Option<String>,
     handle: Option<String>,
@@ -657,11 +699,13 @@ impl TryFrom<EntrantRow> for Entrant {
             .map(u32::try_from)
             .transpose()
             .map_err(|error| StorageError::malformed_row(ENTRANTS, error))?;
+        let skill = row.skill.map(parse_skill).transpose()?;
 
         Ok(Self {
             id: EntrantId::new(parse_uuid(ENTRANTS, &row.id)?),
             player,
             seed,
+            skill,
             registered_at: from_micros(ENTRANTS, row.registered_at)?,
         })
     }

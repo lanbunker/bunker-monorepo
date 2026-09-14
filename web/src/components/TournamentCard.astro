@@ -65,10 +65,7 @@ const winner = t.winner?.player
               <Button variant="danger">RETIRE</Button>
             </form>
           ) : (
-            <form method="POST" action={actions.applyToTournament}>
-              <input type="hidden" name="id" value={t.id} />
-              <Button>APPLY</Button>
-            </form>
+            <Button href={`/tournaments/${t.id}/apply`}>APPLY</Button>
           )
         ) : (
           <Button href="/login" variant="ghost">

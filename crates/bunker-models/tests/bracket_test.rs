@@ -51,11 +51,34 @@ fn eight_entrants_fill_three_rounds_with_no_bye() {
     );
     assert_eq!(ready_matches(&bracket).len(), 4);
     assert!(bracket.flat().all(|m| m.winner.is_none()));
-    // Seed 1 opens the bracket against seed 8, seed 2 sits in the bottom half.
-    assert_eq!(bracket.rounds[0][0].entrant_a, Some(ids[0]));
-    assert_eq!(bracket.rounds[0][0].entrant_b, Some(ids[7]));
-    assert_eq!(bracket.rounds[0][2].entrant_a, Some(ids[1]));
+    // Neighbours meet: seed 1 opens against seed 2, seed 7 closes against seed 8.
+    for (slot, m) in bracket.rounds[0].iter().enumerate() {
+        assert_eq!(m.entrant_a, Some(ids[2 * slot]), "slot {slot} side a");
+        assert_eq!(m.entrant_b, Some(ids[2 * slot + 1]), "slot {slot} side b");
+    }
+}
+
+#[test]
+fn six_entrants_give_two_byes_and_two_neighbour_matches() {
+    let ids = entrants(6);
+    let bracket = Bracket::generate(&ids).unwrap();
+
+    assert_eq!(
+        bracket.rounds.iter().map(Vec::len).collect::<Vec<_>>(),
+        [4, 2, 1]
+    );
+    // The two byes go to the top seeds, then seeds 3 to 6 pair up in order.
+    assert_eq!(bracket.rounds[0][0].winner, Some(ids[0]));
+    assert_eq!(bracket.rounds[0][1].winner, Some(ids[1]));
+    assert_eq!(bracket.rounds[0][2].entrant_a, Some(ids[2]));
+    assert_eq!(bracket.rounds[0][2].entrant_b, Some(ids[3]));
+    assert_eq!(bracket.rounds[0][3].entrant_a, Some(ids[4]));
     assert_eq!(bracket.rounds[0][3].entrant_b, Some(ids[5]));
+    // The top two meet in round two, the bottom four decide who faces them.
+    assert_eq!(bracket.rounds[1][0].entrant_a, Some(ids[0]));
+    assert_eq!(bracket.rounds[1][0].entrant_b, Some(ids[1]));
+    assert_eq!(bracket.rounds[1][1].entrant_a, None);
+    assert_eq!(bracket.rounds[1][1].entrant_b, None);
 }
 
 #[test]
@@ -80,9 +103,9 @@ fn five_entrants_give_byes_to_the_top_three_seeds() {
     assert_eq!(played[0].entrant_b, Some(ids[4]));
     // The byes already wait in round 2, and none of them counts as a result.
     assert_eq!(bracket.rounds[1][0].entrant_a, Some(ids[0]));
-    assert_eq!(bracket.rounds[1][1].entrant_a, Some(ids[1]));
-    assert_eq!(bracket.rounds[1][1].entrant_b, Some(ids[2]));
-    assert_eq!(bracket.rounds[1][0].entrant_b, None);
+    assert_eq!(bracket.rounds[1][0].entrant_b, Some(ids[1]));
+    assert_eq!(bracket.rounds[1][1].entrant_a, Some(ids[2]));
+    assert_eq!(bracket.rounds[1][1].entrant_b, None);
     assert!(!bracket.has_results());
 }
 
@@ -116,12 +139,12 @@ fn a_result_can_change_until_the_next_match_is_decided() {
     let bottom = bracket.rounds[0][1].id;
 
     bracket.report(top, ids[0]).unwrap();
-    bracket.report(top, ids[3]).unwrap();
-    assert_eq!(bracket.rounds[1][0].entrant_a, Some(ids[3]));
+    bracket.report(top, ids[1]).unwrap();
+    assert_eq!(bracket.rounds[1][0].entrant_a, Some(ids[1]));
 
-    bracket.report(bottom, ids[1]).unwrap();
+    bracket.report(bottom, ids[2]).unwrap();
     let final_id = bracket.rounds[1][0].id;
-    bracket.report(final_id, ids[3]).unwrap();
+    bracket.report(final_id, ids[1]).unwrap();
 
     assert_eq!(
         bracket.report(top, ids[0]),
@@ -142,8 +165,8 @@ fn a_result_needs_a_ready_match_and_one_of_its_two_entrants() {
         Err(BracketError::NotReady(final_id))
     );
     assert_eq!(
-        bracket.report(top, ids[1]),
-        Err(BracketError::NotAParticipant(ids[1], top))
+        bracket.report(top, ids[2]),
+        Err(BracketError::NotAParticipant(ids[2], top))
     );
     let stranger = MatchId::generate();
     assert_eq!(
@@ -211,9 +234,12 @@ fn thirty_entrants_fill_five_rounds_with_two_byes() {
         14
     );
     assert!(!bracket.has_results());
-    // Seeds 1 and 2 sit in opposite halves, so they can only meet in the final.
+    // Seeds 1 and 2 skip round one and meet each other at once. The weakest
+    // pair, seeds 29 and 30, plays the last match of round one.
     assert_eq!(bracket.rounds[1][0].entrant_a, Some(ids[0]));
-    assert_eq!(bracket.rounds[1][4].entrant_a, Some(ids[1]));
+    assert_eq!(bracket.rounds[1][0].entrant_b, Some(ids[1]));
+    assert_eq!(bracket.rounds[0][15].entrant_a, Some(ids[28]));
+    assert_eq!(bracket.rounds[0][15].entrant_b, Some(ids[29]));
 }
 
 #[test]

@@ -49,6 +49,21 @@ const description = z
     .nullish()
     .transform(value => (value ?? "").trim())
 
+const SKILL_RULE = "Pick a level from 1 to 5."
+
+/** A radio group posts its value as text. The API reads a number from 1 to 5. */
+export const skillLevel = z.coerce
+    .number({ error: SKILL_RULE })
+    .int(SKILL_RULE)
+    .min(1, SKILL_RULE)
+    .max(5, SKILL_RULE)
+
+/** The empty option of a select means no level. */
+export const optionalSkillLevel = z.preprocess(
+    value => (value === "" || value === null ? undefined : value),
+    skillLevel.optional(),
+)
+
 export const tournamentFields = {
     name: z.string().trim().min(1, "A tournament needs a name.").max(60),
     game: z.string().trim().min(1, "A tournament needs a game.").max(40),

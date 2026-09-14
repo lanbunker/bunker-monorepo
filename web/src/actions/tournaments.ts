@@ -5,6 +5,8 @@ import { requireAdmin, requireToken, unwrap } from "../lib/action"
 import { call, callEmpty } from "../lib/api"
 import {
     handle,
+    optionalSkillLevel,
+    skillLevel,
     statusChangeInput,
     tournamentFields,
     tournamentInput,
@@ -17,13 +19,14 @@ const byId = z.object({ id: uuid })
 export const tournamentActions = {
     applyToTournament: defineAction({
         accept: "form",
-        input: byId,
+        input: z.object({ id: uuid, skill: skillLevel }),
         handler: async (input, context) => {
             unwrap(
                 await call(
                     client =>
                         client.POST("/api/tournaments/{id}/registration", {
                             params: { path: { id: input.id } },
+                            body: { skill: input.skill },
                         }),
                     requireToken(context.locals),
                 ),
@@ -125,7 +128,7 @@ export const tournamentActions = {
 
     addEntrant: defineAction({
         accept: "form",
-        input: z.object({ id: uuid, handle }),
+        input: z.object({ id: uuid, handle, skill: optionalSkillLevel }),
         handler: async (input, context) => {
             const token = requireAdmin(context.locals)
             const player = unwrap(
@@ -142,7 +145,7 @@ export const tournamentActions = {
                     client =>
                         client.POST("/api/admin/tournaments/{id}/entrants", {
                             params: { path: { id: input.id } },
-                            body: { playerId: player.id },
+                            body: { playerId: player.id, skill: input.skill ?? null },
                         }),
                     token,
                 ),

@@ -1,6 +1,8 @@
+use std::cmp::Reverse;
+
 use bunker_models::{
     Bracket, Entrant, EntrantId, MatchId, NewTournament, PageQuery, Paginated, PlayerId,
-    Registrations, SeedOrder, StatusChange, Tournament, TournamentDetail, TournamentId,
+    Registrations, SeedOrder, SkillLevel, StatusChange, Tournament, TournamentDetail, TournamentId,
     TournamentStatus, TournamentUpdate,
 };
 use rand::seq::SliceRandom;
@@ -159,17 +161,20 @@ impl TournamentService {
         })
     }
 
-    /// A player enters while registration is open. A second call answers the
-    /// same entrant.
+    /// A player enters with their level while registration is open. A second
+    /// call answers the same entrant, with the level of the second call.
     pub async fn register(
         &self,
         id: TournamentId,
         player: PlayerId,
+        skill: SkillLevel,
     ) -> Result<Entrant, ServiceError> {
         let tournament = self.load_public(id).await?;
         require_registration_open(&tournament)?;
 
-        self.enrol(id, player).await.map(|(entrant, _)| entrant)
+        self.enrol(id, player, Some(skill))
+            .await
+            .map(|(entrant, _)| entrant)
     }
 
     /// Idempotent, and only while registration is open. After the deadline the
@@ -183,10 +188,13 @@ impl TournamentService {
     }
 
     /// An admin adds any existing player, in any status, while no bracket exists.
+    /// A player who is already in keeps their entry. A given level replaces
+    /// theirs, so an admin can correct one; no level leaves theirs alone.
     pub async fn add_entrant(
         &self,
         id: TournamentId,
         player: PlayerId,
+        skill: Option<SkillLevel>,
     ) -> Result<(Entrant, Enrolled), ServiceError> {
         let tournament = self.load(id).await?;
         if tournament.has_bracket {
@@ -196,7 +204,7 @@ impl TournamentService {
             return Err(ServiceError::PlayerIdNotFound(player));
         }
 
-        self.enrol(id, player).await
+        self.enrol(id, player, skill).await
     }
 
     /// Idempotent. The winner of a concluded tournament stays.
@@ -217,18 +225,17 @@ impl TournamentService {
         Ok(())
     }
 
-    /// Builds the bracket from a random order of the entrants. Runs again as
-    /// long as no result was entered.
+    /// Builds the bracket seeded by level, the strongest first, so that the
+    /// bracket pairs neighbours of the same level in round one. Entrants of one
+    /// level are shuffled first, so a regeneration gives a new draw among them.
+    /// Runs again as long as no result was entered.
     pub async fn generate_bracket(&self, id: TournamentId) -> Result<Bracket, ServiceError> {
         self.require_bracket_editable(id).await?;
-        let mut order: Vec<EntrantId> = self
-            .storage
-            .entrants(id)
-            .await?
-            .into_iter()
-            .map(|entrant| entrant.id)
-            .collect();
-        order.shuffle(&mut rand::rng());
+        let mut entrants = self.storage.entrants(id).await?;
+        entrants.shuffle(&mut rand::rng());
+        // A stable sort keeps the shuffled order inside one level.
+        entrants.sort_by_key(|entrant| Reverse(seeding_level(entrant)));
+        let order: Vec<EntrantId> = entrants.into_iter().map(|entrant| entrant.id).collect();
 
         self.build_bracket(id, &order).await
     }
@@ -382,6 +389,7 @@ impl TournamentService {
         &self,
         id: TournamentId,
         player: PlayerId,
+        skill: Option<SkillLevel>,
     ) -> Result<(Entrant, Enrolled), ServiceError> {
         let enrolled = self
             .storage
@@ -389,9 +397,13 @@ impl TournamentService {
                 id: EntrantId::generate(),
                 tournament: id,
                 player,
+                skill,
                 registered_at: OffsetDateTime::now_utc(),
             })
             .await?;
+        if let (Enrolled::Already, Some(skill)) = (&enrolled, skill) {
+            self.storage.set_skill(id, player, skill).await?;
+        }
         let entrant = self
             .storage
             .entrant_of(id, player)
@@ -400,6 +412,10 @@ impl TournamentService {
 
         Ok((entrant, enrolled))
     }
+}
+
+fn seeding_level(entrant: &Entrant) -> u8 {
+    entrant.skill.map_or(SkillLevel::UNRATED, SkillLevel::value)
 }
 
 fn require_registration_open(tournament: &Tournament) -> Result<(), ServiceError> {

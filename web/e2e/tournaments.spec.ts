@@ -40,7 +40,7 @@ test("an admin creates a tournament, opens it, and the public page lists it", as
         card.getByRole("heading", { level: 3, name: new RegExp(name) }),
     ).toBeVisible()
     await expect(card).toContainText("REGISTRATION OPEN")
-    await expect(card.getByRole("button", { name: "APPLY" })).toBeVisible()
+    await expect(card.getByRole("link", { name: "APPLY" })).toBeVisible()
 
     // The homepage carries the soonest open tournament, whichever it is.
     await page.goto("/")
@@ -54,27 +54,73 @@ test("a player applies and retires while registration is open", async ({ page })
     await page.getByRole("button", { name: "open registration" }).click()
     await logout(page)
 
-    await signup(page, handle("ply"))
+    const player = handle("ply")
+    await signup(page, player)
     await page.goto("/tournaments")
     const card = page.locator(`[data-tournament="${id}"]`)
-    await card.getByRole("button", { name: "APPLY" }).click()
+    await card.getByRole("link", { name: "APPLY" }).click()
+    await expect(page).toHaveURL(`/tournaments/${id}/apply`)
+
+    // The form names the player who applies, with their glyph, and starts in
+    // the middle of the scale.
+    // The header names the player too, so the check stays inside the form.
+    await expect(page.locator("form").getByText(player, { exact: true })).toBeVisible()
+    expect(await page.locator("form svg rect").count()).toBeGreaterThan(0)
+    await expect(page.getByRole("radio", { name: /level 3/ })).toBeChecked()
+    await expect(page.getByText("REGULAR")).toBeVisible()
+    await page.getByRole("radio", { name: /level 4/ }).check()
+    await expect(page.getByText("SHARP")).toBeVisible()
+    await expect(page.getByText("REGULAR")).toBeHidden()
+    await page.getByRole("button", { name: "CONFIRM ENTRY" }).click()
+
     await expect(page).toHaveURL(/\/tournaments\?done=applied$/)
     await expect(page.getByRole("status")).toContainText("you are in")
     await expect(card.getByText("you are in.", { exact: true })).toBeVisible()
 
     const detail = await page.request.get(`/tournaments/${id}/detail.json`)
     expect(detail.ok()).toBe(true)
-    expect((await detail.json()).tournament.entrantCount).toBe(1)
+    const body = await detail.json()
+    expect(body.tournament.entrantCount).toBe(1)
+    expect(body.entrants[0].skill).toBe(4)
+
+    // An entrant has nothing to do on the apply page: the level changes
+    // through retire and apply.
+    await page.goto(`/tournaments/${id}/apply`)
+    await expect(page).toHaveURL(/\/tournaments\?done=registered$/)
+    await expect(page.getByRole("status")).toContainText("retire first")
 
     await card.getByRole("button", { name: "RETIRE" }).click()
     await expect(page).toHaveURL(/\/tournaments\?done=retired$/)
-    await expect(card.getByRole("button", { name: "APPLY" })).toBeVisible()
+    await expect(card.getByRole("link", { name: "APPLY" })).toBeVisible()
 })
 
-/** Signs players up through the API and adds them as entrants. Fast, for large fields. */
-const enrol = async (page: Page, admin: string, id: string, names: string[]) => {
+test("the apply page needs a login and an open tournament", async ({ page }) => {
+    const name = `Cup ${handle("t")}`
+    const { id } = await draftAsAdmin(page, name)
+    await logout(page)
+
+    await page.goto(`/tournaments/${id}/apply`)
+    await expect(page).toHaveURL(/\/login(\?|$)/)
+
+    // A draft is not there for a player. The page says so with a 404.
+    await signup(page, handle("nob"))
+    const hidden = await page.goto(`/tournaments/${id}/apply`)
+    expect(hidden?.status()).toBe(404)
+})
+
+/**
+ * Signs players up through the API and adds them as entrants. Fast, for large
+ * fields. `levels` gives each name its level, in order; a missing one is unrated.
+ */
+const enrol = async (
+    page: Page,
+    admin: string,
+    id: string,
+    names: string[],
+    levels: (number | undefined)[] = [],
+) => {
     const token = await tokenFor(page, admin)
-    for (const name of names) {
+    for (const [index, name] of names.entries()) {
         const created = await page.request.post(`${API}/api/auth/signup`, {
             data: { handle: name, password: PASSWORD },
         })
@@ -84,13 +130,91 @@ const enrol = async (page: Page, admin: string, id: string, names: string[]) => 
         const added = await page.request.post(
             `${API}/api/admin/tournaments/${id}/entrants`,
             {
-                data: { playerId: player.id },
+                data: { playerId: player.id, skill: levels[index] ?? null },
                 headers: { authorization: `Bearer ${token}` },
             },
         )
         expect(added.status()).toBe(201)
     }
 }
+
+test("the bracket is seeded by level, and the backoffice shows each level", async ({
+    page,
+}) => {
+    const { admin, id } = await draftAsAdmin(page, `Seeded ${handle("t")}`)
+    const [rookie, menace, casual, unrated, sharp] = [
+        handle("rk"),
+        handle("mn"),
+        handle("cs"),
+        handle("un"),
+        handle("sh"),
+    ]
+    await enrol(
+        page,
+        admin,
+        id,
+        [rookie, menace, casual, unrated, sharp],
+        [1, 5, 2, undefined, 4],
+    )
+
+    await page.reload()
+    const rows = page.getByRole("table", { name: "entrants" }).locator("tbody tr")
+    await expect(rows).toHaveCount(5)
+    await expect(rows.filter({ hasText: menace }).locator("[data-skill]")).toHaveText(
+        "▮▮▮▮▮",
+    )
+    await expect(rows.filter({ hasText: rookie }).locator("[data-skill]")).toHaveText(
+        "▮▯▯▯▯",
+    )
+    await expect(rows.filter({ hasText: unrated }).locator("[data-skill]")).toHaveText(
+        "-----",
+    )
+
+    // The add form takes a level too. The player signs up through the API, so
+    // the admin stays logged in.
+    const rated = handle("rt")
+    const created = await page.request.post(`${API}/api/auth/signup`, {
+        data: { handle: rated, password: PASSWORD },
+    })
+    expect(created.status()).toBe(201)
+    await page.getByLabel("handle of the player to add").fill(rated)
+    await page.getByLabel("level of the player to add").selectOption("3")
+    await page.getByRole("button", { name: "add entrant" }).click()
+    await expect(page.getByRole("status")).toContainText("entrant added")
+    await expect(rows.filter({ hasText: rated }).locator("[data-skill]")).toHaveText(
+        "▮▮▮▯▯",
+    )
+
+    await page.getByRole("button", { name: "go live" }).click()
+    await expect(page.getByText("seeded by level")).toBeVisible()
+    await page.getByRole("button", { name: "generate bracket" }).click()
+    await expect(page.getByText("regenerate redraws only among")).toBeVisible()
+    const matches = page.locator("[data-match]")
+    await expect(matches).toHaveCount(7)
+
+    // Six entrants: the two top levels get the byes, then neighbours pair up.
+    // The two threes are drawn at random, so the check is on the level and not
+    // on the name.
+    await expect(matches.nth(0)).toContainText(menace)
+    await expect(matches.nth(0)).toContainText("bye")
+    await expect(matches.nth(1)).toContainText(sharp)
+    await expect(matches.nth(1)).toContainText("bye")
+    await expect(matches.nth(2)).toContainText(unrated)
+    await expect(matches.nth(2)).toContainText(rated)
+    await expect(matches.nth(3)).toContainText(casual)
+    await expect(matches.nth(3)).toContainText(rookie)
+
+    // The seeds in the table follow the same order.
+    const seedOf = (row: number) => rows.nth(row).locator("td").first()
+    await expect(rows.nth(0)).toContainText(menace)
+    await expect(seedOf(0)).toHaveText("1")
+    await expect(rows.nth(1)).toContainText(sharp)
+    await expect(seedOf(1)).toHaveText("2")
+    await expect(rows.nth(4)).toContainText(casual)
+    await expect(seedOf(4)).toHaveText("5")
+    await expect(rows.nth(5)).toContainText(rookie)
+    await expect(seedOf(5)).toHaveText("6")
+})
 
 /** A side of a match that has no winner yet. Clicking it enters that result. */
 const openSide = (page: Page) =>
@@ -319,6 +443,6 @@ test("an open tournament past its deadline shows registration closed", async ({
     await page.goto("/tournaments")
     const card = page.locator(`[data-tournament="${id}"]`)
     await expect(card).toContainText("REGISTRATION CLOSED")
-    await expect(card.getByRole("button", { name: "APPLY" })).toHaveCount(0)
+    await expect(card.getByRole("link", { name: "APPLY" })).toHaveCount(0)
     await expect(card.getByRole("link", { name: "LOGIN TO APPLY" })).toHaveCount(0)
 })

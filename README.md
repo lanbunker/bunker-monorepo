@@ -116,14 +116,14 @@ or `test`.
 | GET | `/api/tournaments` | none | tournaments, newest event first, drafts hidden. Same paging |
 | GET | `/api/tournaments/{id}` | none | one tournament with entrants and bracket |
 | GET | `/api/me/registrations` | bearer | the tournaments the caller entered |
-| POST | `/api/tournaments/{id}/registration` | bearer | apply. Idempotent |
+| POST | `/api/tournaments/{id}/registration` | bearer | apply with a level from 1 to 5. A second call changes the level |
 | DELETE | `/api/tournaments/{id}/registration` | bearer | retire. Idempotent |
 | GET, POST | `/api/admin/tournaments` | admin | every tournament, create a draft |
 | GET, PATCH, DELETE | `/api/admin/tournaments/{id}` | admin | detail, edit fields, delete with entrants and matches |
 | POST | `/api/admin/tournaments/{id}/status` | admin | move the status, name the winner |
-| POST | `/api/admin/tournaments/{id}/entrants` | admin | add a player |
+| POST | `/api/admin/tournaments/{id}/entrants` | admin | add a player, with an optional level |
 | DELETE | `/api/admin/tournaments/{id}/entrants/{entrantId}` | admin | remove an entrant |
-| POST, DELETE | `/api/admin/tournaments/{id}/bracket` | admin | generate a random bracket, remove it |
+| POST, DELETE | `/api/admin/tournaments/{id}/bracket` | admin | generate a bracket seeded by level, remove it |
 | PUT | `/api/admin/tournaments/{id}/seeds` | admin | rebuild the bracket in a given seed order |
 | PUT, DELETE | `/api/admin/tournaments/{id}/matches/{matchId}/result` | admin | enter a result, clear it |
 | GET | `/api/openapi.json` | none | the contract |
@@ -138,12 +138,25 @@ entrants and opens the bracket work. `concluded` is final: nothing changes after
 it. A draft can go live at once, which is how an old tournament is backfilled.
 `live` can go back to `open` only while no bracket exists.
 
-The bracket is single elimination and optional. The admin generates it from a
-random order of the entrants, moves seeds by hand, and enters one result per
-match. A winner moves into the next round. A result can change until the next
-match is decided. A bye is not a result. While no result exists, the bracket can
-be regenerated or removed, as long as the tournament is not concluded. With a bracket, the final decides the winner. Without
-one, the admin names the winner among the entrants, or nobody.
+A player applies with a level from 1 to 5: how good they say they are at the
+game. The site asks for it on its own page, with the player's glyph and handle
+above the confirm button. To change the level, the player retires and applies
+again. An admin can add a player with a level or without one. An admin add with
+a level corrects the level of a player who is already in.
+
+The bracket is single elimination and optional. The admin generates it seeded by
+level: the strongest is seed 1, and entrants of one level are shuffled first, so
+a regeneration gives a new draw among them. An entrant without a level counts as
+a 3. Round one pairs neighbours in seed order, seed 1 against seed 2, seed 3
+against seed 4, and so on, so a beginner plays a beginner and a strong player
+plays a strong player. When the field is not a power of two, the top seeds get
+the byes, one per match at most. The two halves of the bracket meet only in the
+final. The admin moves seeds by hand, and enters one result per match. A winner
+moves into the next round. A result can change until the next match is decided.
+A bye is not a result. While no result exists, the bracket can be regenerated or
+removed, as long as the tournament is not concluded. With a bracket, the final
+decides the winner. Without one, the admin names the winner among the entrants,
+or nobody.
 
 Matches point at entrants and not at players, so a team can enter one day. The
 placements a bracket implies, second for the loser of the final and so on, are

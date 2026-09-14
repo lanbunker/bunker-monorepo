@@ -206,18 +206,32 @@ impl TestApi {
         read_json(response).await
     }
 
-    /// Signs up a player and adds them as an entrant through the admin route.
+    /// Signs up a player and adds them as an entrant through the admin route,
+    /// with no level.
     pub async fn add_entrant(
         &self,
         admin: &str,
         tournament: TournamentId,
         handle: &str,
     ) -> Entrant {
+        self.add_rated_entrant(admin, tournament, handle, None)
+            .await
+    }
+
+    /// Signs up a player and adds them as an entrant through the admin route,
+    /// with the given level.
+    pub async fn add_rated_entrant(
+        &self,
+        admin: &str,
+        tournament: TournamentId,
+        handle: &str,
+        skill: Option<u8>,
+    ) -> Entrant {
         let player = self.signup_player(handle).await;
         let response = self
             .post_as(
                 &format!("/api/admin/tournaments/{tournament}/entrants"),
-                &json!({ "playerId": player.id }),
+                &json!({ "playerId": player.id, "skill": skill }),
                 admin,
             )
             .await;

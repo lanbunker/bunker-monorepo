@@ -3,8 +3,8 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use bunker_models::{
-    Description, GameMode, GameName, NewTournament, StatusChange, TournamentName, TournamentStatus,
-    TournamentUpdate,
+    Description, EntrantAdd, GameMode, GameName, NewTournament, RegistrationRequest, SkillLevel,
+    StatusChange, TournamentName, TournamentStatus, TournamentUpdate,
 };
 use time::macros::date;
 
@@ -82,4 +82,50 @@ fn a_status_change_carries_an_optional_winner() {
 fn a_day_serializes_as_iso_text() {
     let day = date!(2026 - 10 - 24);
     assert_eq!(serde_json::to_string(&day).unwrap(), "\"2026-10-24\"");
+}
+
+#[test]
+fn a_skill_level_is_one_to_five() {
+    assert!(SkillLevel::try_new(0).is_err());
+    assert!(SkillLevel::try_new(6).is_err());
+    for level in 1..=5 {
+        assert_eq!(SkillLevel::try_new(level).unwrap().value(), level);
+    }
+    assert!(SkillLevel::try_new(3).unwrap() < SkillLevel::try_new(4).unwrap());
+    assert!(SkillLevel::try_new(SkillLevel::UNRATED).is_ok());
+}
+
+#[test]
+fn a_registration_carries_a_level_and_nothing_else() {
+    let body: RegistrationRequest = serde_json::from_str(r#"{"skill":4}"#).unwrap();
+    assert_eq!(body.skill.value(), 4);
+
+    assert!(serde_json::from_str::<RegistrationRequest>("{}").is_err());
+    assert!(serde_json::from_str::<RegistrationRequest>(r#"{"skill":0}"#).is_err());
+    assert!(serde_json::from_str::<RegistrationRequest>(r#"{"skill":6}"#).is_err());
+    assert!(serde_json::from_str::<RegistrationRequest>(r#"{"skill":"3"}"#).is_err());
+    assert!(serde_json::from_str::<RegistrationRequest>(r#"{"skill":3.5}"#).is_err());
+    assert!(
+        serde_json::from_str::<RegistrationRequest>(r#"{"skill":3,"seed":1}"#).is_err(),
+        "a seed is the bracket's to give"
+    );
+}
+
+#[test]
+fn an_entrant_add_takes_an_optional_level() {
+    let plain: EntrantAdd =
+        serde_json::from_str(r#"{"playerId":"00000000-0000-0000-0000-000000000001"}"#).unwrap();
+    assert!(plain.skill.is_none());
+
+    let rated: EntrantAdd =
+        serde_json::from_str(r#"{"playerId":"00000000-0000-0000-0000-000000000001","skill":5}"#)
+            .unwrap();
+    assert_eq!(rated.skill.unwrap().value(), 5);
+
+    assert!(
+        serde_json::from_str::<EntrantAdd>(
+            r#"{"playerId":"00000000-0000-0000-0000-000000000001","skill":9}"#
+        )
+        .is_err()
+    );
 }

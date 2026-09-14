@@ -152,7 +152,7 @@ test("a logged out visitor cannot apply, and a user cannot run an admin action",
     const applyAnonymously = await page.request.post(
         "/tournaments?_action=applyToTournament",
         {
-            form: { id: MISSING_ID },
+            form: { id: MISSING_ID, skill: "3" },
             headers: { origin: "http://127.0.0.1:4399" },
         },
     )
@@ -221,9 +221,61 @@ test("a refused draft keeps every field of the tournament form", async ({ page }
 test("a malformed id is refused before it reaches the api", async ({ page }) => {
     await signup(page, handle("mal"))
     const refused = await page.request.post("/tournaments?_action=applyToTournament", {
-        form: { id: "not-a-uuid" },
+        form: { id: "not-a-uuid", skill: "3" },
         headers: { origin: "http://127.0.0.1:4399" },
     })
     expect(refused.status()).toBe(400)
-    expect(await refused.text()).not.toContain("Failed to validate")
+    const body = await refused.text()
+    expect(body).toContain("That link is not valid.")
+    expect(body).not.toContain("Failed to validate")
+})
+
+test("a level outside 1 to 5 is refused with a sentence", async ({ page }) => {
+    // The apply page renders the failure, and it needs an open tournament to
+    // render at all. An admin is a player too, so one account does both.
+    const admin = await signupAdmin(page)
+    const token = await tokenFor(page, admin)
+    const created = await page.request.post(`${API}/api/admin/tournaments`, {
+        data: {
+            name: `Cup ${handle("l")}`,
+            game: "COD MW2",
+            mode: "1v1",
+            description: "",
+            date: "2030-01-01",
+            registrationClosesAt: "2029-12-31T20:00:00Z",
+        },
+        headers: { authorization: `Bearer ${token}` },
+    })
+    expect(created.status()).toBe(201)
+    const body: Record<string, unknown> = await created.json()
+    const id = String(body.id)
+    const opened = await page.request.post(`${API}/api/admin/tournaments/${id}/status`, {
+        data: { status: "open" },
+        headers: { authorization: `Bearer ${token}` },
+    })
+    expect(opened.status()).toBe(200)
+
+    for (const skill of ["0", "6", "abc", ""]) {
+        const refused = await page.request.post(
+            `/tournaments/${id}/apply?_action=applyToTournament`,
+            {
+                form: { id, skill },
+                headers: { origin: "http://127.0.0.1:4399" },
+            },
+        )
+        expect(refused.status(), `level ${JSON.stringify(skill)}`).toBe(400)
+        const html = await refused.text()
+        expect(html).toContain("Pick a level from 1 to 5.")
+        expect(html).not.toContain("Failed to validate")
+    }
+
+    // The API is the authority: a level the site let through is refused there
+    // too, and the page shows that sentence as well.
+    const entered = await page.request.post(`${API}/api/tournaments/${id}/registration`, {
+        data: { skill: 7 },
+        headers: { authorization: `Bearer ${token}` },
+    })
+    expect(entered.status()).toBe(422)
+    const detail = await page.request.get(`/tournaments/${id}/detail.json`)
+    expect((await detail.json()).tournament.entrantCount).toBe(0)
 })

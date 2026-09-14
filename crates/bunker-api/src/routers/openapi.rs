@@ -3,9 +3,10 @@ use axum::{Json, Router};
 use bunker_models::{
     Account, Bracket, Description, Entrant, EntrantAdd, EntrantId, GameMode, GameName, Glyph,
     GlyphBits, GlyphColor, Handle, HandleChange, LoginRequest, Match, MatchId, MatchResult,
-    NewTournament, Paginated, Password, PasswordChange, Player, PlayerId, Registrations, Role,
-    RoleUpdate, SeedOrder, SignupRequest, StatusChange, TemporaryPassword, TokenResponse,
-    Tournament, TournamentDetail, TournamentId, TournamentName, TournamentStatus, TournamentUpdate,
+    NewTournament, Paginated, Password, PasswordChange, Player, PlayerId, RegistrationRequest,
+    Registrations, Role, RoleUpdate, SeedOrder, SignupRequest, SkillLevel, StatusChange,
+    TemporaryPassword, TokenResponse, Tournament, TournamentDetail, TournamentId, TournamentName,
+    TournamentStatus, TournamentUpdate,
 };
 use utoipa::openapi::security::{HttpAuthScheme, HttpBuilder, SecurityScheme};
 use utoipa::{Modify, OpenApi};
@@ -71,8 +72,10 @@ use super::{
         MatchId,
         MatchResult,
         NewTournament,
+        RegistrationRequest,
         Registrations,
         SeedOrder,
+        SkillLevel,
         StatusChange,
         Tournament,
         TournamentDetail,

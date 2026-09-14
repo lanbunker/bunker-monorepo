@@ -48,7 +48,7 @@ CREATE TABLE tournament_entrants (
     -- shape. A team column can sit next to this one later.
     player_id     text references players(id) on delete set null,
     seed          integer check (seed is null or seed >= 1),
-    registered_at integer not null check (registered_at > 0),
+    registered_at integer not null check (registered_at > 0), skill integer check (skill is null or skill between 1 and 5),
     unique (tournament_id, player_id),
     -- Lets a match reference an entrant of its own tournament only.
     unique (tournament_id, id)
