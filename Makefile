@@ -97,6 +97,7 @@ web-fmt: ## Format every site source: oxfmt, and prettier for .astro
 
 web-check: ## Format, type check, lint and build the site. Run this before you yield
 	$(MAKE) web-fmt
+	pnpm -C web exec astro sync
 	pnpm -C web typecheck
 	pnpm -C web lint
 	pnpm -C web check

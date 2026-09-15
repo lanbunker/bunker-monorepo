@@ -30,11 +30,12 @@ pub struct StoredEvent {
     pub checkin_code: CheckinCode,
 }
 
-/// What an insert of a check-in did. A second scan is a result, not a failure,
-/// and it carries the time of the first one.
+/// What an insert of a check-in did, with the time as the row holds it: the
+/// column keeps microseconds, and a clock can give more. A second scan is a
+/// result, not a failure, and it carries the time of the first one.
 #[derive(Debug, Clone, Copy)]
 pub enum CheckedIn {
-    New,
+    New(OffsetDateTime),
     Already(OffsetDateTime),
 }
 
@@ -304,7 +305,7 @@ impl EventStorage {
         .await?;
         tx.commit().await.map_err(StorageError::from_query)?;
 
-        Ok(CheckedIn::New)
+        Ok(CheckedIn::New(from_micros(CHECKINS, checked_in_at)?))
     }
 
     /// Every event the player checked in to, first night first.

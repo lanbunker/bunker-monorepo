@@ -71,6 +71,9 @@ jobs:
             # that skipped the checklist fails here.
             - run: pnpm fmt:check
 
+            # `astro:env` and the other virtual modules exist only after a sync.
+            - run: pnpm exec astro sync
+
             # TypeScript 7 reads every .ts and .tsx in under a second.
             - run: pnpm typecheck
 

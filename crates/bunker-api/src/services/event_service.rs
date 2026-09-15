@@ -165,7 +165,7 @@ impl EventService {
         };
 
         Ok(match outcome {
-            CheckedIn::New => CheckinOutcome::First(receipt(now, CHECKIN_CYCLES)),
+            CheckedIn::New(at) => CheckinOutcome::First(receipt(at, CHECKIN_CYCLES)),
             CheckedIn::Already(first) => CheckinOutcome::Repeat(receipt(first, 0)),
         })
     }
