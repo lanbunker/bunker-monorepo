@@ -29,6 +29,10 @@ export default defineConfig({
             url: `http://127.0.0.1:${API_PORT}/health/ready`,
             reuseExistingServer: false,
             timeout: 180_000,
+            // The output of both servers goes into the run log, so a failure on
+            // another machine shows the server side of the story.
+            stdout: "pipe",
+            stderr: "pipe",
         },
         {
             // A Worker var beats the shell in local mode, so the API URL comes
@@ -42,6 +46,8 @@ export default defineConfig({
             url: `http://127.0.0.1:${WEB_PORT}/`,
             reuseExistingServer: false,
             timeout: 120_000,
+            stdout: "pipe",
+            stderr: "pipe",
         },
     ],
 })
