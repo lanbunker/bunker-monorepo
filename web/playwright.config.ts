@@ -9,6 +9,8 @@ const WEB_PORT = 4399
 
 export default defineConfig({
     testDir: "./e2e",
+    // Warms the dev server, so the first test does not race the bundler.
+    globalSetup: "./e2e/warmup.ts",
     fullyParallel: false,
     workers: 1,
     retries: 0,

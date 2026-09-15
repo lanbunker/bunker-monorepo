@@ -50,10 +50,11 @@ export const RANKS: Record<Rank, RankInfo> = {
 /** The number of cells in a rank mark: every rank above the bottom lights one. */
 export const RANK_CELLS = 5
 
-export type Source = "tournaments" | "adjustments"
+export type Source = "events" | "tournaments" | "adjustments"
 
 /** Where cycles come from, as a player thinks of it: several kinds make one source. */
 export const SOURCE_OF: Record<PointKind, Source> = {
+    checkin: "events",
     tournament_entry: "tournaments",
     match_win: "tournaments",
     semifinalist: "tournaments",
@@ -62,7 +63,7 @@ export const SOURCE_OF: Record<PointKind, Source> = {
     adjustment: "adjustments",
 }
 
-export const SOURCES: readonly Source[] = ["tournaments", "adjustments"]
+export const SOURCES: readonly Source[] = ["events", "tournaments", "adjustments"]
 
 /** The cycles of each source, every source present, from the totals by kind. */
 export const sourceTotals = (totals: readonly KindTotal[]): Record<Source, number> => {
@@ -70,7 +71,11 @@ export const sourceTotals = (totals: readonly KindTotal[]): Record<Source, numbe
         totals
             .filter(total => SOURCE_OF[total.kind] === source)
             .reduce((sum, total) => sum + total.cycles, 0)
-    return { tournaments: sumOf("tournaments"), adjustments: sumOf("adjustments") }
+    return {
+        events: sumOf("events"),
+        tournaments: sumOf("tournaments"),
+        adjustments: sumOf("adjustments"),
+    }
 }
 
 /** `1,240` or `-80`: a comma every three digits, and the sign of a loss stays. */
@@ -110,6 +115,7 @@ export type KindInfo = {
 
 /** What each source of cycles is called. The amounts come from the API. */
 export const KINDS: Record<PointKind, KindInfo> = {
+    checkin: { label: "event check-in", blurb: "scan the QR code at the entrance" },
     tournament_entry: { label: "tournament entry", blurb: "you showed up and played" },
     match_win: {
         label: "match won",

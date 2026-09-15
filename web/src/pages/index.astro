@@ -1,39 +1,36 @@
 ---
-import { getCollection } from "astro:content"
 import AsciiBanner from "../components/AsciiBanner.astro"
 import Button from "../components/ui/Button.astro"
 import Kv from "../components/ui/Kv.astro"
 import Panel from "../components/ui/Panel.astro"
 import Layout from "../layouts/Layout.astro"
 import { call, dataOf } from "../lib/api"
-import { formatEurDate, parseEurDate } from "../lib/dates"
+import LocalTime from "../components/ui/LocalTime.astro"
+import { nextEvent as soonest } from "../lib/events"
 import { isRegistrationOpen, nextOpen } from "../lib/tournaments"
 
-const events = (await getCollection("events")).toSorted(
-  (a, b) => parseEurDate(b.data.date) - parseEurDate(a.data.date),
-)
-
-// Events sort newest first, so the last upcoming entry is the soonest one.
-const nextEvent = events.findLast(
-  e => e.data.status === "OPEN" || e.data.status === "SOON",
-)
-// One row proves the API is up and carries the head count. The tournament list
-// is small, so the first page holds every open one.
-const [roster, tournaments] = await Promise.all([
+// One row proves the API is up and carries the head count. The tournament and
+// event lists are small, so the first page holds every one that matters.
+const [roster, tournaments, events] = await Promise.all([
   call(client =>
     client.GET("/api/players", { params: { query: { page: 1, pageSize: 1 } } }),
   ),
   call(client =>
     client.GET("/api/tournaments", { params: { query: { page: 1, pageSize: 100 } } }),
   ),
+  call(client =>
+    client.GET("/api/events", { params: { query: { page: 1, pageSize: 100 } } }),
+  ),
 ])
 const net = dataOf(roster)
+const nights = dataOf(events)?.items
+const nextEvent = soonest(nights ?? [])
 const netOnline = net !== undefined
 const upcomingTournament = nextOpen(dataOf(tournaments)?.items ?? [])
 const canRegister = upcomingTournament ? isRegistrationOpen(upcomingTournament) : false
 ---
 
-<Layout title="LAN BUNKER" active="home">
+<Layout title="LAN BUNKER" active="home" events={nights}>
   <AsciiBanner
     text="BUNKERNET"
     hollow="NET"
@@ -80,7 +77,7 @@ const canRegister = upcomingTournament ? isRegistrationOpen(upcomingTournament) 
           <Kv label="Next event">
             {nextEvent ? (
               <a href="/events" class="text-bright no-underline hover:text-accent">
-                {formatEurDate(nextEvent.data.date)} // {nextEvent.data.name}
+                <LocalTime at={nextEvent.startsAt} mode="date" /> // {nextEvent.name}
               </a>
             ) : (
               "to be announced"

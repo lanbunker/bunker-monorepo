@@ -1,6 +1,9 @@
 use std::error::Error as StdError;
 
-use bunker_models::{BracketError, EntrantId, Handle, MatchId, TournamentId, TournamentStatus};
+use bunker_models::{
+    BracketError, CheckinWindow, EntrantId, EventId, Handle, MatchId, TournamentId,
+    TournamentStatus,
+};
 use serde::Serialize;
 use utoipa::ToSchema;
 
@@ -27,6 +30,8 @@ pub enum ErrorCode {
     WrongPassword,
     /// Registration is not open, or the deadline passed.
     RegistrationClosed,
+    /// The doors of the event are not open: too early, or the night is over.
+    CheckinClosed,
     /// The tournament or its bracket is in a state that refuses this action.
     InvalidState,
     /// An id in the body is not an entrant of this tournament, or not a side of
@@ -68,6 +73,25 @@ pub enum ServiceError {
 
     #[error("tournament {0} not found")]
     TournamentNotFound(TournamentId),
+
+    #[error("event {0} not found")]
+    EventNotFound(EventId),
+
+    /// One variant for an unknown code and a draft. A leaked link must not say
+    /// that an event exists before it is published.
+    #[error("no published event answers to this check-in code")]
+    UnknownCheckinCode,
+
+    #[error("check-in is {}", match .0 { CheckinWindow::Early => "not open yet", CheckinWindow::Over => "over", CheckinWindow::Open => "open" })]
+    CheckinClosed(CheckinWindow),
+
+    #[error("the end must come after the start")]
+    InvalidEventWindow,
+
+    /// The generated code did not satisfy its own type. A bug, never a client
+    /// mistake.
+    #[error("could not generate a check-in code")]
+    CodeGeneration(#[source] Box<dyn StdError + Send + Sync>),
 
     #[error("match {0} not found in this tournament")]
     MatchNotFound(MatchId),
@@ -148,10 +172,27 @@ impl ServiceError {
             Self::PlayerNotFound(_)
             | Self::PlayerIdNotFound(_)
             | Self::TournamentNotFound(_)
+            | Self::EventNotFound(_)
             | Self::MatchNotFound(_) => (ErrorCode::ItemNotFound, None),
+            Self::UnknownCheckinCode => (
+                ErrorCode::ItemNotFound,
+                Some("This check-in link is not valid"),
+            ),
             Self::RegistrationClosed => (
                 ErrorCode::RegistrationClosed,
                 Some("Registration is closed"),
+            ),
+            Self::CheckinClosed(window) => (
+                ErrorCode::CheckinClosed,
+                Some(match window {
+                    CheckinWindow::Early => "Check-in opens when the doors open",
+                    CheckinWindow::Open => "Check-in is not open",
+                    CheckinWindow::Over => "Check-in is over. The night is done",
+                }),
+            ),
+            Self::InvalidEventWindow => (
+                ErrorCode::UnprocessableRequest,
+                Some("The end must come after the start"),
             ),
             Self::InvalidTransition { .. } => (
                 ErrorCode::InvalidState,
@@ -227,7 +268,7 @@ impl ServiceError {
                 ErrorCode::ServiceUnavailable,
                 Some("The service is temporarily unavailable"),
             ),
-            Self::Storage(_) | Self::Crypto(_) => (
+            Self::Storage(_) | Self::Crypto(_) | Self::CodeGeneration(_) => (
                 ErrorCode::GenericError,
                 Some("An unexpected error occurred"),
             ),
@@ -239,6 +280,13 @@ impl ServiceError {
         E: StdError + Send + Sync + 'static,
     {
         Self::Crypto(Box::new(error))
+    }
+
+    pub fn code_generation<E>(error: E) -> Self
+    where
+        E: StdError + Send + Sync + 'static,
+    {
+        Self::CodeGeneration(Box::new(error))
     }
 
     pub fn invalid_token<E>(error: E) -> Self

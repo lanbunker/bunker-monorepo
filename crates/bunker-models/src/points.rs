@@ -12,6 +12,7 @@ use utoipa::ToSchema;
 use uuid::Uuid;
 
 use super::bracket::Bracket;
+use super::event::{EventId, EventName};
 use super::pagination::Paginated;
 use super::player::PlayerId;
 use super::tournament::{Entrant, EntrantId, TournamentId, TournamentName};
@@ -20,6 +21,9 @@ use super::tournament::{Entrant, EntrantId, TournamentId, TournamentName};
 // sends these to every client, so a legend on the site can never disagree with
 // what the ledger writes.
 
+/// A player who scans the code at the door of an event gets this, one time
+/// per event.
+pub const CHECKIN_CYCLES: i64 = 100;
 /// Every entrant of a concluded tournament gets this for being there.
 pub const ENTRY_CYCLES: i64 = 40;
 /// Each match won in the bracket. A bye is not a win.
@@ -215,6 +219,7 @@ impl Standing {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum PointKind {
+    Checkin,
     TournamentEntry,
     MatchWin,
     Champion,
@@ -226,7 +231,8 @@ pub enum PointKind {
 impl PointKind {
     /// Every kind, in the order a legend lists them. `CyclesRules` is built
     /// from this list, so a new variant appears there without a second edit.
-    pub const ALL: [Self; 6] = [
+    pub const ALL: [Self; 7] = [
+        Self::Checkin,
         Self::TournamentEntry,
         Self::MatchWin,
         Self::Semifinalist,
@@ -237,6 +243,7 @@ impl PointKind {
 
     pub const fn as_str(self) -> &'static str {
         match self {
+            Self::Checkin => "checkin",
             Self::TournamentEntry => "tournament_entry",
             Self::MatchWin => "match_win",
             Self::Champion => "champion",
@@ -248,10 +255,11 @@ impl PointKind {
 
     /// What a tournament of this size pays for this kind. The entry and a win
     /// are the same in every field: a bigger bracket already has more wins in
-    /// it. An adjustment has no fixed amount.
+    /// it. A check-in has no field at all. An adjustment has no fixed amount.
     pub const fn cycles(self, tier: FieldTier) -> Option<i64> {
         use FieldTier::{Large, Medium, Small};
         match (self, tier) {
+            (Self::Checkin, _) => Some(CHECKIN_CYCLES),
             (Self::TournamentEntry, _) => Some(ENTRY_CYCLES),
             (Self::MatchWin, _) => Some(MATCH_WIN_CYCLES),
             (Self::Champion, Small) => Some(120),
@@ -350,6 +358,7 @@ impl std::str::FromStr for PointKind {
 
     fn from_str(raw: &str) -> Result<Self, Self::Err> {
         match raw {
+            "checkin" => Ok(Self::Checkin),
             "tournament_entry" => Ok(Self::TournamentEntry),
             "match_win" => Ok(Self::MatchWin),
             "champion" => Ok(Self::Champion),
@@ -362,7 +371,8 @@ impl std::str::FromStr for PointKind {
 }
 
 /// One line of the history. `note` is present on an adjustment: the reason an
-/// admin gave, written for everyone.
+/// admin gave, written for everyone. A tournament line names its tournament,
+/// and a check-in names its event.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct PointEntry {
@@ -371,6 +381,8 @@ pub struct PointEntry {
     pub kind: PointKind,
     pub tournament_id: Option<TournamentId>,
     pub tournament_name: Option<TournamentName>,
+    pub event_id: Option<EventId>,
+    pub event_name: Option<EventName>,
     pub note: Option<Note>,
     #[serde(with = "time::serde::rfc3339")]
     #[schema(value_type = String, format = DateTime)]
@@ -403,15 +415,26 @@ pub struct Adjustment {
     pub note: Note,
 }
 
-/// What a concluded tournament pays one player, before it is a row.
+/// What a source pays one player, before it is a row.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Award {
     pub player: PlayerId,
     pub amount: i64,
     pub kind: PointKind,
-    /// What paid: the match for a win, the tournament otherwise. With the kind
-    /// and the player it is the key that makes a retry pay nobody twice.
+    /// What paid: the event for a check-in, the match for a win, the
+    /// tournament otherwise. With the kind and the player it is the key that
+    /// makes a retry pay nobody twice.
     pub source_ref: String,
+}
+
+/// What the door of an event pays a player who scans the code.
+pub fn checkin_award(event: EventId, player: PlayerId) -> Award {
+    Award {
+        player,
+        amount: CHECKIN_CYCLES,
+        kind: PointKind::Checkin,
+        source_ref: event.to_string(),
+    }
 }
 
 /// Everything a concluded tournament pays. Every entrant with an account gets

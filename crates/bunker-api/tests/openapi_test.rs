@@ -64,6 +64,13 @@ async fn the_document_is_served_and_lists_every_route() {
         "/api/admin/tournaments/{id}/bracket",
         "/api/admin/tournaments/{id}/seeds",
         "/api/admin/tournaments/{id}/matches/{matchId}/result",
+        "/api/events",
+        "/api/checkin/{code}",
+        "/api/me/checkins",
+        "/api/admin/events",
+        "/api/admin/events/{id}",
+        "/api/admin/events/{id}/status",
+        "/api/admin/events/{id}/checkins",
         "/health/live",
         "/health/ready",
     ] {
@@ -130,5 +137,47 @@ fn the_tournament_schema_has_the_documented_fields() {
     assert_eq!(
         document["components"]["schemas"]["TournamentStatus"]["enum"],
         serde_json::json!(["draft", "open", "live", "concluded"])
+    );
+}
+
+#[test]
+fn the_event_schema_has_the_documented_fields_and_hides_the_code() {
+    let document: Value = serde_json::to_value(ApiDoc::openapi()).unwrap();
+    let event = &document["components"]["schemas"]["Event"];
+    let mut fields: Vec<&str> = event["properties"]
+        .as_object()
+        .unwrap()
+        .keys()
+        .map(String::as_str)
+        .collect();
+    fields.sort_unstable();
+
+    assert_eq!(
+        fields,
+        [
+            "checkinCount",
+            "createdAt",
+            "description",
+            "endsAt",
+            "games",
+            "id",
+            "image",
+            "location",
+            "name",
+            "startsAt",
+            "status",
+        ]
+    );
+    assert_eq!(
+        document["components"]["schemas"]["EventStatus"]["enum"],
+        serde_json::json!(["draft", "published"])
+    );
+    assert_eq!(
+        document["components"]["schemas"]["CheckinWindow"]["enum"],
+        serde_json::json!(["early", "open", "over"])
+    );
+    assert_eq!(
+        document["components"]["schemas"]["PointKind"]["enum"][0],
+        serde_json::json!("checkin")
     );
 }

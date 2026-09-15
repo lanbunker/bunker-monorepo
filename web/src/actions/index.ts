@@ -12,6 +12,7 @@ import {
     signupInput,
     uuid,
 } from "../lib/schemas"
+import { eventActions } from "./events"
 import { tournamentActions } from "./tournaments"
 
 /** Sets the session cookie until the token expires. */
@@ -26,6 +27,7 @@ const storeSession = (cookies: AstroCookies, token: string, expiresAt: string) =
 }
 
 export const server = {
+    ...eventActions,
     ...tournamentActions,
 
     signup: defineAction({
@@ -40,7 +42,7 @@ export const server = {
                 ),
             )
             storeSession(context.cookies, session.token, session.expiresAt)
-            return { handle: input.handle }
+            return { handle: input.handle, next: input.next }
         },
     }),
 
@@ -49,10 +51,14 @@ export const server = {
         input: credentials,
         handler: async (input, context) => {
             const session = unwrap(
-                await call(client => client.POST("/api/auth/login", { body: input })),
+                await call(client =>
+                    client.POST("/api/auth/login", {
+                        body: { handle: input.handle, password: input.password },
+                    }),
+                ),
             )
             storeSession(context.cookies, session.token, session.expiresAt)
-            return { handle: input.handle }
+            return { handle: input.handle, next: input.next }
         },
     }),
 

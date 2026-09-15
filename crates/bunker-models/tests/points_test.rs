@@ -395,3 +395,29 @@ fn the_rules_are_the_constants_the_ledger_pays() {
     let paid = tournament_awards(cup(), &entrants, None, Some(entrants[0].id));
     assert!(paid.iter().all(|a| a.amount == cycles_of(a.kind)[0]));
 }
+
+#[test]
+fn the_door_pays_a_fixed_amount_keyed_on_the_event() {
+    let event = bunker_models::EventId::new(uuid::Uuid::from_u128(9));
+    let who = PlayerId::generate();
+
+    let award = bunker_models::checkin_award(event, who);
+
+    assert_eq!(award.player, who);
+    assert_eq!(award.amount, bunker_models::CHECKIN_CYCLES);
+    assert_eq!(award.kind, PointKind::Checkin);
+    assert_eq!(award.source_ref, event.to_string());
+    for tier in FieldTier::ALL {
+        assert_eq!(
+            PointKind::Checkin.cycles(tier),
+            Some(bunker_models::CHECKIN_CYCLES),
+            "a check-in has no field"
+        );
+    }
+    let rules = CyclesRules::current();
+    assert_eq!(
+        rules.awards.first().map(|a| a.kind),
+        Some(PointKind::Checkin),
+        "the legend starts at the door"
+    );
+}

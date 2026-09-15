@@ -1,9 +1,11 @@
 ---
 import "../styles/global.css"
-import { getCollection } from "astro:content"
 import Button from "../components/ui/Button.astro"
 import Glyph from "../components/ui/Glyph.astro"
-import { formatEurDate, parseEurDate } from "../lib/dates"
+import LocalTime from "../components/ui/LocalTime.astro"
+import { call, dataOf } from "../lib/api"
+import type { Event } from "../lib/api"
+import { firstEvent, nextEvent as soonest } from "../lib/events"
 
 type Section = "home" | "events" | "tournaments" | "players" | "media" | "shop" | "about"
 
@@ -15,9 +17,17 @@ interface Props {
   noindex?: boolean
   /** No header, nav, footer or status bar. The page fills the screen. */
   bare?: boolean
+  /** The published events, when the page fetched them already. Saves the call below. */
+  events?: Event[] | undefined
 }
 
-const { title = "LAN BUNKER", active, noindex = false, bare = false } = Astro.props
+const {
+  title = "LAN BUNKER",
+  active,
+  noindex = false,
+  bare = false,
+  events: given,
+} = Astro.props
 const player = Astro.locals.player
 const description =
   "LAN BUNKER, a recurring local multiplayer event blending music and gaming."
@@ -32,16 +42,22 @@ const nav: { key: Section; label: string; href: string }[] = [
   { key: "about", label: "ABOUT", href: "/about" },
 ]
 
-const events = (await getCollection("events")).toSorted(
-  (a, b) => parseEurDate(b.data.date) - parseEurDate(a.data.date),
-)
-// Events sort newest first, so the last upcoming entry is the soonest one.
-const nextEvent = events.findLast(
-  e => e.data.status === "OPEN" || e.data.status === "SOON",
-)
-const nextEventTs = nextEvent ? parseEurDate(nextEvent.data.date) : NaN
-const firstEvent = events.at(-1)
-const firstEventTs = firstEvent ? parseEurDate(firstEvent.data.date) : NaN
+// One small call per page for the next night and the first one, unless the
+// page fetched the list already. A bare page shows neither, so it makes no
+// call. If the API is down the bar hides both. One page of 100 holds every
+// night for decades at four a year.
+const events = bare
+  ? []
+  : (given ??
+    dataOf(
+      await call(client =>
+        client.GET("/api/events", { params: { query: { page: 1, pageSize: 100 } } }),
+      ),
+    )?.items ??
+    [])
+const nextEvent = soonest(events)
+const first = firstEvent(events)
+const firstEventTs = first ? new Date(first.startsAt).getTime() : NaN
 const activeIndex = nav.findIndex(item => item.key === active)
 ---
 
@@ -192,14 +208,14 @@ const activeIndex = nav.findIndex(item => item.key === active)
           </span>
         </div>
         <div class="flex items-stretch">
-          {nextEvent && Number.isFinite(nextEventTs) && (
+          {nextEvent && (
             <a
               href="/events"
               class="hidden items-center gap-1.5 border-l border-faint px-2.5 no-underline text-dim hover:text-accent min-[35rem]:flex"
-              data-next-date={nextEvent.data.date}
+              data-next-at={nextEvent.startsAt}
             >
               next event
-              <span class="text-ink">{formatEurDate(nextEvent.data.date)}</span>
+              <LocalTime at={nextEvent.startsAt} mode="date" class="text-ink" />
               <span id="next-tminus" class="text-accent-soft tabular-nums" />
             </a>
           )}
@@ -218,16 +234,12 @@ const activeIndex = nav.findIndex(item => item.key === active)
       const uptime = document.getElementById("uptime")
       const tminus = document.getElementById("next-tminus")
       const since = Number(uptime?.parentElement?.dataset.since)
-      const [nextDay, nextMonth, nextYear] = (
-        tminus?.parentElement?.dataset.nextDate ?? ""
-      )
-        .split("/")
-        .map(Number)
-      // Local midnight of the event date, so the day count does not drift with the viewer's timezone.
-      const nextMidnight =
-        nextDay && nextMonth && nextYear
-          ? new Date(nextYear, nextMonth - 1, nextDay).getTime()
-          : NaN
+      const nextAt = new Date(tminus?.parentElement?.dataset.nextAt ?? "")
+      // Local midnight of the day the doors open, so the day count does not
+      // drift with the viewer's timezone.
+      const nextMidnight = Number.isNaN(nextAt.getTime())
+        ? NaN
+        : new Date(nextAt.getFullYear(), nextAt.getMonth(), nextAt.getDate()).getTime()
 
       const updateClock = () => {
         const now = Date.now()

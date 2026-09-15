@@ -3,6 +3,7 @@
 
 mod auth_service;
 mod error;
+mod event_service;
 mod password;
 mod player_service;
 mod points_service;
@@ -11,6 +12,7 @@ mod tournament_service;
 
 pub use auth_service::AuthService;
 pub use error::{ErrorCode, ServiceError};
+pub use event_service::{CheckinOutcome, EventService};
 pub use password::PasswordHasher;
 pub use player_service::PlayerService;
 pub use points_service::PointsService;

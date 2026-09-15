@@ -413,3 +413,21 @@ async fn admin_tournament_routes_without_a_token_are_unauthorized() {
     let response = api.get("/api/admin/tournaments").await;
     assert_error(response, StatusCode::UNAUTHORIZED, "Unauthorized").await;
 }
+
+#[tokio::test]
+async fn a_malformed_checkin_code_is_rejected_before_the_handler() {
+    let api = TestApi::without_database().await;
+
+    let response = api.get("/api/checkin/NOT-A-CODE").await;
+
+    assert_error(response, StatusCode::BAD_REQUEST, "InvalidRequest").await;
+}
+
+#[tokio::test]
+async fn a_checkin_without_a_token_is_unauthorized() {
+    let api = TestApi::without_database().await;
+
+    let response = api.post("/api/checkin/abcdefghij12", &json!({})).await;
+
+    assert_error(response, StatusCode::UNAUTHORIZED, "Unauthorized").await;
+}

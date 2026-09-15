@@ -43,6 +43,14 @@ const { entries, empty = "no cycles yet." } = Astro.props
               )}
             </span>
           )}
+          {entry.eventName && (
+            <span class="text-dim">
+              {" // "}
+              <a href="/events" class="text-dim no-underline hover:text-accent">
+                {entry.eventName}
+              </a>
+            </span>
+          )}
           {entry.note && (
             <span class="block text-2xs text-dim italic">"{entry.note}"</span>
           )}

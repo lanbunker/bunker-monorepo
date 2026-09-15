@@ -1,13 +1,14 @@
 ---
 import { actions } from "astro:actions"
 import type { Player, Tournament } from "../lib/api"
-import { formatIsoDay, toLocalInput } from "../lib/dates"
+import { formatIsoDay } from "../lib/dates"
 import { isRegistrationOpen, statusBadge } from "../lib/tournaments"
 import Badge from "./ui/Badge.astro"
 import Button from "./ui/Button.astro"
 import Countdown from "./ui/Countdown.astro"
 import Glyph from "./ui/Glyph.astro"
 import Kv from "./ui/Kv.astro"
+import LocalTime from "./ui/LocalTime.astro"
 import Panel from "./ui/Panel.astro"
 
 interface Props {
@@ -47,9 +48,7 @@ const winner = t.winner?.player
       <Kv label="Entrants">{t.entrantCount}</Kv>
       {t.status === "open" && (
         <Kv label="Open until">
-          <time datetime={t.registrationClosesAt} data-local>
-            {toLocalInput(t.registrationClosesAt).replace("T", " ")}
-          </time>
+          <LocalTime at={t.registrationClosesAt} />
         </Kv>
       )}
     </div>
@@ -117,15 +116,3 @@ const winner = t.winner?.player
     )}
   </Panel>
 </article>
-
-<script>
-  // The server cannot know the viewer's timezone, so the deadline is written
-  // again here in local time.
-  for (const el of document.querySelectorAll<HTMLTimeElement>("time[data-local]")) {
-    const at = new Date(el.dateTime)
-    el.textContent = at.toLocaleString(undefined, {
-      dateStyle: "medium",
-      timeStyle: "short",
-    })
-  }
-</script>

@@ -3,6 +3,7 @@
 
 mod db;
 mod error;
+mod event_storage;
 mod player_storage;
 mod point_storage;
 mod row;
@@ -10,6 +11,7 @@ mod tournament_storage;
 
 pub use db::{DbPool, connect, run_pending_migrations};
 pub use error::StorageError;
+pub use event_storage::{CheckedIn, EventStorage, NewEventRow, StoredEvent};
 pub use player_storage::{
     Created, Credentials, ListOrder, NewPlayer, PlayerStorage, Renamed, StoredAccount,
 };

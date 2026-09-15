@@ -2,6 +2,35 @@
 -- This file is the readable source of truth for the structure. The
 -- migrations are the source of truth for how to get there.
 
+CREATE TABLE event_checkins (
+    event_id      text not null references events(id) on delete cascade,
+    player_id     text not null references players(id) on delete cascade,
+    checked_in_at integer not null check (checked_in_at > 0),
+    primary key (event_id, player_id)
+) strict;
+
+CREATE INDEX event_checkins_player on event_checkins (player_id);
+
+CREATE TABLE events (
+    id           text primary key check (length(id) = 36),
+    name         text not null check (length(name) between 1 and 60),
+    location     text not null check (length(location) <= 60),
+    games        text not null check (length(games) <= 200),
+    description  text not null check (length(description) <= 1000),
+    -- The cover, as a file name under web/src/assets/images/events. The site
+    -- owns the files, and a name it does not know renders no cover.
+    image        text check (image is null or (length(image) between 1 and 80
+                                                and image not glob '*[^A-Za-z0-9._-]*')),
+    starts_at    integer not null check (starts_at > 0),
+    ends_at      integer not null check (ends_at > starts_at),
+    status       text not null default 'draft' check (status in ('draft', 'published')),
+    -- The check-in link carries this code and not the id, so a guess opens no
+    -- door. Lowercase letters and digits, so it survives a QR code and a phone.
+    checkin_code text not null unique
+                 check (length(checkin_code) = 12 and checkin_code not glob '*[^a-z0-9]*'),
+    created_at   integer not null check (created_at > 0)
+) strict;
+
 CREATE TABLE matches (
     id            text primary key check (length(id) = 36),
     tournament_id text not null references tournaments(id) on delete cascade,
@@ -50,24 +79,26 @@ CREATE TABLE players (
     check (must_change_password in (0, 1)), credentials_changed_at integer not null default 0
     check (credentials_changed_at >= 0)) strict;
 
-CREATE TABLE point_entries (
+CREATE TABLE "point_entries" (
     id            text primary key check (length(id) = 36),
     player_id     text not null references players(id) on delete cascade,
     amount        integer not null check (amount != 0 and abs(amount) <= 10000),
     kind          text not null
-                  check (kind in ('tournament_entry', 'match_win', 'champion', 'finalist',
-                                  'semifinalist', 'adjustment')),
-    -- What paid, inside the kind: the tournament for an entry or a placement,
-    -- the match for a win, the row itself for an adjustment. Never null, so the
-    -- unique index below holds for every kind, including the ones to come.
+                  check (kind in ('checkin', 'tournament_entry', 'match_win', 'champion',
+                                  'finalist', 'semifinalist', 'adjustment')),
+    -- What paid, inside the kind: the event for a check-in, the tournament for
+    -- an entry or a placement, the match for a win, the row itself for an
+    -- adjustment. Never null, so the unique index below holds for every kind.
     source_ref    text not null check (length(source_ref) > 0),
     tournament_id text references tournaments(id) on delete cascade,
+    event_id      text references events(id) on delete cascade,
     note          text check (note is null or length(note) between 1 and 200),
     created_by    text references players(id) on delete set null,
     created_at    integer not null check (created_at > 0),
     -- Only an admin takes cycles away, and only with a reason.
     check (kind = 'adjustment' or amount > 0),
     check (kind != 'adjustment' or note is not null),
+    check (kind != 'checkin' or event_id is not null),
     -- A source pays one time however often the write is retried.
     unique (kind, player_id, source_ref)
 ) strict;

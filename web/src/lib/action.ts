@@ -12,7 +12,7 @@ import type { ApiFailure, ApiResult, ErrorCode } from "./api"
  */
 const codeFor = (code: ErrorCode | undefined): ActionErrorCode =>
     match(code)
-        .with("HandleTaken", () => "CONFLICT" as const)
+        .with("HandleTaken", "CheckinClosed", () => "CONFLICT" as const)
         .with("ItemNotFound", "RouteNotFound", () => "NOT_FOUND" as const)
         .with(
             "InvalidCredentials",

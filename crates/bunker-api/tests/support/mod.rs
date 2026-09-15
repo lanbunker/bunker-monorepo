@@ -29,7 +29,10 @@ use axum::response::Response;
 use bunker_api::config::{AppEnv, DbConfig, JwtSecret, MaxConnections, resolve_app_config};
 use bunker_api::server::{Secrets, build_router};
 use bunker_api::storage::{connect, run_pending_migrations};
-use bunker_models::{Account, Entrant, Player, Role, TokenResponse, Tournament, TournamentId};
+use bunker_models::{
+    Account, Entrant, Event, EventDetail, EventId, Player, Role, TokenResponse, Tournament,
+    TournamentId,
+};
 use http_body_util::BodyExt as _;
 use serde::de::DeserializeOwned;
 use serde_json::{Value, json};
@@ -350,4 +353,58 @@ fn json_request(method: Method, path: &str, body: &Value) -> Request<Body> {
         .header(header::CONTENT_TYPE, "application/json")
         .body(Body::from(serde_json::to_vec(body).unwrap()))
         .unwrap()
+}
+
+impl TestApi {
+    /// A draft event whose doors open in `opens_in_seconds` and close
+    /// `lasts_seconds` later. Negative values put the night in the past.
+    pub async fn create_event(
+        &self,
+        admin: &str,
+        opens_in_seconds: i64,
+        lasts_seconds: i64,
+    ) -> Event {
+        let starts_at = OffsetDateTime::now_utc() + Duration::seconds(opens_in_seconds);
+        let ends_at = starts_at + Duration::seconds(lasts_seconds);
+        let response = self
+            .post_as(
+                "/api/admin/events",
+                &json!({
+                    "name": "BUNKER//SESSION 04",
+                    "location": "@theoffice",
+                    "games": "Halo 3, Mario Kart 8",
+                    "description": "Doors at nine.",
+                    "image": "feb2026-cover.webp",
+                    "startsAt": starts_at.format(&Rfc3339).unwrap(),
+                    "endsAt": ends_at.format(&Rfc3339).unwrap(),
+                }),
+                admin,
+            )
+            .await;
+        assert_eq!(
+            response.status(),
+            StatusCode::CREATED,
+            "event creation failed"
+        );
+
+        read_json(response).await
+    }
+
+    /// Publishes an event and reads its check-in code from the admin detail.
+    pub async fn publish_event(&self, admin: &str, event: EventId) -> EventDetail {
+        let response = self
+            .post_as(
+                &format!("/api/admin/events/{event}/status"),
+                &json!({ "status": "published" }),
+                admin,
+            )
+            .await;
+        assert_eq!(response.status(), StatusCode::OK, "publishing failed");
+        let response = self
+            .get_as(&format!("/api/admin/events/{event}"), admin)
+            .await;
+        assert_eq!(response.status(), StatusCode::OK);
+
+        read_json(response).await
+    }
 }

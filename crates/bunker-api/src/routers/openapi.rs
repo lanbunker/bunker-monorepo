@@ -1,13 +1,16 @@
 use axum::routing::get;
 use axum::{Json, Router};
 use bunker_models::{
-    Account, Adjustment, Amount, AwardRule, Bracket, CyclesLog, CyclesRules, Description, Entrant,
-    EntrantAdd, EntrantId, FieldTier, GameMode, GameName, Glyph, GlyphBits, GlyphColor, Handle,
-    HandleChange, KindTotal, LoginRequest, Match, MatchId, MatchResult, NewTournament, NextRank,
-    Note, Paginated, Password, PasswordChange, Player, PlayerId, PointEntry, PointEntryId,
-    PointKind, Rank, RankRule, RegistrationRequest, Registrations, Role, RoleUpdate, SeedOrder,
-    SignupRequest, SkillLevel, Standing, StatusChange, TemporaryPassword, TierRule, TokenResponse,
-    Tournament, TournamentDetail, TournamentId, TournamentName, TournamentStatus, TournamentUpdate,
+    Account, Adjustment, Amount, AwardRule, Bracket, Checkin, CheckinAdd, CheckinCode, CheckinGate,
+    CheckinReceipt, CheckinWindow, Checkins, CyclesLog, CyclesRules, Description, Entrant,
+    EntrantAdd, EntrantId, Event, EventDetail, EventFields, EventId, EventName, EventStatus,
+    EventStatusChange, FieldTier, GameMode, GameName, Games, Glyph, GlyphBits, GlyphColor, Handle,
+    HandleChange, ImageName, KindTotal, Location, LoginRequest, Match, MatchId, MatchResult,
+    NewTournament, NextRank, Note, Paginated, Password, PasswordChange, Player, PlayerId,
+    PointEntry, PointEntryId, PointKind, Rank, RankRule, RegistrationRequest, Registrations, Role,
+    RoleUpdate, SeedOrder, SignupRequest, SkillLevel, Standing, StatusChange, TemporaryPassword,
+    TierRule, TokenResponse, Tournament, TournamentDetail, TournamentId, TournamentName,
+    TournamentStatus, TournamentUpdate,
 };
 use utoipa::openapi::security::{HttpAuthScheme, HttpBuilder, SecurityScheme};
 use utoipa::{Modify, OpenApi};
@@ -16,8 +19,8 @@ use crate::internal::http::ApiErrorBody;
 use crate::services::ErrorCode;
 
 use super::{
-    AppState, admin_router, admin_tournament_router, auth_router, health_router, player_router,
-    tournament_router,
+    AppState, admin_event_router, admin_router, admin_tournament_router, auth_router, event_router,
+    health_router, player_router, tournament_router,
 };
 
 /// The whole contract. `make openapi` writes it to `openapi.json`, and the site
@@ -59,6 +62,17 @@ use super::{
         admin_tournament_router::delete_bracket,
         admin_tournament_router::report_result,
         admin_tournament_router::clear_result,
+        event_router::list_events,
+        event_router::checkin_gate,
+        event_router::check_in,
+        event_router::checkins,
+        admin_event_router::list_all_events,
+        admin_event_router::create_event,
+        admin_event_router::get_event,
+        admin_event_router::update_event,
+        admin_event_router::change_event_status,
+        admin_event_router::add_checkin,
+        admin_event_router::delete_event,
         health_router::live,
         health_router::ready,
     ),
@@ -68,6 +82,13 @@ use super::{
         Amount,
         ApiErrorBody,
         AwardRule,
+        Checkin,
+        CheckinAdd,
+        CheckinCode,
+        CheckinGate,
+        CheckinReceipt,
+        CheckinWindow,
+        Checkins,
         CyclesLog,
         CyclesRules,
         Bracket,
@@ -75,9 +96,19 @@ use super::{
         Entrant,
         EntrantAdd,
         EntrantId,
+        Event,
+        EventDetail,
+        EventFields,
+        EventId,
+        EventName,
+        EventStatus,
+        EventStatusChange,
         FieldTier,
         GameMode,
         GameName,
+        Games,
+        ImageName,
+        Location,
         Match,
         MatchId,
         MatchResult,
@@ -103,6 +134,7 @@ use super::{
         LoginRequest,
         NextRank,
         Note,
+        Paginated<Event>,
         Paginated<Player>,
         Paginated<PointEntry>,
         Paginated<Tournament>,
@@ -128,6 +160,7 @@ use super::{
         (name = "auth", description = "Signup and login"),
         (name = "players", description = "Public player data"),
         (name = "tournaments", description = "Tournaments, entrants and brackets"),
+        (name = "events", description = "Events and the check-in at the door"),
         (name = "admin", description = "Backoffice, admins only"),
         (name = "health", description = "Liveness and readiness"),
     )

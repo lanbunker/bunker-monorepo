@@ -7,6 +7,7 @@
 
 mod auth;
 mod bracket;
+mod event;
 mod glyph;
 mod handle;
 mod pagination;
@@ -21,6 +22,13 @@ pub use auth::{
     SignupRequest, TemporaryPassword, TokenResponse,
 };
 pub use bracket::{Bracket, BracketError, Match, MatchId};
+pub use event::{
+    CHECKIN_CODE_LEN, Checkin, CheckinAdd, CheckinCode, CheckinCodeError, CheckinGate,
+    CheckinReceipt, CheckinWindow, Checkins, EVENT_NAME_MAX_LEN, Event, EventDetail, EventFields,
+    EventId, EventName, EventNameError, EventStatus, EventStatusChange, EventWindowError,
+    GAMES_MAX_LEN, Games, GamesError, IMAGE_NAME_MAX_LEN, ImageName, ImageNameError,
+    LOCATION_MAX_LEN, Location, LocationError, UnknownEventStatus,
+};
 pub use glyph::{
     GLYPH_CELLS, GLYPH_COLORS, GLYPH_SIZE, Glyph, GlyphBits, GlyphBitsError, GlyphColor,
     generate_glyph,
@@ -32,10 +40,10 @@ pub use pagination::{
 };
 pub use player::{Account, Player, PlayerId};
 pub use points::{
-    ADJUSTMENT_MAX, Adjustment, Amount, AmountError, Award, AwardRule, CyclesLog, CyclesRules,
-    ENTRY_CYCLES, FieldTier, KindTotal, MATCH_WIN_CYCLES, NOTE_MAX_LEN, NextRank, Note, NoteError,
-    PointEntry, PointEntryId, PointKind, Rank, RankRule, Standing, TierRule, UnknownPointKind,
-    tournament_awards,
+    ADJUSTMENT_MAX, Adjustment, Amount, AmountError, Award, AwardRule, CHECKIN_CYCLES, CyclesLog,
+    CyclesRules, ENTRY_CYCLES, FieldTier, KindTotal, MATCH_WIN_CYCLES, NOTE_MAX_LEN, NextRank,
+    Note, NoteError, PointEntry, PointEntryId, PointKind, Rank, RankRule, Standing, TierRule,
+    UnknownPointKind, checkin_award, tournament_awards,
 };
 pub use role::{Role, RoleUpdate, UnknownRole};
 pub use tournament::{

@@ -8,7 +8,7 @@ use time::{Date, OffsetDateTime};
 
 use super::db::DbPool;
 use super::error::StorageError;
-use super::point_storage::insert_awards;
+use super::point_storage::{AwardSource, insert_awards};
 use super::row::{MalformedField, PlayerRow, from_micros, parse_uuid, to_micros};
 
 const TOURNAMENTS: &str = "tournaments";
@@ -248,7 +248,7 @@ impl TournamentStorage {
         .execute(&mut *tx)
         .await
         .map_err(StorageError::from_query)?;
-        insert_awards(&mut tx, id, awards, at).await?;
+        insert_awards(&mut tx, AwardSource::Tournament(id), awards, at).await?;
         tx.commit().await.map_err(StorageError::from_query)?;
 
         Ok(result.rows_affected() > 0)

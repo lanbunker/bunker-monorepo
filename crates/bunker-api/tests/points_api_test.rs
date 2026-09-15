@@ -492,6 +492,7 @@ async fn the_rules_are_public_and_name_every_way_to_earn() {
     assert_eq!(
         kinds,
         [
+            PointKind::Checkin,
             PointKind::TournamentEntry,
             PointKind::MatchWin,
             PointKind::Semifinalist,

@@ -289,7 +289,7 @@ async fn the_database_refuses_tournament_rows_the_domain_refuses() {
             1,
         ),
     ];
-    let bad_entries: [LedgerRow; 9] = [
+    let bad_entries: [LedgerRow; 10] = [
         // Zero changes nothing.
         (
             "80000000-0000-0000-0000-000000000001",
@@ -343,10 +343,20 @@ async fn the_database_refuses_tournament_rows_the_domain_refuses() {
         (
             "80000000-0000-0000-0000-000000000006",
             10,
-            "checkin",
+            "arcade_score",
             "f",
             None,
             Some("x"),
+            1,
+        ),
+        // A check-in without its event.
+        (
+            "80000000-0000-0000-0000-00000000000a",
+            100,
+            "checkin",
+            "g",
+            None,
+            None,
             1,
         ),
         // The source is never empty.
@@ -472,4 +482,324 @@ fn normalize(sql: &str) -> String {
         .collect::<Vec<_>>()
         .join(" ")
         .to_lowercase()
+}
+
+/// The event tables mirror the domain the same way: a window in order, a code
+/// of twelve lowercase characters, and one check-in per player per event.
+#[tokio::test]
+async fn the_database_refuses_event_rows_the_domain_refuses() {
+    let dir = tempfile::tempdir().unwrap();
+    let config = DbConfig {
+        url: format!(
+            "sqlite://{}?mode=rwc",
+            dir.path().join("events.db").display()
+        ),
+        max_connections: MaxConnections::try_new(1).unwrap(),
+    };
+    let pool = connect(&config).unwrap();
+    run_pending_migrations(&pool).await.unwrap();
+
+    const EVENT: &str = "90000000-0000-0000-0000-000000000001";
+    const PLAYER: &str = "90000000-0000-0000-0000-000000000002";
+    let insert = "insert into events (id, name, location, games, description, image, starts_at, ends_at, status, checkin_code, created_at)
+                  values (?1, ?2, '', '', '', ?3, ?4, ?5, ?6, ?7, 1)";
+    sqlx::query(insert)
+        .bind(EVENT)
+        .bind("Session 04")
+        .bind(Some("cover.webp"))
+        .bind(10)
+        .bind(20)
+        .bind("published")
+        .bind("abcdefghij12")
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    type EventRow<'a> = (
+        &'a str,
+        &'a str,
+        Option<&'a str>,
+        i64,
+        i64,
+        &'a str,
+        &'a str,
+    );
+    let bad_events: [EventRow; 6] = [
+        // The end before the start, and the end at the start.
+        (
+            "a0000000-0000-0000-0000-000000000001",
+            "Night",
+            None,
+            20,
+            10,
+            "draft",
+            "abcdefghij13",
+        ),
+        (
+            "a0000000-0000-0000-0000-000000000002",
+            "Night",
+            None,
+            20,
+            20,
+            "draft",
+            "abcdefghij14",
+        ),
+        // A status the model does not know.
+        (
+            "a0000000-0000-0000-0000-000000000003",
+            "Night",
+            None,
+            10,
+            20,
+            "open",
+            "abcdefghij15",
+        ),
+        // A code of the wrong length, and one with an uppercase letter.
+        (
+            "a0000000-0000-0000-0000-000000000004",
+            "Night",
+            None,
+            10,
+            20,
+            "draft",
+            "short",
+        ),
+        (
+            "a0000000-0000-0000-0000-000000000005",
+            "Night",
+            None,
+            10,
+            20,
+            "draft",
+            "ABCDEFGHIJ16",
+        ),
+        // A cover with a path in it.
+        (
+            "a0000000-0000-0000-0000-000000000006",
+            "Night",
+            Some("../x.webp"),
+            10,
+            20,
+            "draft",
+            "abcdefghij17",
+        ),
+    ];
+    for (id, name, image, starts_at, ends_at, status, code) in bad_events {
+        let result = sqlx::query(insert)
+            .bind(id)
+            .bind(name)
+            .bind(image)
+            .bind(starts_at)
+            .bind(ends_at)
+            .bind(status)
+            .bind(code)
+            .execute(&pool)
+            .await;
+        assert!(
+            result.is_err(),
+            "the database accepted image {image:?}, window {starts_at}..{ends_at}, status {status:?}, code {code:?}"
+        );
+    }
+
+    // The same code as the valid event.
+    let taken = sqlx::query(insert)
+        .bind("a0000000-0000-0000-0000-000000000007")
+        .bind("Night")
+        .bind(None::<&str>)
+        .bind(10)
+        .bind(20)
+        .bind("draft")
+        .bind("abcdefghij12")
+        .execute(&pool)
+        .await;
+    assert!(taken.is_err(), "two events share a check-in code");
+
+    sqlx::query(
+        "insert into players (id, handle, password_hash, glyph_bits, glyph_color, created_at)
+         values (?1, 'door', 'x', 1, '#ffb000', 1)",
+    )
+    .bind(PLAYER)
+    .execute(&pool)
+    .await
+    .unwrap();
+    let checkin =
+        "insert into event_checkins (event_id, player_id, checked_in_at) values (?1, ?2, ?3)";
+    sqlx::query(checkin)
+        .bind(EVENT)
+        .bind(PLAYER)
+        .bind(15)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let twice = sqlx::query(checkin)
+        .bind(EVENT)
+        .bind(PLAYER)
+        .bind(16)
+        .execute(&pool)
+        .await;
+    assert!(twice.is_err(), "a player checked in twice to one event");
+    let nowhere = sqlx::query(checkin)
+        .bind("a0000000-0000-0000-0000-000000000099")
+        .bind(PLAYER)
+        .bind(16)
+        .execute(&pool)
+        .await;
+    assert!(
+        nowhere.is_err(),
+        "a check-in to an event that does not exist"
+    );
+}
+
+/// The events migration builds `point_entries` again and copies every row. The
+/// other tests migrate an empty file, so the copy runs on nothing there. Here
+/// the ledger holds a row of each kind before that migration runs.
+#[tokio::test]
+async fn the_events_migration_keeps_every_ledger_row() {
+    const EVENTS_MIGRATION: i64 = 20260915080435;
+    const PLAYER: &str = "b0000000-0000-0000-0000-000000000001";
+    const CUP: &str = "b0000000-0000-0000-0000-000000000002";
+
+    let dir = tempfile::tempdir().unwrap();
+    let config = DbConfig {
+        url: format!("sqlite://{}?mode=rwc", dir.path().join("copy.db").display()),
+        max_connections: MaxConnections::try_new(1).unwrap(),
+    };
+    let pool = connect(&config).unwrap();
+    let all = sqlx::migrate!("./migrations");
+    let before = sqlx::migrate::Migrator {
+        migrations: std::borrow::Cow::Owned(
+            all.iter()
+                .filter(|m| m.version < EVENTS_MIGRATION)
+                .cloned()
+                .collect(),
+        ),
+        ..sqlx::migrate::Migrator::DEFAULT
+    };
+    assert!(
+        before.iter().count() < all.iter().count(),
+        "the events migration is in the set"
+    );
+    before.run(&pool).await.unwrap();
+
+    sqlx::query(
+        "insert into players (id, handle, password_hash, glyph_bits, glyph_color, created_at)
+         values (?1, 'keeper', 'x', 1, '#ffb000', 1)",
+    )
+    .bind(PLAYER)
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "insert into tournaments (id, name, game, mode, description, date, registration_closes_at, status, created_at)
+         values (?1, 'Cup', 'COD', '1v1', '', '2026-10-24', 1, 'concluded', 1)",
+    )
+    .bind(CUP)
+    .execute(&pool)
+    .await
+    .unwrap();
+    type Seed<'a> = (
+        &'a str,
+        i64,
+        &'a str,
+        &'a str,
+        Option<&'a str>,
+        Option<&'a str>,
+    );
+    let rows: [Seed; 3] = [
+        (
+            "c0000000-0000-0000-0000-000000000001",
+            40,
+            "tournament_entry",
+            CUP,
+            Some(CUP),
+            None,
+        ),
+        (
+            "c0000000-0000-0000-0000-000000000002",
+            120,
+            "champion",
+            CUP,
+            Some(CUP),
+            None,
+        ),
+        (
+            "c0000000-0000-0000-0000-000000000003",
+            -30,
+            "adjustment",
+            "c0000000-0000-0000-0000-000000000003",
+            None,
+            Some("late"),
+        ),
+    ];
+    for (id, amount, kind, source_ref, tournament, note) in rows {
+        sqlx::query(
+            "insert into point_entries (id, player_id, amount, kind, source_ref, tournament_id, note, created_by, created_at)
+             values (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?2, 7)",
+        )
+        .bind(id)
+        .bind(PLAYER)
+        .bind(amount)
+        .bind(kind)
+        .bind(source_ref)
+        .bind(tournament)
+        .bind(note)
+        .execute(&pool)
+        .await
+        .unwrap();
+    }
+
+    all.run(&pool).await.unwrap();
+
+    type Copied = (
+        String,
+        i64,
+        String,
+        String,
+        Option<String>,
+        Option<String>,
+        Option<String>,
+        i64,
+    );
+    let copied: Vec<Copied> = sqlx::query_as(
+        "select id, amount, kind, source_ref, tournament_id, note, created_by, created_at
+         from point_entries order by id",
+    )
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    assert_eq!(copied.len(), 3, "every row survived the copy");
+    for ((id, amount, kind, source_ref, tournament, note, created_by, created_at), expected) in
+        copied.iter().zip(rows)
+    {
+        assert_eq!(id, expected.0);
+        assert_eq!(*amount, expected.1);
+        assert_eq!(kind, expected.2);
+        assert_eq!(source_ref, expected.3);
+        assert_eq!(tournament.as_deref(), expected.4);
+        assert_eq!(note.as_deref(), expected.5);
+        assert_eq!(created_by.as_deref(), Some(PLAYER));
+        assert_eq!(*created_at, 7);
+    }
+    let (cycles, place): (i64, i64) =
+        sqlx::query_as("select cycles, place from player_standings where player_id = ?1")
+            .bind(PLAYER)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(cycles, 130, "the view sums the copied rows");
+    assert_eq!(place, 1);
+
+    // The old key still holds on the new table.
+    let twice = sqlx::query(
+        "insert into point_entries (id, player_id, amount, kind, source_ref, tournament_id, created_at)
+         values ('c0000000-0000-0000-0000-000000000009', ?1, 40, 'tournament_entry', ?2, ?2, 8)",
+    )
+    .bind(PLAYER)
+    .bind(CUP)
+    .execute(&pool)
+    .await;
+    assert!(
+        twice.is_err(),
+        "the unique key on kind, player and source came back"
+    );
 }

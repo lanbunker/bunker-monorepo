@@ -129,9 +129,53 @@ or `test`.
 | POST, DELETE | `/api/admin/tournaments/{id}/bracket` | admin | generate a bracket seeded by level, remove it |
 | PUT | `/api/admin/tournaments/{id}/seeds` | admin | rebuild the bracket in a given seed order |
 | PUT, DELETE | `/api/admin/tournaments/{id}/matches/{matchId}/result` | admin | enter a result, clear it |
+| GET | `/api/events` | none | published events, the latest night first. Same paging |
+| GET | `/api/checkin/{code}` | none | the event behind a check-in code, and whether its doors are open |
+| POST | `/api/checkin/{code}` | bearer | check in. 201 pays the cycles, 200 on a repeat, which pays nothing |
+| GET | `/api/me/checkins` | bearer | the events the caller checked in to |
+| GET, POST | `/api/admin/events` | admin | every event, create a draft |
+| GET, PUT, DELETE | `/api/admin/events/{id}` | admin | detail with the code and the check-ins, replace the fields, delete with check-ins and cycles |
+| POST | `/api/admin/events/{id}/status` | admin | publish, or back to draft |
+| POST | `/api/admin/events/{id}/checkins` | admin | check a player in by hand, any status, any time. Pays like a scan |
 | GET | `/api/openapi.json` | none | the contract |
 | GET | `/health/live` | none | process is up, version |
 | GET | `/health/ready` | none | database answers |
+
+## Events
+
+An event is one night: a name, a place, the games, a cover and a window from
+the doors to the last game. A new event is a draft that only admins see. A
+published event is on the site, the latest night first, and past nights stay
+as the archive.
+
+Every event has a check-in code, twelve lowercase letters and digits, made when
+the event is created and never sent to the public. The backoffice shows the
+link, `/checkin/{code}` on the site, and the admin prints a QR code of it for
+the door. The link carries the code and not the id, so a guess opens no door.
+A draft answers a 404 to its own code, so a leaked link says nothing before the
+night is announced.
+
+A player scans the code, and the page shows the event and one of three states:
+the doors are not open yet, the night is over, or the door is open. At an open
+door a visitor without a session gets two buttons, enlist and login, and both
+carry the door in `?next=` so the player lands back on it, logged in. A signup
+logs the player in at once. A logged-in player sees their glyph and handle over
+one button, and a second link logs them out for a friend's turn on the same
+phone. The check-in is one row per player per event, the primary key of
+`event_checkins`, and it pays 100 cycles in the same transaction. A second
+scan pays nothing and answers the first receipt. The server decides the
+window, so no page reads a clock to open the door. An admin can check a player
+in by hand from the backoffice, at any time and in any status, for a phone that
+did not scan or for a night from before the door existed. It pays the same, one
+time per player.
+
+The nights that happened before the events table existed are not in a
+migration. An admin creates them in the backoffice, and `make seed` creates
+them for local work.
+
+The covers are files under `web/src/assets/images/events`. The API holds a file
+name, the backoffice offers the names it finds, and a name the site does not
+know renders no cover. A new cover is a commit and a deploy.
 
 ## Tournaments
 
@@ -172,26 +216,28 @@ position among all players. A view, `player_standings`, computes the three on
 every read, so they are never stale. A row is never updated or deleted. A
 correction is a new row with the opposite sign and a note.
 
-Two sources write the ledger today. A concluded tournament pays every entrant
+Three sources write the ledger today. The door of an event pays 100 cycles to
+a player who checks in, one time per event, in the transaction that writes the
+check-in. A concluded tournament pays every entrant
 for the entry, every won match, and the placements: champion, finalist and the
 two semifinalists. The entry and a win pay the same in every field. A placement
 follows the size of the field, every entrant counted: small below 8, medium
 below 16, large from 16 on, and the large tier is a cap. Without a bracket only
 the entry and the named winner pay.
 The rows are written in the transaction that concludes the tournament. Every
-row names its source, the tournament or the match, and a unique index on the
+row names its source, the event, the tournament or the match, and a unique index on the
 kind, the player and the source makes a second payment a failure and not a
 duplicate. An admin adds or
 takes cycles by hand, with a note that everyone reads.
-A deleted tournament takes its cycles with it, and so does a deleted player.
+A deleted tournament takes its cycles with it, and so do a deleted event and a
+deleted player.
 
 The amounts and the ladder live in one file, `crates/bunker-models/src/points.rs`.
 `GET /api/cycles/rules` serves them, and the site renders its legend from that
 call, so the page can never disagree with the ledger. The ranks, bottom first:
 zombie, guest at 100, user at 600, sudoer at 1500, daemon at 3000, kernel at 6000.
 
-A future source, such as a check-in at the door or an arcade score, is one
-variant in `PointKind` with its amount, one writer that names its source, and
+A future source, such as an arcade score, is one variant in `PointKind` with its amount, one writer that names its source, and
 one migration that recreates the table with the new kind in the CHECK list,
 because SQLite cannot alter a CHECK in place.
 

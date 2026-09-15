@@ -10,6 +10,583 @@
     "version": "0.1.0"
   },
   "paths": {
+    "/api/admin/events": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "list_all_events",
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 1,
+              "minimum": 1
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Every event, drafts included, the latest night first",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Paginated_Event"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "create_event",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EventFields"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "A new draft with its own check-in code",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Event"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A field out of range, or the end before the start",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/admin/events/{id}": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "get_event",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/EventId"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The event, its check-in code and who came",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EventDetail"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      },
+      "put": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "update_event",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/EventId"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EventFields"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Every field replaced. The status and the code stay",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Event"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A field out of range, or the end before the start",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      },
+      "delete": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "delete_event",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/EventId"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Gone, with its check-ins and their cycles"
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/admin/events/{id}/checkins": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "add_checkin",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/EventId"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CheckinAdd"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Already in. The time of the first check-in, and zero cycles",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CheckinReceipt"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Checked in by hand, cycles paid. Any status, any time",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CheckinReceipt"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown event or player",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/admin/events/{id}/status": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "change_event_status",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/EventId"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EventStatusChange"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Published or back to draft. A draft closes its door",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Event"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
     "/api/admin/players": {
       "get": {
         "tags": [
@@ -1780,6 +2357,139 @@
         }
       }
     },
+    "/api/checkin/{code}": {
+      "get": {
+        "tags": [
+          "events"
+        ],
+        "operationId": "checkin_gate",
+        "parameters": [
+          {
+            "name": "code",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/CheckinCode"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The event behind the code, and whether its doors are open",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CheckinGate"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown code, or a draft",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "events"
+        ],
+        "operationId": "check_in",
+        "parameters": [
+          {
+            "name": "code",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/CheckinCode"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Already in. The time of the first scan, and zero cycles",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CheckinReceipt"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Checked in, cycles paid",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CheckinReceipt"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown code, or a draft",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The doors are not open",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
     "/api/cycles/rules": {
       "get": {
         "tags": [
@@ -1800,6 +2510,61 @@
         }
       }
     },
+    "/api/events": {
+      "get": {
+        "tags": [
+          "events"
+        ],
+        "operationId": "list_events",
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 1,
+              "minimum": 1
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The latest night first. Drafts are hidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Paginated_Event"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/me": {
       "get": {
         "tags": [
@@ -1813,6 +2578,41 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Account"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/me/checkins": {
+      "get": {
+        "tags": [
+          "events"
+        ],
+        "operationId": "checkins",
+        "responses": {
+          "200": {
+            "description": "The events the caller checked in to",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Checkins"
                 }
               }
             }
@@ -2615,6 +3415,105 @@
           }
         }
       },
+      "Checkin": {
+        "type": "object",
+        "description": "One player at the door. The row goes with the player, so the player is\nalways there.",
+        "required": [
+          "player",
+          "checkedInAt"
+        ],
+        "properties": {
+          "checkedInAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "player": {
+            "$ref": "#/components/schemas/Player"
+          }
+        }
+      },
+      "CheckinAdd": {
+        "type": "object",
+        "description": "Body of `POST /api/admin/events/{id}/checkins`: an admin checks a player in\nby hand, for a night that is over or a phone that did not scan.",
+        "required": [
+          "playerId"
+        ],
+        "properties": {
+          "playerId": {
+            "$ref": "#/components/schemas/PlayerId"
+          }
+        },
+        "additionalProperties": false
+      },
+      "CheckinCode": {
+        "type": "string",
+        "maxLength": 12,
+        "minLength": 12,
+        "pattern": "^[a-z0-9]{12}$"
+      },
+      "CheckinGate": {
+        "type": "object",
+        "description": "Answer of `GET /api/checkin/{code}`: what the door shows before a player\nconfirms. The server decides the window, so no client reads a clock.",
+        "required": [
+          "event",
+          "window"
+        ],
+        "properties": {
+          "event": {
+            "$ref": "#/components/schemas/Event"
+          },
+          "window": {
+            "$ref": "#/components/schemas/CheckinWindow"
+          }
+        }
+      },
+      "CheckinReceipt": {
+        "type": "object",
+        "description": "Answer of `POST /api/checkin/{code}`. A repeat answers the time of the\nfirst check-in and pays nothing.",
+        "required": [
+          "event",
+          "checkedInAt",
+          "cycles"
+        ],
+        "properties": {
+          "checkedInAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "cycles": {
+            "type": "integer",
+            "format": "int64",
+            "description": "What this call paid: the check-in cycles the first time, zero after."
+          },
+          "event": {
+            "$ref": "#/components/schemas/Event"
+          }
+        }
+      },
+      "CheckinWindow": {
+        "type": "string",
+        "description": "Where `now` sits against the window of an event. The door pays only while\nit is `Open`.",
+        "enum": [
+          "early",
+          "open",
+          "over"
+        ]
+      },
+      "Checkins": {
+        "type": "object",
+        "description": "Answer of `GET /api/me/checkins`: the events the caller checked in to.",
+        "required": [
+          "events"
+        ],
+        "properties": {
+          "events": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EventId"
+            }
+          }
+        }
+      },
       "CyclesLog": {
         "type": "object",
         "description": "Answer of `GET /api/players/{handle}/cycles`: one page of the log, and the\ntotal of every kind over the whole log, so a page can show where the\ncycles came from without reading every line.",
@@ -2764,6 +3663,7 @@
           "Forbidden",
           "WrongPassword",
           "RegistrationClosed",
+          "CheckinClosed",
           "InvalidState",
           "NotAnEntrant",
           "InvalidRequest",
@@ -2773,6 +3673,167 @@
           "RouteNotFound",
           "MethodNotAllowed"
         ]
+      },
+      "Event": {
+        "type": "object",
+        "description": "An event as every client sees it. The check-in code is not here: only an\nadmin reads it, through [`EventDetail`].",
+        "required": [
+          "id",
+          "name",
+          "location",
+          "games",
+          "description",
+          "startsAt",
+          "endsAt",
+          "status",
+          "checkinCount",
+          "createdAt"
+        ],
+        "properties": {
+          "checkinCount": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "description": {
+            "$ref": "#/components/schemas/Description"
+          },
+          "endsAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "The last game. Past it the check-in is over."
+          },
+          "games": {
+            "$ref": "#/components/schemas/Games"
+          },
+          "id": {
+            "$ref": "#/components/schemas/EventId"
+          },
+          "image": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ImageName"
+              }
+            ]
+          },
+          "location": {
+            "$ref": "#/components/schemas/Location"
+          },
+          "name": {
+            "$ref": "#/components/schemas/EventName"
+          },
+          "startsAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "The doors open, and with them the check-in."
+          },
+          "status": {
+            "$ref": "#/components/schemas/EventStatus"
+          }
+        }
+      },
+      "EventDetail": {
+        "type": "object",
+        "description": "Answer of `GET /api/admin/events/{id}`: the event, the code for the QR at\nthe door, and everyone who came.",
+        "required": [
+          "event",
+          "checkinCode",
+          "checkins"
+        ],
+        "properties": {
+          "checkinCode": {
+            "$ref": "#/components/schemas/CheckinCode"
+          },
+          "checkins": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Checkin"
+            },
+            "description": "First at the door first."
+          },
+          "event": {
+            "$ref": "#/components/schemas/Event"
+          }
+        }
+      },
+      "EventFields": {
+        "type": "object",
+        "description": "Body of `POST /api/admin/events` and of `PUT /api/admin/events/{id}`. A\nput replaces every field, so an absent cover clears the cover. A new event\nis always a draft.",
+        "required": [
+          "name",
+          "startsAt",
+          "endsAt"
+        ],
+        "properties": {
+          "description": {
+            "$ref": "#/components/schemas/Description"
+          },
+          "endsAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "games": {
+            "$ref": "#/components/schemas/Games"
+          },
+          "image": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ImageName"
+              }
+            ]
+          },
+          "location": {
+            "$ref": "#/components/schemas/Location"
+          },
+          "name": {
+            "$ref": "#/components/schemas/EventName"
+          },
+          "startsAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "additionalProperties": false
+      },
+      "EventId": {
+        "type": "string",
+        "format": "uuid"
+      },
+      "EventName": {
+        "type": "string",
+        "maxLength": 60,
+        "minLength": 1
+      },
+      "EventStatus": {
+        "type": "string",
+        "description": "`Draft` is visible to admins only, and its code opens nothing.",
+        "enum": [
+          "draft",
+          "published"
+        ]
+      },
+      "EventStatusChange": {
+        "type": "object",
+        "description": "Body of `POST /api/admin/events/{id}/status`.",
+        "required": [
+          "status"
+        ],
+        "properties": {
+          "status": {
+            "$ref": "#/components/schemas/EventStatus"
+          }
+        },
+        "additionalProperties": false
       },
       "FieldTier": {
         "type": "string",
@@ -2792,6 +3853,11 @@
         "type": "string",
         "maxLength": 40,
         "minLength": 1
+      },
+      "Games": {
+        "type": "string",
+        "maxLength": 200,
+        "minLength": 0
       },
       "Glyph": {
         "type": "object",
@@ -2867,6 +3933,13 @@
           }
         }
       },
+      "ImageName": {
+        "type": "string",
+        "description": "A file name under the event images of the site",
+        "maxLength": 80,
+        "minLength": 1,
+        "pattern": "^[A-Za-z0-9._-]+$"
+      },
       "KindTotal": {
         "type": "object",
         "required": [
@@ -2882,6 +3955,11 @@
             "$ref": "#/components/schemas/PointKind"
           }
         }
+      },
+      "Location": {
+        "type": "string",
+        "maxLength": 60,
+        "minLength": 0
       },
       "LoginRequest": {
         "type": "object",
@@ -3026,6 +4104,109 @@
         "maxLength": 200,
         "minLength": 1
       },
+      "Paginated_Event": {
+        "type": "object",
+        "description": "One page of results, and the totals a client needs for a pager.",
+        "required": [
+          "items",
+          "total",
+          "page",
+          "pageSize",
+          "totalPages"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "description": "An event as every client sees it. The check-in code is not here: only an\nadmin reads it, through [`EventDetail`].",
+              "required": [
+                "id",
+                "name",
+                "location",
+                "games",
+                "description",
+                "startsAt",
+                "endsAt",
+                "status",
+                "checkinCount",
+                "createdAt"
+              ],
+              "properties": {
+                "checkinCount": {
+                  "type": "integer",
+                  "format": "int32",
+                  "minimum": 0
+                },
+                "createdAt": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "description": {
+                  "$ref": "#/components/schemas/Description"
+                },
+                "endsAt": {
+                  "type": "string",
+                  "format": "date-time",
+                  "description": "The last game. Past it the check-in is over."
+                },
+                "games": {
+                  "$ref": "#/components/schemas/Games"
+                },
+                "id": {
+                  "$ref": "#/components/schemas/EventId"
+                },
+                "image": {
+                  "oneOf": [
+                    {
+                      "type": "null"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ImageName"
+                    }
+                  ]
+                },
+                "location": {
+                  "$ref": "#/components/schemas/Location"
+                },
+                "name": {
+                  "$ref": "#/components/schemas/EventName"
+                },
+                "startsAt": {
+                  "type": "string",
+                  "format": "date-time",
+                  "description": "The doors open, and with them the check-in."
+                },
+                "status": {
+                  "$ref": "#/components/schemas/EventStatus"
+                }
+              }
+            }
+          },
+          "page": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 1
+          },
+          "pageSize": {
+            "type": "integer",
+            "format": "int32",
+            "maximum": 100,
+            "minimum": 1
+          },
+          "total": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Every row that matches, ignoring the window.",
+            "minimum": 0
+          },
+          "totalPages": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          }
+        }
+      },
       "Paginated_Player": {
         "type": "object",
         "description": "One page of results, and the totals a client needs for a pager.",
@@ -3113,7 +4294,7 @@
             "type": "array",
             "items": {
               "type": "object",
-              "description": "One line of the history. `note` is present on an adjustment: the reason an\nadmin gave, written for everyone.",
+              "description": "One line of the history. `note` is present on an adjustment: the reason an\nadmin gave, written for everyone. A tournament line names its tournament,\nand a check-in names its event.",
               "required": [
                 "id",
                 "amount",
@@ -3128,6 +4309,26 @@
                 "createdAt": {
                   "type": "string",
                   "format": "date-time"
+                },
+                "eventId": {
+                  "oneOf": [
+                    {
+                      "type": "null"
+                    },
+                    {
+                      "$ref": "#/components/schemas/EventId"
+                    }
+                  ]
+                },
+                "eventName": {
+                  "oneOf": [
+                    {
+                      "type": "null"
+                    },
+                    {
+                      "$ref": "#/components/schemas/EventName"
+                    }
+                  ]
                 },
                 "id": {
                   "$ref": "#/components/schemas/PointEntryId"
@@ -3362,7 +4563,7 @@
       },
       "PointEntry": {
         "type": "object",
-        "description": "One line of the history. `note` is present on an adjustment: the reason an\nadmin gave, written for everyone.",
+        "description": "One line of the history. `note` is present on an adjustment: the reason an\nadmin gave, written for everyone. A tournament line names its tournament,\nand a check-in names its event.",
         "required": [
           "id",
           "amount",
@@ -3377,6 +4578,26 @@
           "createdAt": {
             "type": "string",
             "format": "date-time"
+          },
+          "eventId": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/EventId"
+              }
+            ]
+          },
+          "eventName": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/EventName"
+              }
+            ]
           },
           "id": {
             "$ref": "#/components/schemas/PointEntryId"
@@ -3424,6 +4645,7 @@
         "type": "string",
         "description": "The source of an entry. A client selects on these names to label the\nhistory, so they are part of the contract. A placement is its own kind, so\nno client has to read a meaning out of an amount.",
         "enum": [
+          "checkin",
           "tournament_entry",
           "match_win",
           "champion",
@@ -3863,6 +5085,10 @@
     {
       "name": "tournaments",
       "description": "Tournaments, entrants and brackets"
+    },
+    {
+      "name": "events",
+      "description": "Events and the check-in at the door"
     },
     {
       "name": "admin",

@@ -19,15 +19,16 @@ use crate::internal::http::{
 };
 use crate::internal::init_tracing;
 use crate::routers::{
-    AppState, admin_router, admin_tournament_router, auth_router, health_router, openapi_router,
-    player_router, tournament_router,
+    AppState, admin_event_router, admin_router, admin_tournament_router, auth_router, event_router,
+    health_router, openapi_router, player_router, tournament_router,
 };
 use crate::services::{
-    AuthService, ErrorCode, PasswordHasher, PlayerService, PointsService, TokenIssuer,
-    TournamentService,
+    AuthService, ErrorCode, EventService, PasswordHasher, PlayerService, PointsService,
+    TokenIssuer, TournamentService,
 };
 use crate::storage::{
-    DbPool, PlayerStorage, PointStorage, TournamentStorage, connect, run_pending_migrations,
+    DbPool, EventStorage, PlayerStorage, PointStorage, TournamentStorage, connect,
+    run_pending_migrations,
 };
 
 /// Without this limit, a stopped request holds a connection and a task for ever.
@@ -59,6 +60,7 @@ pub fn build_router(pool: DbPool, config: AppConfig, secrets: &Secrets) -> Route
 
     let state = AppState {
         auth: AuthService::new(players.clone(), tokens, hasher),
+        events: EventService::new(EventStorage::new(pool.clone()), players.clone()),
         tournaments: TournamentService::new(TournamentStorage::new(pool.clone()), players.clone()),
         points: PointsService::new(PointStorage::new(pool), players.clone()),
         players: PlayerService::new(players),
@@ -72,6 +74,8 @@ pub fn build_router(pool: DbPool, config: AppConfig, secrets: &Secrets) -> Route
         .merge(admin_router())
         .merge(tournament_router())
         .merge(admin_tournament_router())
+        .merge(event_router())
+        .merge(admin_event_router())
         .merge(health_router())
         .merge(openapi_router())
         .fallback(route_not_found)
@@ -104,9 +108,10 @@ impl From<ErrorCode> for StatusCode {
             ErrorCode::GenericError => Self::INTERNAL_SERVER_ERROR,
             ErrorCode::ServiceUnavailable => Self::SERVICE_UNAVAILABLE,
             ErrorCode::ItemNotFound | ErrorCode::RouteNotFound => Self::NOT_FOUND,
-            ErrorCode::HandleTaken | ErrorCode::RegistrationClosed | ErrorCode::InvalidState => {
-                Self::CONFLICT
-            }
+            ErrorCode::HandleTaken
+            | ErrorCode::RegistrationClosed
+            | ErrorCode::CheckinClosed
+            | ErrorCode::InvalidState => Self::CONFLICT,
             ErrorCode::NotAnEntrant => Self::UNPROCESSABLE_ENTITY,
             ErrorCode::InvalidCredentials | ErrorCode::Unauthorized => Self::UNAUTHORIZED,
             ErrorCode::Forbidden => Self::FORBIDDEN,

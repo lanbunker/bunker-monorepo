@@ -21,6 +21,11 @@ export type CyclesRules = components["schemas"]["CyclesRules"]
 export type CyclesLog = components["schemas"]["CyclesLog"]
 export type KindTotal = components["schemas"]["KindTotal"]
 export type TierRule = components["schemas"]["TierRule"]
+export type Event = components["schemas"]["Event"]
+export type EventDetail = components["schemas"]["EventDetail"]
+export type EventStatus = components["schemas"]["EventStatus"]
+export type CheckinGate = components["schemas"]["CheckinGate"]
+export type CheckinWindow = components["schemas"]["CheckinWindow"]
 
 /** The cookie that holds the bearer token. HttpOnly, so scripts never see it. */
 export const SESSION_COOKIE = "bunker_session"
@@ -71,6 +76,7 @@ const ERROR_CODES = {
     Forbidden: true,
     WrongPassword: true,
     RegistrationClosed: true,
+    CheckinClosed: true,
     InvalidState: true,
     NotAnEntrant: true,
     InvalidRequest: true,

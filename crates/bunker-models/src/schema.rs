@@ -7,6 +7,10 @@ use utoipa::{PartialSchema, ToSchema};
 
 use crate::auth::{PASSWORD_MAX_LEN, PASSWORD_MIN_LEN, Password};
 use crate::bracket::MatchId;
+use crate::event::{
+    CHECKIN_CODE_LEN, CheckinCode, EVENT_NAME_MAX_LEN, EventId, EventName, GAMES_MAX_LEN, Games,
+    IMAGE_NAME_MAX_LEN, ImageName, LOCATION_MAX_LEN, Location,
+};
 use crate::glyph::GlyphBits;
 use crate::handle::{HANDLE_MAX_LEN, HANDLE_MIN_LEN, Handle};
 use crate::player::PlayerId;
@@ -50,14 +54,51 @@ macro_rules! text_schema {
     )+};
 }
 
-uuid_schema!(PlayerId, TournamentId, EntrantId, MatchId, PointEntryId);
+uuid_schema!(
+    PlayerId,
+    TournamentId,
+    EntrantId,
+    MatchId,
+    PointEntryId,
+    EventId
+);
 text_schema!(
     TournamentName => 1, TOURNAMENT_NAME_MAX_LEN;
     GameName => 1, GAME_NAME_MAX_LEN;
     GameMode => 1, GAME_MODE_MAX_LEN;
     Description => 0, DESCRIPTION_MAX_LEN;
     Note => 1, NOTE_MAX_LEN;
+    EventName => 1, EVENT_NAME_MAX_LEN;
+    Location => 0, LOCATION_MAX_LEN;
+    Games => 0, GAMES_MAX_LEN;
 );
+
+impl PartialSchema for ImageName {
+    fn schema() -> RefOr<Schema> {
+        ObjectBuilder::new()
+            .schema_type(Type::String)
+            .min_length(Some(1))
+            .max_length(Some(IMAGE_NAME_MAX_LEN))
+            .pattern(Some("^[A-Za-z0-9._-]+$"))
+            .description(Some("A file name under the event images of the site"))
+            .build()
+            .into()
+    }
+}
+impl ToSchema for ImageName {}
+
+impl PartialSchema for CheckinCode {
+    fn schema() -> RefOr<Schema> {
+        ObjectBuilder::new()
+            .schema_type(Type::String)
+            .min_length(Some(CHECKIN_CODE_LEN))
+            .max_length(Some(CHECKIN_CODE_LEN))
+            .pattern(Some("^[a-z0-9]{12}$"))
+            .build()
+            .into()
+    }
+}
+impl ToSchema for CheckinCode {}
 
 impl PartialSchema for Amount {
     fn schema() -> RefOr<Schema> {

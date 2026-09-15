@@ -22,7 +22,24 @@ export const handle = z
 
 export const password = z.string().min(8, PASSWORD_RULE).max(128, PASSWORD_RULE)
 
-export const credentials = z.object({ handle, password })
+/**
+ * Where to go after a login or a signup. Only a path of this site: one slash,
+ * then neither a second slash nor a backslash, and no backslash anywhere,
+ * because a browser reads `/\evil.example` like `//evil.example`. An empty
+ * field, the usual case, means the profile.
+ */
+export const localPath = z
+    .string()
+    .nullish()
+    .transform(value => value || undefined)
+    .pipe(
+        z
+            .string()
+            .regex(/^\/(?![/\\])[^\s\\]*$/, "That link is not valid.")
+            .optional(),
+    )
+
+export const credentials = z.object({ handle, password, next: localPath })
 
 export const signupInput = credentials
     .extend({ confirmPassword: password })
@@ -42,12 +59,18 @@ export const passwordChangeInput = z
         path: ["confirmPassword"],
     })
 
-/** An empty textarea arrives as null from a form post. */
-const description = z
-    .string()
-    .max(1000, "A description is at most 1000 characters.")
-    .nullish()
-    .transform(value => (value ?? "").trim())
+/**
+ * A text the player can leave empty. An empty field arrives as null from a
+ * form post, and the API wants a string, so null becomes "".
+ */
+const optionalText = (max: number, rule: string) =>
+    z
+        .string()
+        .max(max, rule)
+        .nullish()
+        .transform(value => (value ?? "").trim())
+
+const description = optionalText(1000, "A description is at most 1000 characters.")
 
 const SKILL_RULE = "Pick a level from 1 to 5."
 
@@ -108,3 +131,42 @@ export const statusChangeInput = z.object({
         .transform(value => value || undefined)
         .pipe(uuid.optional()),
 })
+
+export const eventFields = {
+    name: z.string().trim().min(1, "An event needs a name.").max(60),
+    location: optionalText(60, "A location is at most 60 characters."),
+    games: optionalText(200, "The games line is at most 200 characters."),
+    description,
+    /** The empty option of the select means no cover. */
+    image: z
+        .string()
+        .nullish()
+        .transform(value => value || undefined)
+        .pipe(
+            z
+                .string()
+                .regex(/^[A-Za-z0-9._-]{1,80}$/, "Pick a cover from the list.")
+                .optional(),
+        ),
+    startsAt: z.iso.datetime({ offset: true, error: "Pick when the doors open." }),
+    endsAt: z.iso.datetime({ offset: true, error: "Pick when the night ends." }),
+}
+
+const inOrder = (input: { startsAt: string; endsAt: string }) =>
+    new Date(input.endsAt).getTime() > new Date(input.startsAt).getTime()
+
+const WINDOW_RULE = { message: "The end must come after the start.", path: ["endsAt"] }
+
+export const eventInput = z.object(eventFields).refine(inOrder, WINDOW_RULE)
+
+export const eventUpdateInput = z
+    .object({ id: uuid, ...eventFields })
+    .refine(inOrder, WINDOW_RULE)
+
+export const eventStatusInput = z.object({
+    id: uuid,
+    status: z.enum(["draft", "published"]),
+})
+
+/** The secret in a check-in link. The API has the same shape. */
+export const checkinCode = z.string().regex(/^[a-z0-9]{12}$/, "That link is not valid.")

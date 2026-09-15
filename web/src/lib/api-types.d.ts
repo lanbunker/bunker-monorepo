@@ -4,6 +4,70 @@
  */
 
 export interface paths {
+    "/api/admin/events": {
+        parameters: {
+            query?: never
+            header?: never
+            path?: never
+            cookie?: never
+        }
+        get: operations["list_all_events"]
+        put?: never
+        post: operations["create_event"]
+        delete?: never
+        options?: never
+        head?: never
+        patch?: never
+        trace?: never
+    }
+    "/api/admin/events/{id}": {
+        parameters: {
+            query?: never
+            header?: never
+            path?: never
+            cookie?: never
+        }
+        get: operations["get_event"]
+        put: operations["update_event"]
+        post?: never
+        delete: operations["delete_event"]
+        options?: never
+        head?: never
+        patch?: never
+        trace?: never
+    }
+    "/api/admin/events/{id}/checkins": {
+        parameters: {
+            query?: never
+            header?: never
+            path?: never
+            cookie?: never
+        }
+        get?: never
+        put?: never
+        post: operations["add_checkin"]
+        delete?: never
+        options?: never
+        head?: never
+        patch?: never
+        trace?: never
+    }
+    "/api/admin/events/{id}/status": {
+        parameters: {
+            query?: never
+            header?: never
+            path?: never
+            cookie?: never
+        }
+        get?: never
+        put?: never
+        post: operations["change_event_status"]
+        delete?: never
+        options?: never
+        head?: never
+        patch?: never
+        trace?: never
+    }
     "/api/admin/players": {
         parameters: {
             query?: never
@@ -244,6 +308,22 @@ export interface paths {
         patch?: never
         trace?: never
     }
+    "/api/checkin/{code}": {
+        parameters: {
+            query?: never
+            header?: never
+            path?: never
+            cookie?: never
+        }
+        get: operations["checkin_gate"]
+        put?: never
+        post: operations["check_in"]
+        delete?: never
+        options?: never
+        head?: never
+        patch?: never
+        trace?: never
+    }
     "/api/cycles/rules": {
         parameters: {
             query?: never
@@ -260,6 +340,22 @@ export interface paths {
         patch?: never
         trace?: never
     }
+    "/api/events": {
+        parameters: {
+            query?: never
+            header?: never
+            path?: never
+            cookie?: never
+        }
+        get: operations["list_events"]
+        put?: never
+        post?: never
+        delete?: never
+        options?: never
+        head?: never
+        patch?: never
+        trace?: never
+    }
     "/api/me": {
         parameters: {
             query?: never
@@ -268,6 +364,22 @@ export interface paths {
             cookie?: never
         }
         get: operations["me"]
+        put?: never
+        post?: never
+        delete?: never
+        options?: never
+        head?: never
+        patch?: never
+        trace?: never
+    }
+    "/api/me/checkins": {
+        parameters: {
+            query?: never
+            header?: never
+            path?: never
+            cookie?: never
+        }
+        get: operations["checkins"]
         put?: never
         post?: never
         delete?: never
@@ -494,6 +606,55 @@ export interface components {
             rounds: components["schemas"]["Match"][][]
         }
         /**
+         * @description One player at the door. The row goes with the player, so the player is
+         *     always there.
+         */
+        Checkin: {
+            /** Format: date-time */
+            checkedInAt: string
+            player: components["schemas"]["Player"]
+        }
+        /**
+         * @description Body of `POST /api/admin/events/{id}/checkins`: an admin checks a player in
+         *     by hand, for a night that is over or a phone that did not scan.
+         */
+        CheckinAdd: {
+            playerId: components["schemas"]["PlayerId"]
+        }
+        CheckinCode: string
+        /**
+         * @description Answer of `GET /api/checkin/{code}`: what the door shows before a player
+         *     confirms. The server decides the window, so no client reads a clock.
+         */
+        CheckinGate: {
+            event: components["schemas"]["Event"]
+            window: components["schemas"]["CheckinWindow"]
+        }
+        /**
+         * @description Answer of `POST /api/checkin/{code}`. A repeat answers the time of the
+         *     first check-in and pays nothing.
+         */
+        CheckinReceipt: {
+            /** Format: date-time */
+            checkedInAt: string
+            /**
+             * Format: int64
+             * @description What this call paid: the check-in cycles the first time, zero after.
+             */
+            cycles: number
+            event: components["schemas"]["Event"]
+        }
+        /**
+         * @description Where `now` sits against the window of an event. The door pays only while
+         *     it is `Open`.
+         * @enum {string}
+         */
+        CheckinWindow: "early" | "open" | "over"
+        /** @description Answer of `GET /api/me/checkins`: the events the caller checked in to. */
+        Checkins: {
+            events: components["schemas"]["EventId"][]
+        }
+        /**
          * @description Answer of `GET /api/players/{handle}/cycles`: one page of the log, and the
          *     total of every kind over the whole log, so a page can show where the
          *     cycles came from without reading every line.
@@ -564,6 +725,7 @@ export interface components {
             | "Forbidden"
             | "WrongPassword"
             | "RegistrationClosed"
+            | "CheckinClosed"
             | "InvalidState"
             | "NotAnEntrant"
             | "InvalidRequest"
@@ -573,6 +735,71 @@ export interface components {
             | "RouteNotFound"
             | "MethodNotAllowed"
         /**
+         * @description An event as every client sees it. The check-in code is not here: only an
+         *     admin reads it, through [`EventDetail`].
+         */
+        Event: {
+            /** Format: int32 */
+            checkinCount: number
+            /** Format: date-time */
+            createdAt: string
+            description: components["schemas"]["Description"]
+            /**
+             * Format: date-time
+             * @description The last game. Past it the check-in is over.
+             */
+            endsAt: string
+            games: components["schemas"]["Games"]
+            id: components["schemas"]["EventId"]
+            image?: null | components["schemas"]["ImageName"]
+            location: components["schemas"]["Location"]
+            name: components["schemas"]["EventName"]
+            /**
+             * Format: date-time
+             * @description The doors open, and with them the check-in.
+             */
+            startsAt: string
+            status: components["schemas"]["EventStatus"]
+        }
+        /**
+         * @description Answer of `GET /api/admin/events/{id}`: the event, the code for the QR at
+         *     the door, and everyone who came.
+         */
+        EventDetail: {
+            checkinCode: components["schemas"]["CheckinCode"]
+            /** @description First at the door first. */
+            checkins: components["schemas"]["Checkin"][]
+            event: components["schemas"]["Event"]
+        }
+        /**
+         * @description Body of `POST /api/admin/events` and of `PUT /api/admin/events/{id}`. A
+         *     put replaces every field, so an absent cover clears the cover. A new event
+         *     is always a draft.
+         */
+        EventFields: {
+            description?: components["schemas"]["Description"]
+            /** Format: date-time */
+            endsAt: string
+            games?: components["schemas"]["Games"]
+            image?: null | components["schemas"]["ImageName"]
+            location?: components["schemas"]["Location"]
+            name: components["schemas"]["EventName"]
+            /** Format: date-time */
+            startsAt: string
+        }
+        /** Format: uuid */
+        EventId: string
+        EventName: string
+        /**
+         * @description `Draft` is visible to admins only, and its code opens nothing.
+         * @enum {string}
+         */
+        EventStatus: "draft" | "published"
+        /** @description Body of `POST /api/admin/events/{id}/status`. */
+        EventStatusChange: {
+            status: components["schemas"]["EventStatus"]
+        }
+        /**
          * @description The size of the field. A placement pays more in a bigger field. The cuts sit
          *     on bracket sizes, so a tier changes where a round is added, and the top
          *     tier is a cap: forty players are not twice the cup of twenty.
@@ -581,6 +808,7 @@ export interface components {
         FieldTier: "small" | "medium" | "large"
         GameMode: string
         GameName: string
+        Games: string
         /**
          * @description What the players table stores: the grid and the color. Generated one time at
          *     signup and then read, never recomputed.
@@ -621,11 +849,14 @@ export interface components {
             status: string
             version: string
         }
+        /** @description A file name under the event images of the site */
+        ImageName: string
         KindTotal: {
             /** Format: int64 */
             cycles: number
             kind: components["schemas"]["PointKind"]
         }
+        Location: string
         /** @description Request body of `POST /api/auth/login`. */
         LoginRequest: {
             handle: components["schemas"]["Handle"]
@@ -669,6 +900,43 @@ export interface components {
         }
         Note: string
         /** @description One page of results, and the totals a client needs for a pager. */
+        Paginated_Event: {
+            items: {
+                /** Format: int32 */
+                checkinCount: number
+                /** Format: date-time */
+                createdAt: string
+                description: components["schemas"]["Description"]
+                /**
+                 * Format: date-time
+                 * @description The last game. Past it the check-in is over.
+                 */
+                endsAt: string
+                games: components["schemas"]["Games"]
+                id: components["schemas"]["EventId"]
+                image?: null | components["schemas"]["ImageName"]
+                location: components["schemas"]["Location"]
+                name: components["schemas"]["EventName"]
+                /**
+                 * Format: date-time
+                 * @description The doors open, and with them the check-in.
+                 */
+                startsAt: string
+                status: components["schemas"]["EventStatus"]
+            }[]
+            /** Format: int32 */
+            page: number
+            /** Format: int32 */
+            pageSize: number
+            /**
+             * Format: int64
+             * @description Every row that matches, ignoring the window.
+             */
+            total: number
+            /** Format: int64 */
+            totalPages: number
+        }
+        /** @description One page of results, and the totals a client needs for a pager. */
         Paginated_Player: {
             items: {
                 /** Format: date-time */
@@ -702,6 +970,8 @@ export interface components {
                 amount: number
                 /** Format: date-time */
                 createdAt: string
+                eventId?: null | components["schemas"]["EventId"]
+                eventName?: null | components["schemas"]["EventName"]
                 id: components["schemas"]["PointEntryId"]
                 kind: components["schemas"]["PointKind"]
                 note?: null | components["schemas"]["Note"]
@@ -783,13 +1053,16 @@ export interface components {
         PlayerId: string
         /**
          * @description One line of the history. `note` is present on an adjustment: the reason an
-         *     admin gave, written for everyone.
+         *     admin gave, written for everyone. A tournament line names its tournament,
+         *     and a check-in names its event.
          */
         PointEntry: {
             /** Format: int64 */
             amount: number
             /** Format: date-time */
             createdAt: string
+            eventId?: null | components["schemas"]["EventId"]
+            eventName?: null | components["schemas"]["EventName"]
             id: components["schemas"]["PointEntryId"]
             kind: components["schemas"]["PointKind"]
             note?: null | components["schemas"]["Note"]
@@ -805,6 +1078,7 @@ export interface components {
          * @enum {string}
          */
         PointKind:
+            | "checkin"
             | "tournament_entry"
             | "match_win"
             | "champion"
@@ -974,6 +1248,417 @@ export interface components {
 }
 export type $defs = Record<string, never>
 export interface operations {
+    list_all_events: {
+        parameters: {
+            query?: {
+                page?: number
+                pageSize?: number
+            }
+            header?: never
+            path?: never
+            cookie?: never
+        }
+        requestBody?: never
+        responses: {
+            /** @description Every event, drafts included, the latest night first */
+            200: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["Paginated_Event"]
+                }
+            }
+            400: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            401: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            403: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+        }
+    }
+    create_event: {
+        parameters: {
+            query?: never
+            header?: never
+            path?: never
+            cookie?: never
+        }
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EventFields"]
+            }
+        }
+        responses: {
+            /** @description A new draft with its own check-in code */
+            201: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["Event"]
+                }
+            }
+            400: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            401: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            403: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            /** @description A field out of range, or the end before the start */
+            422: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+        }
+    }
+    get_event: {
+        parameters: {
+            query?: never
+            header?: never
+            path: {
+                id: components["schemas"]["EventId"]
+            }
+            cookie?: never
+        }
+        requestBody?: never
+        responses: {
+            /** @description The event, its check-in code and who came */
+            200: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["EventDetail"]
+                }
+            }
+            400: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            401: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            403: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            404: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+        }
+    }
+    update_event: {
+        parameters: {
+            query?: never
+            header?: never
+            path: {
+                id: components["schemas"]["EventId"]
+            }
+            cookie?: never
+        }
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EventFields"]
+            }
+        }
+        responses: {
+            /** @description Every field replaced. The status and the code stay */
+            200: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["Event"]
+                }
+            }
+            400: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            401: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            403: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            404: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            /** @description A field out of range, or the end before the start */
+            422: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+        }
+    }
+    delete_event: {
+        parameters: {
+            query?: never
+            header?: never
+            path: {
+                id: components["schemas"]["EventId"]
+            }
+            cookie?: never
+        }
+        requestBody?: never
+        responses: {
+            /** @description Gone, with its check-ins and their cycles */
+            204: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content?: never
+            }
+            400: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            401: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            403: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+        }
+    }
+    add_checkin: {
+        parameters: {
+            query?: never
+            header?: never
+            path: {
+                id: components["schemas"]["EventId"]
+            }
+            cookie?: never
+        }
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CheckinAdd"]
+            }
+        }
+        responses: {
+            /** @description Already in. The time of the first check-in, and zero cycles */
+            200: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["CheckinReceipt"]
+                }
+            }
+            /** @description Checked in by hand, cycles paid. Any status, any time */
+            201: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["CheckinReceipt"]
+                }
+            }
+            400: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            401: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            403: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            /** @description Unknown event or player */
+            404: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            422: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+        }
+    }
+    change_event_status: {
+        parameters: {
+            query?: never
+            header?: never
+            path: {
+                id: components["schemas"]["EventId"]
+            }
+            cookie?: never
+        }
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EventStatusChange"]
+            }
+        }
+        responses: {
+            /** @description Published or back to draft. A draft closes its door */
+            200: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["Event"]
+                }
+            }
+            400: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            401: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            403: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            404: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            422: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+        }
+    }
     list_players: {
         parameters: {
             query?: {
@@ -2232,6 +2917,110 @@ export interface operations {
             }
         }
     }
+    checkin_gate: {
+        parameters: {
+            query?: never
+            header?: never
+            path: {
+                code: components["schemas"]["CheckinCode"]
+            }
+            cookie?: never
+        }
+        requestBody?: never
+        responses: {
+            /** @description The event behind the code, and whether its doors are open */
+            200: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["CheckinGate"]
+                }
+            }
+            400: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            /** @description Unknown code, or a draft */
+            404: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+        }
+    }
+    check_in: {
+        parameters: {
+            query?: never
+            header?: never
+            path: {
+                code: components["schemas"]["CheckinCode"]
+            }
+            cookie?: never
+        }
+        requestBody?: never
+        responses: {
+            /** @description Already in. The time of the first scan, and zero cycles */
+            200: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["CheckinReceipt"]
+                }
+            }
+            /** @description Checked in, cycles paid */
+            201: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["CheckinReceipt"]
+                }
+            }
+            400: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            401: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            /** @description Unknown code, or a draft */
+            404: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            /** @description The doors are not open */
+            409: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+        }
+    }
     cycles_rules: {
         parameters: {
             query?: never
@@ -2252,6 +3041,37 @@ export interface operations {
             }
         }
     }
+    list_events: {
+        parameters: {
+            query?: {
+                page?: number
+                pageSize?: number
+            }
+            header?: never
+            path?: never
+            cookie?: never
+        }
+        requestBody?: never
+        responses: {
+            /** @description The latest night first. Drafts are hidden */
+            200: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["Paginated_Event"]
+                }
+            }
+            400: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+        }
+    }
     me: {
         parameters: {
             query?: never
@@ -2267,6 +3087,34 @@ export interface operations {
                 }
                 content: {
                     "application/json": components["schemas"]["Account"]
+                }
+            }
+            401: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+        }
+    }
+    checkins: {
+        parameters: {
+            query?: never
+            header?: never
+            path?: never
+            cookie?: never
+        }
+        requestBody?: never
+        responses: {
+            /** @description The events the caller checked in to */
+            200: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["Checkins"]
                 }
             }
             401: {

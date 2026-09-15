@@ -1,0 +1,296 @@
+---
+import { actions } from "astro:actions"
+import Alert from "../../../components/ui/Alert.astro"
+import Button from "../../../components/ui/Button.astro"
+import Glyph from "../../../components/ui/Glyph.astro"
+import LocalTime from "../../../components/ui/LocalTime.astro"
+import Table from "../../../components/ui/Table.astro"
+import AdminLayout from "../../../layouts/AdminLayout.astro"
+import { call, dataOf, failureOf, isMissing } from "../../../lib/api"
+import { COVER_NAMES } from "../../../lib/event-images"
+import { checkinUrl, phaseOf } from "../../../lib/events"
+import { firstError, noticeFrom } from "../../../lib/form"
+import { adminSessionOf } from "../../../lib/session"
+import { ADMIN_FIELD, ADMIN_FIELD_INLINE } from "../../../lib/styles"
+
+const session = adminSessionOf(Astro.locals)
+if (!session) return Astro.rewrite("/404")
+const id = Astro.params.id ?? ""
+
+const NOTICES = {
+  saved: "saved",
+  status: "status changed",
+  checked: "check-in added",
+}
+
+const saved = Astro.getActionResult(actions.updateEvent)
+const status = Astro.getActionResult(actions.setEventStatus)
+const added = Astro.getActionResult(actions.addCheckin)
+const done = [
+  saved?.data && "saved",
+  status?.data && "status",
+  added?.data && "checked",
+].find(key => typeof key === "string")
+if (done) return Astro.redirect(`/admin/events/${id}?done=${done}`)
+const deleted = Astro.getActionResult(actions.deleteEvent)
+if (deleted?.data) return Astro.redirect("/admin/events?done=deleted")
+
+const failure = firstError(saved, status, added, deleted)
+const notice = noticeFrom(Astro.url, NOTICES)
+// A refused add keeps the handle that was typed.
+const typed = Astro.locals.submitted
+
+const result = await call(
+  client => client.GET("/api/admin/events/{id}", { params: { path: { id } } }),
+  session.token,
+)
+const outage = failureOf(result)
+if (outage && isMissing(outage)) return Astro.rewrite("/404")
+
+const detail = dataOf(result)
+const e = detail?.event
+const door = detail ? checkinUrl(Astro.url.origin, detail.checkinCode) : ""
+---
+
+<AdminLayout title={`BACKOFFICE//${e?.name ?? "event"}`} active="events">
+  <Alert error={failure} class="mb-3" />
+  {!detail || !e ? (
+    <p class="text-xs text-alert">the api is unreachable.</p>
+  ) : (
+    <>
+      <div class="flex flex-wrap items-baseline justify-between gap-3">
+        <h1 class="m-0 text-sm tracking-wider text-warn">
+          root@bunker:~# events/{e.id.slice(0, 8)}{" "}
+          <span class="text-admin-dim"># {e.status}</span>
+        </h1>
+        <div class="flex flex-wrap gap-2">
+          {e.status === "published" && (
+            <Button href="/events" variant="ghost" size="sm" external>
+              PUBLIC PAGE
+            </Button>
+          )}
+          <Button href="/admin/events" variant="ghost" size="sm">
+            ← LIST
+          </Button>
+        </div>
+      </div>
+
+      <Alert message={notice} tone="warn" class="mt-3" />
+
+      <section class="mt-4 border border-warn/40 p-4">
+        <h2 class="m-0 mb-3 text-2xs font-normal tracking-wider text-admin-dim">
+          status
+        </h2>
+        <div class="flex flex-wrap items-center gap-3">
+          {e.status === "draft" ? (
+            <form method="POST" action={actions.setEventStatus}>
+              <input type="hidden" name="id" value={e.id} />
+              <input type="hidden" name="status" value="published" />
+              <Button variant="warn" size="sm">
+                publish
+              </Button>
+            </form>
+          ) : (
+            <form
+              method="POST"
+              action={actions.setEventStatus}
+              data-confirm="back to draft? the event leaves the site and its door closes."
+            >
+              <input type="hidden" name="id" value={e.id} />
+              <input type="hidden" name="status" value="draft" />
+              <Button variant="danger" size="sm">
+                back to draft
+              </Button>
+            </form>
+          )}
+          <span class="text-2xs text-admin-mute">
+            {e.status === "draft"
+              ? "a draft is hidden and its check-in link does not work."
+              : `on the site. the door is ${phaseOf(e) === "live" ? "open now" : phaseOf(e) === "upcoming" ? "closed until the doors open" : "closed, the night is over"}.`}
+          </span>
+        </div>
+      </section>
+
+      <section class="mt-4 border border-warn/40 p-4">
+        <h2 class="m-0 mb-3 text-2xs font-normal tracking-wider text-admin-dim">
+          check-in link
+        </h2>
+        <div class="flex flex-wrap items-center gap-3">
+          <input
+            readonly
+            value={door}
+            aria-label="check-in link"
+            data-checkin-link
+            class:list={["min-w-0 flex-1 font-mono", ADMIN_FIELD]}
+          />
+          <Button href={door} variant="warn" size="sm" external>
+            open
+          </Button>
+        </div>
+        <p class="m-0 mt-2 text-2xs text-admin-mute">
+          print a QR code of this link for the entrance. it works from{" "}
+          <LocalTime at={e.startsAt} class="text-admin-dim" /> to{" "}
+          <LocalTime at={e.endsAt} class="text-admin-dim" /> while the event is published.
+          one check-in per player, 100 cycles.
+        </p>
+      </section>
+
+      <section class="mt-4 border border-warn/40 p-4">
+        <h2 class="m-0 mb-3 text-2xs font-normal tracking-wider text-admin-dim">
+          details
+        </h2>
+        <form
+          method="POST"
+          action={actions.updateEvent}
+          class="grid gap-3 text-xs min-[40rem]:grid-cols-2"
+        >
+          <input type="hidden" name="id" value={e.id} />
+          <label class="flex flex-col gap-1">
+            <span class="text-2xs text-admin-dim">name</span>
+            <input
+              name="name"
+              required
+              maxlength="60"
+              value={e.name}
+              class={ADMIN_FIELD}
+            />
+          </label>
+          <label class="flex flex-col gap-1">
+            <span class="text-2xs text-admin-dim">location</span>
+            <input
+              name="location"
+              maxlength="60"
+              value={e.location}
+              class={ADMIN_FIELD}
+            />
+          </label>
+          <label class="flex flex-col gap-1">
+            <span class="text-2xs text-admin-dim">doors open (your local time)</span>
+            <input
+              type="datetime-local"
+              required
+              data-iso-for="startsAt"
+              data-iso={e.startsAt}
+              class={ADMIN_FIELD}
+            />
+            <input type="hidden" name="startsAt" value={e.startsAt} />
+          </label>
+          <label class="flex flex-col gap-1">
+            <span class="text-2xs text-admin-dim">night ends (your local time)</span>
+            <input
+              type="datetime-local"
+              required
+              data-iso-for="endsAt"
+              data-iso={e.endsAt}
+              class={ADMIN_FIELD}
+            />
+            <input type="hidden" name="endsAt" value={e.endsAt} />
+          </label>
+          <label class="flex flex-col gap-1">
+            <span class="text-2xs text-admin-dim">games</span>
+            <input name="games" maxlength="200" value={e.games} class={ADMIN_FIELD} />
+          </label>
+          <label class="flex flex-col gap-1">
+            <span class="text-2xs text-admin-dim">cover</span>
+            <select name="image" class={ADMIN_FIELD}>
+              <option value="">no cover</option>
+              {COVER_NAMES.map(name => (
+                <option value={name} selected={name === e.image}>
+                  {name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label class="flex flex-col gap-1 min-[40rem]:col-span-2">
+            <span class="text-2xs text-admin-dim">description</span>
+            <textarea
+              name="description"
+              maxlength="1000"
+              rows="2"
+              class={ADMIN_FIELD}
+            >{e.description}</textarea>
+          </label>
+          <div class="min-[40rem]:col-span-2">
+            <Button variant="warn" size="sm">
+              save
+            </Button>
+          </div>
+        </form>
+      </section>
+
+      <section class="mt-4 border border-warn/40 p-4">
+        <h2 class="m-0 mb-3 text-2xs font-normal tracking-wider text-admin-dim">
+          checked in <span class="text-admin-mute"># {detail.checkins.length}</span>
+        </h2>
+        {detail.checkins.length > 0 ? (
+          <Table label="check-ins">
+            <thead>
+              <tr class="text-left text-2xs tracking-wider text-admin-dim">
+                <th class="w-[10%] pb-2 font-normal">#</th>
+                <th class="w-[50%] pb-2 font-normal">player</th>
+                <th class="w-[40%] pb-2 text-right font-normal">at the door</th>
+              </tr>
+            </thead>
+            <tbody>
+              {detail.checkins.map((c, index) => (
+                <tr class="border-t border-warn/20">
+                  <td class="py-1.5 text-admin-dim tabular-nums">{index + 1}</td>
+                  <td class="py-1.5">
+                    <a
+                      href={`/players/${c.player.handle}`}
+                      class="inline-flex items-center gap-2 text-admin-ink no-underline hover:text-warn"
+                    >
+                      <Glyph glyph={c.player.glyph} size="1.1em" />
+                      {c.player.handle}
+                    </a>
+                  </td>
+                  <td class="nowrap py-1.5 text-right text-admin-dim">
+                    <LocalTime at={c.checkedInAt} />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </Table>
+        ) : (
+          <p class="m-0 text-xs text-admin-dim">nobody yet.</p>
+        )}
+        <form
+          method="POST"
+          action={actions.addCheckin}
+          class="mt-3 flex flex-wrap items-center gap-2"
+        >
+          <input type="hidden" name="id" value={e.id} />
+          <input
+            name="handle"
+            required
+            minlength="3"
+            maxlength="20"
+            placeholder="handle"
+            aria-label="handle of the player to check in"
+            value={typed.handle ?? ""}
+            class:list={["w-40", ADMIN_FIELD_INLINE]}
+          />
+          <Button variant="warn" size="sm">
+            add check-in
+          </Button>
+          <span class="text-2xs text-admin-mute">
+            by hand, at any time. pays 100 cycles, one time per player.
+          </span>
+        </form>
+      </section>
+
+      <section class="mt-8 flex justify-end">
+        <form
+          method="POST"
+          action={actions.deleteEvent}
+          data-confirm={`delete ${e.name}? the check-ins and their cycles go with it.`}
+        >
+          <input type="hidden" name="id" value={e.id} />
+          <Button variant="danger" size="sm">
+            delete event
+          </Button>
+        </form>
+      </section>
+    </>
+  )}
+</AdminLayout>

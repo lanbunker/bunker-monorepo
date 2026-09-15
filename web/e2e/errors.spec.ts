@@ -301,3 +301,36 @@ test("a refused cycles adjustment is a sentence for every field", async ({ page 
         expect(html).not.toContain("Failed to validate")
     }
 })
+
+test("a next link that leaves the site is dropped, on login and on signup", async ({
+    page,
+}) => {
+    await signup(page, handle("nxt"))
+    // A logged-in player is sent straight to `next`. These shapes read as
+    // another origin to a browser, so every one must fall back to the profile.
+    for (const next of ["//evil.example", "/%5Cevil.example", "/x%5Cevil.example"]) {
+        await page.goto(`/login?next=${next}`)
+        await expect(page).toHaveURL(/\/profile(\?|$)/)
+        await page.goto(`/signup?next=${next}`)
+        await expect(page).toHaveURL(/\/profile(\?|$)/)
+    }
+    // A path of this site passes.
+    await page.goto("/login?next=%2Fevents")
+    await expect(page).toHaveURL(/\/events$/)
+})
+
+test("an event whose night ends before its doors open reads as a sentence", async ({
+    page,
+}) => {
+    await signupAdmin(page)
+    await page.goto("/admin/events")
+    await page.getByLabel("name", { exact: true }).fill(`Night ${handle("bad")}`)
+    await page.getByLabel("doors open (your local time)").fill("2030-02-02T21:00")
+    await page.getByLabel("night ends (your local time)").fill("2030-02-02T20:00")
+    await page.getByRole("button", { name: "CREATE DRAFT" }).click()
+
+    await expect(page).toHaveURL(/\/admin\/events(\?|$)/)
+    await readableFailure(page, "The end must come after the start.")
+    // The typed name survives the refusal.
+    await expect(page.getByLabel("name", { exact: true })).toHaveValue(/^Night /)
+})

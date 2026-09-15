@@ -8,21 +8,23 @@ if (!session) return Astro.rewrite("/404")
 
 // One row is enough: the total rides along with any page.
 const query = { page: 1, pageSize: 1 }
-const [players, tournaments] = await Promise.all([
+const [players, tournaments, events] = await Promise.all([
   call(client => client.GET("/api/admin/players", { params: { query } }), session.token),
   call(
     client => client.GET("/api/admin/tournaments", { params: { query } }),
     session.token,
   ),
+  call(client => client.GET("/api/admin/events", { params: { query } }), session.token),
 ])
 const roster = dataOf(players)
 const cups = dataOf(tournaments)
+const nights = dataOf(events)
 ---
 
 <AdminLayout title="BACKOFFICE//overview" active="overview">
   <h1 class="m-0 text-sm tracking-wider text-warn">root@bunker:~# status</h1>
 
-  <div class="mt-4 grid gap-4 min-[40rem]:grid-cols-3">
+  <div class="mt-4 grid gap-4 min-[40rem]:grid-cols-4">
     <div class="border border-warn/40 p-4">
       <div class="text-2xs tracking-wider text-admin-dim">players</div>
       <div data-stat="players" class="mt-1 text-[1.75rem] leading-none text-warn">
@@ -33,6 +35,12 @@ const cups = dataOf(tournaments)
       <div class="text-2xs tracking-wider text-admin-dim">tournaments</div>
       <div data-stat="tournaments" class="mt-1 text-[1.75rem] leading-none text-warn">
         {cups?.total ?? "?"}
+      </div>
+    </div>
+    <div class="border border-warn/40 p-4">
+      <div class="text-2xs tracking-wider text-admin-dim">events</div>
+      <div data-stat="events" class="mt-1 text-[1.75rem] leading-none text-warn">
+        {nights?.total ?? "?"}
       </div>
     </div>
     <div class="border border-warn/40 p-4">
@@ -47,11 +55,15 @@ const cups = dataOf(tournaments)
     manage players under{" "}
     <a href="/admin/players" class="text-warn">
       players
-    </a>{" "}
-    and tournaments under
+    </a>
+    , tournaments under{" "}
     <a href="/admin/tournaments" class="text-warn">
       tournaments
+    </a>{" "}
+    and the nights under{" "}
+    <a href="/admin/events" class="text-warn">
+      events
     </a>
-    . events and scores open as the backend grows.
+    . scores open as the cabinets come online.
   </p>
 </AdminLayout>

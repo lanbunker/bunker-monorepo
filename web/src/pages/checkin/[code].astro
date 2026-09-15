@@ -1,0 +1,200 @@
+---
+import { actions } from "astro:actions"
+import AsciiBanner from "../../components/AsciiBanner.astro"
+import Alert from "../../components/ui/Alert.astro"
+import Button from "../../components/ui/Button.astro"
+import Countdown from "../../components/ui/Countdown.astro"
+import Glyph from "../../components/ui/Glyph.astro"
+import Kv from "../../components/ui/Kv.astro"
+import LocalTime from "../../components/ui/LocalTime.astro"
+import Panel from "../../components/ui/Panel.astro"
+import Layout from "../../layouts/Layout.astro"
+import { call, dataOf, failureOf, isMissing } from "../../lib/api"
+import { checkinPath } from "../../lib/events"
+import { checkinCode } from "../../lib/schemas"
+import { sessionOf } from "../../lib/session"
+
+// The door. A phone scans the QR at the entrance and lands here. Whoever
+// arrives, logged in or not, must be able to check in within a few taps.
+const code = checkinCode.safeParse(Astro.params.code).data
+if (!code) return Astro.rewrite("/404")
+const here = checkinPath(code)
+
+// Every action redirects, so a refresh repeats nothing. A logout sends the
+// player to the login and back here, for a shared phone.
+const checked = Astro.getActionResult(actions.checkIn)
+if (checked?.data) {
+  return Astro.redirect(`${here}?done=${checked.data.paid ? "checked" : "already"}`)
+}
+const loggedOut = Astro.getActionResult(actions.logout)
+if (loggedOut && !loggedOut.error) {
+  return Astro.redirect(`/login?next=${encodeURIComponent(here)}`)
+}
+// The confirmation shows one time, right after the scan that paid. A later
+// visit, or a scan that found the player in, shows the quieter "already in".
+// The query string is anyone's to write, so the API must agree that the
+// player is in before the page claims a payment.
+const justChecked = Astro.url.searchParams.get("done") === "checked"
+
+const session = sessionOf(Astro.locals)
+const [gateResult, mine] = await Promise.all([
+  call(client => client.GET("/api/checkin/{code}", { params: { path: { code } } })),
+  session ? call(client => client.GET("/api/me/checkins"), session.token) : undefined,
+])
+const failure = failureOf(gateResult)
+if (failure && isMissing(failure)) return Astro.rewrite("/404")
+const gate = dataOf(gateResult)
+const event = gate?.event
+// Without the list the page cannot tell a repeat from a first scan. The API
+// refuses nothing on a repeat, so the button stays and the answer is the same.
+const already = mine ? (dataOf(mine)?.events ?? []).includes(event?.id ?? "") : false
+const next = encodeURIComponent(here)
+---
+
+<Layout title={`CHECK-IN//${event?.name ?? "LAN_BUNKER"}`} bare noindex>
+  <div class="mx-auto w-full max-w-[34rem]">
+    <AsciiBanner text="BUNKERNET" hollow="NET" class="h-32 max-[30rem]:h-24" />
+    <div class="-mt-1 text-center text-2xs tracking-wider text-dim">
+      ── player network ──
+    </div>
+    <h1 class="m-0 mt-6 text-center text-[2rem] leading-none font-bold tracking-[0.2em] text-bright max-[30rem]:text-2xl">
+      CHECK-IN
+    </h1>
+
+    <div class="mt-6">
+      {!gate || !event ? (
+        <Panel>
+          <Alert message="The door is not answering. Ask the crew." />
+        </Panel>
+      ) : (
+        <Panel tone={gate.window === "open" ? "accent" : "default"}>
+          <h2 class="m-0 text-base tracking-wide text-bright" data-event={event.id}>
+            {event.name}
+          </h2>
+          <div class="mt-3 flex flex-col gap-1">
+            <Kv label="Date" tone="accent">
+              <LocalTime at={event.startsAt} mode="date" />
+            </Kv>
+            {event.location && <Kv label="Where">{event.location}</Kv>}
+            <Kv label="Doors">
+              <LocalTime at={event.startsAt} mode="time" />
+              <span class="text-dim"> to </span>
+              <LocalTime at={event.endsAt} mode="time" />
+            </Kv>
+          </div>
+
+          <div class="mt-5 border-t border-faint pt-4 text-xs">
+            <Alert error={checked?.error} class="mb-3" />
+
+            {justChecked && already && session ? (
+              <div data-state="confirmed">
+                <div
+                  class="flex items-center gap-4 bg-accent p-4 text-black"
+                  role="status"
+                  style={`--player:${session.player.glyph.color}`}
+                >
+                  <Glyph glyph={session.player.glyph} size="3.5rem" />
+                  <div class="min-w-0">
+                    <div class="text-xl leading-none font-bold tracking-[0.15em]">
+                      CHECKED IN
+                    </div>
+                    <div class="mt-2 truncate text-sm">{session.player.handle}</div>
+                    <div class="mt-1 text-xs font-bold">+100 cycles</div>
+                  </div>
+                </div>
+                <p class="m-0 mt-3 text-dim">welcome to the bunker. have a good night.</p>
+                <div class="mt-4 flex flex-wrap items-center gap-4">
+                  <Button href="/profile">MY PROFILE</Button>
+                  <Button href="/events" variant="ghost">
+                    EVENTS
+                  </Button>
+                </div>
+              </div>
+            ) : already && session ? (
+              <div data-state="in">
+                <p class="m-0 text-sm text-accent">
+                  <span aria-hidden="true">[ OK ] </span>
+                  {session.player.handle}, you are already checked in.
+                </p>
+                <div class="mt-4 flex flex-wrap items-center gap-4">
+                  <Button href="/profile">MY PROFILE</Button>
+                  <Button href="/events" variant="ghost">
+                    EVENTS
+                  </Button>
+                </div>
+              </div>
+            ) : gate.window === "early" ? (
+              <div data-state="early">
+                <p class="m-0 text-dim">
+                  doors open at <LocalTime at={event.startsAt} class="text-bright" />.
+                  check-in opens with them.
+                </p>
+                <div class="mt-3">
+                  <Countdown deadline={event.startsAt} label="doors in" />
+                </div>
+              </div>
+            ) : gate.window === "over" ? (
+              <div data-state="over">
+                <p class="m-0 text-dim">check-in is closed. this night is over.</p>
+                <div class="mt-4">
+                  <Button href="/events" variant="ghost">
+                    EVENTS
+                  </Button>
+                </div>
+              </div>
+            ) : !session ? (
+              <div data-state="anonymous">
+                <p class="m-0 text-dim">
+                  log in or enlist to check in. check-in gives you{" "}
+                  <span class="text-bright">100 cycles</span>.
+                </p>
+                <div class="mt-4 flex flex-wrap items-center gap-4">
+                  <Button href={`/signup?next=${next}`}>ENLIST</Button>
+                  <Button href={`/login?next=${next}`} variant="ghost">
+                    LOGIN
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <form method="POST" action={actions.checkIn} data-state="ready">
+                <input type="hidden" name="code" value={code} />
+                <div class="mb-3 text-dim">&gt; checking in as</div>
+                <div
+                  class="flex items-center gap-4"
+                  style={`--player:${session.player.glyph.color}`}
+                >
+                  <Glyph glyph={session.player.glyph} size="4rem" framed />
+                  <div class="min-w-0">
+                    <div class="truncate text-base leading-tight tracking-wider text-(--player)">
+                      {session.player.handle}
+                    </div>
+                    <div class="mt-1 text-2xs text-dim">check-in: +100 cycles</div>
+                  </div>
+                </div>
+                <div class="mt-5 flex flex-wrap items-center gap-4">
+                  <Button>CHECK IN</Button>
+                  <button
+                    type="submit"
+                    form="switch-account"
+                    class="cursor-pointer border-0 bg-transparent p-0 text-2xs text-dim hover:text-accent"
+                  >
+                    not you? log out →
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
+        </Panel>
+      )}
+      {session && !already && gate?.window === "open" && (
+        <form id="switch-account" method="POST" action={actions.logout}></form>
+      )}
+    </div>
+
+    <div class="mt-6 text-center">
+      <a href="/" class="text-2xs text-mute no-underline hover:text-accent">
+        ← back to the bunker
+      </a>
+    </div>
+  </div>
+</Layout>

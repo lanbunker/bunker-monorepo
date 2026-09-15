@@ -1,0 +1,182 @@
+---
+import { actions } from "astro:actions"
+import Alert from "../../../components/ui/Alert.astro"
+import Button from "../../../components/ui/Button.astro"
+import Pager from "../../../components/ui/Pager.astro"
+import LocalTime from "../../../components/ui/LocalTime.astro"
+import Table from "../../../components/ui/Table.astro"
+import AdminLayout from "../../../layouts/AdminLayout.astro"
+import { call, dataOf } from "../../../lib/api"
+import { COVER_NAMES } from "../../../lib/event-images"
+import { firstError, noticeFrom } from "../../../lib/form"
+import { PAGE_SIZE, pageFrom } from "../../../lib/paging"
+import { adminSessionOf } from "../../../lib/session"
+import { ADMIN_FIELD } from "../../../lib/styles"
+
+const session = adminSessionOf(Astro.locals)
+if (!session) return Astro.rewrite("/404")
+
+const created = Astro.getActionResult(actions.createEvent)
+if (created?.data) return Astro.redirect(`/admin/events/${created.data.id}`)
+const deleted = Astro.getActionResult(actions.deleteEvent)
+if (deleted?.data) return Astro.redirect("/admin/events?done=deleted")
+const failure = firstError(created, deleted)
+const notice = noticeFrom(Astro.url, { deleted: "event deleted" })
+
+const page = pageFrom(Astro.url)
+const result = await call(
+  client =>
+    client.GET("/api/admin/events", { params: { query: { page, pageSize: PAGE_SIZE } } }),
+  session.token,
+)
+// A refused draft keeps every text field. The two instants cannot come back:
+// the browser writes them from local fields the server never sees.
+const typed = Astro.locals.submitted
+const data = dataOf(result)
+if (data && page > data.totalPages && data.totalPages > 0) {
+  return Astro.redirect(`/admin/events?page=${data.totalPages}`)
+}
+---
+
+<AdminLayout title="BACKOFFICE//events" active="events">
+  <h1 class="m-0 text-sm tracking-wider text-warn">
+    root@bunker:~# events <span class="text-admin-dim"># {data?.total ?? "?"} rows</span>
+  </h1>
+
+  <Alert message={notice} tone="warn" class="mt-3" />
+  <Alert error={failure} class="mt-3" />
+
+  <div class="mt-4 border border-warn/40">
+    {!data ? (
+      <p class="p-4 text-xs text-alert">the api is unreachable.</p>
+    ) : data.total === 0 ? (
+      <p class="p-4 text-xs text-admin-dim">no events yet. create the first one below.</p>
+    ) : (
+      <Table label="events">
+        <thead>
+          <tr class="bg-warn/10 text-left text-2xs tracking-wider text-admin-dim">
+            <th class="w-[45%] px-3 py-2 font-normal">event</th>
+            <th class="w-[20%] px-3 py-2 font-normal">date</th>
+            <th class="w-[15%] px-3 py-2 font-normal">status</th>
+            <th class="w-[20%] px-3 py-2 text-right font-normal">checked in</th>
+          </tr>
+        </thead>
+        <tbody>
+          {data.items.map(e => (
+            <tr class="border-t border-warn/20">
+              <td class="px-3 py-2">
+                <a
+                  href={`/admin/events/${e.id}`}
+                  class="text-admin-ink no-underline hover:text-warn"
+                >
+                  {e.name}
+                </a>
+                {e.location && <span class="text-admin-mute"> {e.location}</span>}
+              </td>
+              <td class="nowrap px-3 py-2 text-admin-dim">
+                <LocalTime at={e.startsAt} mode="date" />
+              </td>
+              <td
+                class:list={[
+                  "px-3 py-2",
+                  e.status === "draft" ? "text-admin-mute" : "text-warn",
+                ]}
+              >
+                {e.status}
+              </td>
+              <td class="px-3 py-2 text-right text-admin-dim tabular-nums">
+                {e.checkinCount}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </Table>
+    )}
+  </div>
+  {data && (
+    <Pager
+      page={page}
+      totalPages={data.totalPages}
+      total={data.total}
+      href="/admin/events"
+      noun="event"
+    />
+  )}
+
+  <h2 class="mt-8 mb-3 text-sm font-normal tracking-wider text-warn">
+    root@bunker:~# events --new
+  </h2>
+  <form
+    method="POST"
+    action={actions.createEvent}
+    class="grid gap-3 border border-warn/40 p-4 text-xs min-[40rem]:grid-cols-2"
+  >
+    <label class="flex flex-col gap-1">
+      <span class="text-2xs text-admin-dim">name</span>
+      <input
+        name="name"
+        required
+        maxlength="60"
+        value={typed.name}
+        class={ADMIN_FIELD}
+        placeholder="BUNKER//SESSION 04"
+      />
+    </label>
+    <label class="flex flex-col gap-1">
+      <span class="text-2xs text-admin-dim">location</span>
+      <input
+        name="location"
+        maxlength="60"
+        value={typed.location}
+        class={ADMIN_FIELD}
+        placeholder="@theoffice"
+      />
+    </label>
+    <label class="flex flex-col gap-1">
+      <span class="text-2xs text-admin-dim">doors open (your local time)</span>
+      <input type="datetime-local" required data-iso-for="startsAt" class={ADMIN_FIELD} />
+      <input type="hidden" name="startsAt" />
+    </label>
+    <label class="flex flex-col gap-1">
+      <span class="text-2xs text-admin-dim">night ends (your local time)</span>
+      <input type="datetime-local" required data-iso-for="endsAt" class={ADMIN_FIELD} />
+      <input type="hidden" name="endsAt" />
+    </label>
+    <label class="flex flex-col gap-1">
+      <span class="text-2xs text-admin-dim">games</span>
+      <input
+        name="games"
+        maxlength="200"
+        value={typed.games}
+        class={ADMIN_FIELD}
+        placeholder="Halo 3, Mario Kart 8, casual games"
+      />
+    </label>
+    <label class="flex flex-col gap-1">
+      <span class="text-2xs text-admin-dim">cover</span>
+      <select name="image" class={ADMIN_FIELD}>
+        <option value="">no cover</option>
+        {COVER_NAMES.map(name => (
+          <option value={name} selected={name === typed.image}>
+            {name}
+          </option>
+        ))}
+      </select>
+    </label>
+    <label class="flex flex-col gap-1 min-[40rem]:col-span-2">
+      <span class="text-2xs text-admin-dim">description</span>
+      <textarea
+        name="description"
+        maxlength="1000"
+        rows="2"
+        class={ADMIN_FIELD}
+      >{typed.description}</textarea>
+    </label>
+    <div class="min-[40rem]:col-span-2">
+      <Button variant="warn">CREATE DRAFT</Button>
+      <span class="ml-3 text-2xs text-admin-mute">
+        a new event is a draft. publish it from its page.
+      </span>
+    </div>
+  </form>
+</AdminLayout>

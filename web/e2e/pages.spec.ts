@@ -6,7 +6,7 @@ import { API, handle, signup, signupAdmin, tokenFor } from "./support"
 
 const PUBLIC_PAGES = [
     { path: "/", heading: /Enter the bunker/i, title: /LAN BUNKER/ },
-    { path: "/events", heading: /upcoming/i, title: /EVENTS/ },
+    { path: "/events", heading: /archive/i, title: /EVENTS/ },
     { path: "/tournaments", heading: /tournaments/i, title: /TOURNAMENTS/ },
     { path: "/players", heading: /players/i, title: /PLAYERS/ },
     { path: "/cycles", heading: /man cycles/i, title: /CYCLES/ },

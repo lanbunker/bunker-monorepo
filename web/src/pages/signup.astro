@@ -5,14 +5,20 @@ import Alert from "../components/ui/Alert.astro"
 import Button from "../components/ui/Button.astro"
 import Panel from "../components/ui/Panel.astro"
 import Layout from "../layouts/Layout.astro"
+import { localPath } from "../lib/schemas"
 import { SITE_FIELD } from "../lib/styles"
 
-if (Astro.locals.player) return Astro.redirect("/profile")
+// `?next=` brings a player back where they came from, such as the door of an
+// event. Only a path of this site passes.
+const next = localPath.safeParse(Astro.url.searchParams.get("next")).data
+if (Astro.locals.player) return Astro.redirect(next ?? "/profile")
 
 // A success renders the boot sequence on the POST itself, then a script moves to
-// the profile. The response must never be cached: it belongs to one signup.
+// the profile, or to `next`. The response must never be cached: it belongs to
+// one signup.
 const result = Astro.getActionResult(actions.signup)
 const created = result?.data?.handle
+const destination = result?.data?.next ?? "/profile"
 // A refused signup keeps the handle. The two password fields start empty again.
 const typed = Astro.locals.submitted.handle ?? ""
 if (created) Astro.response.headers.set("Cache-Control", "no-store")
@@ -34,15 +40,16 @@ if (created) Astro.response.headers.set("Cache-Control", "no-store")
         <ol
           id="enlist-log"
           data-handle={created}
+          data-next={destination}
           class="m-0 mt-2 list-none p-0 text-xs text-dim"
           aria-live="polite"
         />
         <noscript>
-          <meta http-equiv="refresh" content="0;url=/profile" />
+          <meta http-equiv="refresh" content={`0;url=${destination}`} />
           <p class="mt-2 text-xs text-bright">
             welcome, {created}.{" "}
-            <a href="/profile" class="text-accent">
-              open your profile →
+            <a href={destination} class="text-accent">
+              continue →
             </a>
           </p>
         </noscript>
@@ -60,6 +67,7 @@ if (created) Astro.response.headers.set("Cache-Control", "no-store")
             class="flex flex-col gap-3 text-xs"
             autocomplete="on"
           >
+            {next && <input type="hidden" name="next" value={next} />}
             <label class="flex items-baseline gap-2">
               <span class="w-24 shrink-0 text-dim">handle:</span>
               <input
@@ -107,7 +115,10 @@ if (created) Astro.response.headers.set("Cache-Control", "no-store")
             <Alert error={result?.error} />
             <div class="mt-2 flex items-center gap-4">
               <Button>ENLIST</Button>
-              <a href="/login" class="text-2xs text-dim no-underline hover:text-accent">
+              <a
+                href={next ? `/login?next=${encodeURIComponent(next)}` : "/login"}
+                class="text-2xs text-dim no-underline hover:text-accent"
+              >
                 have an account? login →
               </a>
             </div>
@@ -125,6 +136,7 @@ if (created) Astro.response.headers.set("Cache-Control", "no-store")
   <script>
     const log = document.getElementById("enlist-log")
     const handle = log?.dataset.handle
+    const next = log?.dataset.next || "/profile"
     if (log && handle) {
       const LINES = [
         `creating home /players/${handle}`,
@@ -148,7 +160,7 @@ if (created) Astro.response.headers.set("Cache-Control", "no-store")
         li.className = "mt-2 text-bright"
         li.textContent = `welcome, ${handle}.`
         log.append(li)
-        window.setTimeout(() => window.location.replace("/profile"), reduced ? 0 : 600)
+        window.setTimeout(() => window.location.replace(next), reduced ? 0 : 600)
       }
 
       if (reduced) {

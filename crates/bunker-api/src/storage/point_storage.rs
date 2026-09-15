@@ -1,6 +1,6 @@
 use bunker_models::{
-    Amount, Award, KindTotal, Note, PageQuery, Paginated, PlayerId, PointEntry, PointEntryId,
-    PointKind, TournamentId, TournamentName,
+    Amount, Award, EventId, EventName, KindTotal, Note, PageQuery, Paginated, PlayerId, PointEntry,
+    PointEntryId, PointKind, TournamentId, TournamentName,
 };
 use sqlx::SqliteConnection;
 use time::OffsetDateTime;
@@ -21,10 +21,17 @@ pub struct NewAdjustment {
     pub created_at: OffsetDateTime,
 }
 
+/// What pays a batch of awards, and the column that ties the rows to it, so
+/// the rows go when it goes.
+#[derive(Debug, Clone, Copy)]
+pub(super) enum AwardSource {
+    Tournament(TournamentId),
+    Event(EventId),
+}
+
 /// The ledger. Every write to `point_entries` is in this file: the adjustments
-/// through the pool, and the tournament awards through `insert_awards`, which
-/// `TournamentStorage` calls inside the transaction that concludes the
-/// tournament.
+/// through the pool, and the awards through `insert_awards`, which the storage
+/// of a tournament or an event calls inside the transaction that pays.
 #[derive(Debug, Clone)]
 pub struct PointStorage {
     pool: DbPool,
@@ -71,6 +78,8 @@ impl PointStorage {
             kind: PointKind::Adjustment,
             tournament_id: None,
             tournament_name: None,
+            event_id: None,
+            event_name: None,
             note: Some(adjustment.note.clone()),
             created_at: adjustment.created_at,
         })
@@ -97,9 +106,10 @@ impl PointStorage {
         let rows = sqlx::query_as!(
             EntryRow,
             r#"select e.id, e.amount, e.kind, e.tournament_id, t.name as "tournament_name?",
-                      e.note, e.created_at
+                      e.event_id, v.name as "event_name?", e.note, e.created_at
                from point_entries e
                left join tournaments t on t.id = e.tournament_id
+               left join events v on v.id = e.event_id
                where e.player_id = ?1
                order by e.created_at desc, e.id asc
                limit ?2 offset ?3"#,
@@ -151,30 +161,34 @@ impl PointStorage {
     }
 }
 
-/// Writes the awards of a tournament on the caller's transaction, so they land
-/// with the status change or not at all. A duplicate is a bug of the caller
+/// Writes the awards of a source on the caller's transaction, so they land with
+/// the write that earned them or not at all. A duplicate is a bug of the caller
 /// and stays a failure: the unique index reports it.
 pub(super) async fn insert_awards(
     connection: &mut SqliteConnection,
-    tournament: TournamentId,
+    source: AwardSource,
     awards: &[Award],
     at: OffsetDateTime,
 ) -> Result<(), StorageError> {
-    let tournament = tournament.into_inner().to_string();
+    let (tournament, event) = match source {
+        AwardSource::Tournament(id) => (Some(id.into_inner().to_string()), None),
+        AwardSource::Event(id) => (None, Some(id.into_inner().to_string())),
+    };
     let created_at = to_micros(TABLE, at)?;
     for award in awards {
         let id = PointEntryId::generate().into_inner().to_string();
         let player = award.player.into_inner().to_string();
         let kind = award.kind.as_str();
         sqlx::query!(
-            "insert into point_entries (id, player_id, amount, kind, source_ref, tournament_id, created_at)
-             values (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            "insert into point_entries (id, player_id, amount, kind, source_ref, tournament_id, event_id, created_at)
+             values (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
             id,
             player,
             award.amount,
             kind,
             award.source_ref,
             tournament,
+            event,
             created_at,
         )
         .execute(&mut *connection)
@@ -192,6 +206,8 @@ struct EntryRow {
     kind: String,
     tournament_id: Option<String>,
     tournament_name: Option<String>,
+    event_id: Option<String>,
+    event_name: Option<String>,
     note: Option<String>,
     created_at: i64,
 }
@@ -214,6 +230,15 @@ impl TryFrom<EntryRow> for PointEntry {
             tournament_name: row
                 .tournament_name
                 .map(TournamentName::try_new)
+                .transpose()
+                .map_err(|error| StorageError::malformed_row(TABLE, error))?,
+            event_id: row
+                .event_id
+                .map(|raw| parse_uuid(TABLE, &raw).map(EventId::new))
+                .transpose()?,
+            event_name: row
+                .event_name
+                .map(EventName::try_new)
                 .transpose()
                 .map_err(|error| StorageError::malformed_row(TABLE, error))?,
             note: row
