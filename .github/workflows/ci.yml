@@ -19,7 +19,11 @@ jobs:
               with:
                   components: rustfmt, clippy
 
+            # One key for the rust and the e2e jobs, so the second reuses what
+            # the first compiled.
             - uses: Swatinem/rust-cache@v2
+              with:
+                  shared-key: rust
 
             # The sqlx macros check each query against a real schema at compile
             # time. The runner has sqlite3, so the migrations build that schema.
@@ -101,6 +105,8 @@ jobs:
             - uses: dtolnay/rust-toolchain@stable
 
             - uses: Swatinem/rust-cache@v2
+              with:
+                  shared-key: rust
 
             - uses: pnpm/action-setup@v4
               with:
@@ -124,7 +130,12 @@ jobs:
             - run: pnpm exec playwright install --with-deps chromium
               working-directory: web
 
-            # Playwright builds and starts the API on its own database, then the site.
+            # Playwright starts the API with a build of its own, but a cold build
+            # takes longer than the three minutes it waits. This step does the
+            # build first, so the one inside Playwright finds nothing to do.
+            - run: cargo build -p bunker-api
+
+            # Playwright starts the API on its own database, then the site.
             - run: pnpm exec playwright test
               working-directory: web
 
