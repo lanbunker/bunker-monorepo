@@ -3,8 +3,9 @@ type Variant = "primary" | "ghost" | "danger" | "warn"
 type Size = "md" | "sm"
 
 interface Props {
-  /** With `href` this renders a link. Without it, a `<button type="submit">`. */
+  /** With `href` this renders a link. Without it, a `<button>` that submits, or a plain one with `type="button"`. */
   href?: string
+  type?: "submit" | "button"
   variant?: Variant
   size?: Size
   external?: boolean
@@ -15,6 +16,7 @@ interface Props {
 
 const {
   href,
+  type = "submit",
   variant = "primary",
   size = "md",
   external = false,
@@ -68,7 +70,7 @@ const classes = [
     <span aria-hidden="true">]</span>
   </a>
 ) : (
-  <button type="submit" disabled={disabled} title={title} class:list={classes}>
+  <button type={type} disabled={disabled} title={title} class:list={classes}>
     <span aria-hidden="true">[</span>
     <span class="btn-label">
       <slot />

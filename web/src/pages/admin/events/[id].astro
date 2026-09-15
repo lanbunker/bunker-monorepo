@@ -9,6 +9,7 @@ import AdminLayout from "../../../layouts/AdminLayout.astro"
 import { call, dataOf, failureOf, isMissing } from "../../../lib/api"
 import { COVER_NAMES } from "../../../lib/event-images"
 import { checkinUrl, phaseOf } from "../../../lib/events"
+import { posterFileName } from "../../../lib/qr"
 import { firstError, noticeFrom } from "../../../lib/form"
 import { adminSessionOf } from "../../../lib/session"
 import { ADMIN_FIELD, ADMIN_FIELD_INLINE } from "../../../lib/styles"
@@ -128,11 +129,42 @@ const door = detail ? checkinUrl(Astro.url.origin, detail.checkinCode) : ""
           </Button>
         </div>
         <p class="m-0 mt-2 text-2xs text-admin-mute">
-          print a QR code of this link for the entrance. it works from{" "}
-          <LocalTime at={e.startsAt} class="text-admin-dim" /> to{" "}
+          the link works from <LocalTime at={e.startsAt} class="text-admin-dim" /> to{" "}
           <LocalTime at={e.endsAt} class="text-admin-dim" /> while the event is published.
           one check-in per player, 100 cycles.
         </p>
+        <div class="mt-4 flex flex-wrap items-start gap-4">
+          <img
+            src={`/admin/events/${e.id}/qr.svg`}
+            alt="check-in QR code"
+            width="192"
+            height="240"
+            class="h-auto w-48 border border-warn/40 bg-white"
+          />
+          <div class="flex flex-col gap-2">
+            <p class="m-0 text-2xs text-admin-mute">
+              the poster for the door: the QR code, CHECK-IN and the name of the night.
+              print it as big as you like, it is a vector.
+            </p>
+            <div class="flex flex-wrap gap-2">
+              <Button
+                href={`/admin/events/${e.id}/qr.svg?download=1`}
+                variant="warn"
+                size="sm"
+              >
+                download svg
+              </Button>
+              <span
+                data-qr-png={`/admin/events/${e.id}/qr.svg`}
+                data-file={posterFileName(e.name, "png")}
+              >
+                <Button type="button" variant="warn" size="sm">
+                  download png
+                </Button>
+              </span>
+            </div>
+          </div>
+        </div>
       </section>
 
       <section class="mt-4 border border-warn/40 p-4">
@@ -294,3 +326,71 @@ const door = detail ? checkinUrl(Astro.url.origin, detail.checkinCode) : ""
     </>
   )}
 </AdminLayout>
+
+<script>
+  // A PNG for a chat or a phone gallery, drawn from the SVG in the browser: the
+  // server has no canvas, and the browser has one for free.
+  const SIZE = 1024
+  const FAILED = "The PNG could not be made. Download the SVG instead."
+
+  const loadImage = (url: string): Promise<HTMLImageElement> =>
+    new Promise((resolve, reject) => {
+      const image = new Image()
+      image.addEventListener("load", () => resolve(image))
+      image.addEventListener("error", () => reject(new Error("the SVG did not decode")))
+      image.src = url
+    })
+
+  const toPng = (image: HTMLImageElement): Promise<Blob> =>
+    new Promise((resolve, reject) => {
+      const canvas = document.createElement("canvas")
+      canvas.width = SIZE
+      canvas.height = Math.round((SIZE * image.height) / image.width)
+      const context = canvas.getContext("2d")
+      if (!context) {
+        reject(new Error("no canvas"))
+        return
+      }
+      context.fillStyle = "#fff"
+      context.fillRect(0, 0, canvas.width, canvas.height)
+      context.drawImage(image, 0, 0, canvas.width, canvas.height)
+      canvas.toBlob(
+        blob => (blob ? resolve(blob) : reject(new Error("no blob"))),
+        "image/png",
+      )
+    })
+
+  // The anchor sits in the document while it is clicked: a detached one is
+  // ignored by some engines.
+  const save = (blob: Blob, file: string) => {
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement("a")
+    link.href = url
+    link.download = file
+    document.body.append(link)
+    link.click()
+    link.remove()
+    URL.revokeObjectURL(url)
+  }
+
+  for (const holder of document.querySelectorAll<HTMLElement>("[data-qr-png]")) {
+    holder.addEventListener("click", async () => {
+      const source = holder.dataset.qrPng
+      const file = holder.dataset.file ?? "checkin.png"
+      if (!source) return
+      let svgUrl: string | undefined
+      try {
+        const response = await fetch(source)
+        if (!response.ok) throw new Error(`the poster answered ${response.status}`)
+        const svg = await response.text()
+        svgUrl = URL.createObjectURL(new Blob([svg], { type: "image/svg+xml" }))
+        save(await toPng(await loadImage(svgUrl)), file)
+      } catch (cause) {
+        console.error("png poster failed", cause)
+        window.alert(FAILED)
+      } finally {
+        if (svgUrl) URL.revokeObjectURL(svgUrl)
+      }
+    })
+  }
+</script>

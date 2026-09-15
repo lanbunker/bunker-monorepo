@@ -150,9 +150,11 @@ as the archive.
 
 Every event has a check-in code, twelve lowercase letters and digits, made when
 the event is created and never sent to the public. The backoffice shows the
-link, `/checkin/{code}` on the site, and the admin prints a QR code of it for
-the door. The link carries the code and not the id, so a guess opens no door.
-A draft answers a 404 to its own code, so a leaked link says nothing before the
+link, `/checkin/{code}` on the site, and renders it as a QR poster at
+`/admin/events/{id}/qr.svg`: black on white, with CHECK-IN and the name of the
+night under the code, as an SVG to print or as a PNG the browser draws from
+it. The link carries the code and not the id, so a guess opens no door. A
+draft answers a 404 to its own code, so a leaked link says nothing before the
 night is announced.
 
 A player scans the code, and the page shows the event and one of three states:

@@ -11,6 +11,7 @@ import {
     logout,
     signup,
     signupAdmin,
+    signupMany,
     standingSchema,
     tokenFor,
     tomorrow,
@@ -63,6 +64,7 @@ const publishedEvent = async (
 
 test("an admin creates an event, publishes it, and the public page lists it", async ({
     page,
+    request,
 }) => {
     await signupAdmin(page)
     const name = `Night ${handle("ev")}`
@@ -92,6 +94,37 @@ test("an admin creates an event, publishes it, and the public page lists it", as
     await expect(page.getByLabel("check-in link")).toHaveValue(
         /^http:\/\/127\.0\.0\.1:4399\/checkin\/[a-z0-9]{12}$/,
     )
+    const link = await page.getByLabel("check-in link").inputValue()
+
+    // The poster is an SVG that carries the link and the name, for admins only.
+    const posterImage = page.getByRole("img", { name: "check-in QR code" })
+    await expect(posterImage).toBeVisible()
+    // The route compiles on its first hit in the dev server, so the width is polled.
+    await expect
+        .poll(() =>
+            posterImage.evaluate(img =>
+                img instanceof HTMLImageElement ? img.naturalWidth : 0,
+            ),
+        )
+        .toBeGreaterThan(0)
+    const poster = await page.request.get(`/admin/events/${id}/qr.svg?download=1`)
+    expect(poster.status()).toBe(200)
+    expect(poster.headers()["content-type"]).toContain("image/svg+xml")
+    expect(poster.headers()["content-disposition"]).toContain("attachment")
+    const svg = await poster.text()
+    expect(svg).toContain("<svg")
+    expect(svg).toContain('<path d="M')
+    expect(svg).toContain(link)
+    expect(svg).toContain(name)
+    // A stranger and a plain player both get the same 404 as the backoffice.
+    expect((await request.get(`/admin/events/${id}/qr.svg`)).status()).toBe(404)
+    const player = handle("qr")
+    await signupMany(request, player, 1)
+    const token = await tokenFor(page, `${player}0`)
+    const asPlayer = await request.get(`/admin/events/${id}/qr.svg`, {
+        headers: { cookie: `bunker_session=${token}` },
+    })
+    expect(asPlayer.status()).toBe(404)
 
     await page.goto("/events")
     const card = page.locator(`[data-event="${id}"]`)
