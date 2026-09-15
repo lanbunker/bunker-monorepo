@@ -14,9 +14,16 @@ repository = "https://github.com/paologaleotti/lanbunker-website"
 # it needs through `dep.workspace = true`.
 [workspace.dependencies]
 bunker-models = { path = "crates/bunker-models" }
+cabd-core = { path = "crates/cabd-core" }
 
 anyhow = "1"
 argon2 = "0.6"
+clap = { version = "4", features = ["derive", "env"] }
+toml = "1"
+# The cabinet screen. `ttf` is the one C addition to SDL2 itself.
+sdl2 = { version = "0.38", features = ["ttf", "use-pkgconfig"] }
+png = "0.18"
+qrcode = { version = "0.14", default-features = false }
 axum = { version = "0.8", default-features = false, features = [
     "http1",
     "json",
@@ -93,6 +100,12 @@ debug = false
 # expand faster when their macros are optimised.
 [profile.dev.build-override]
 opt-level = 3
+
+# The build that goes to the Pi 3 during development. Level 0 is too slow for
+# a 60 fps screen on that CPU. Level 1 keeps incremental builds and line tables.
+[profile.pi]
+inherits = "dev"
+opt-level = 1
 
 [profile.release]
 opt-level = 3

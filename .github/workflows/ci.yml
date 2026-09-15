@@ -25,6 +25,10 @@ jobs:
               with:
                   shared-key: rust
 
+            # The cabinet binary links SDL2 and SDL2_ttf through pkg-config.
+            - name: Install SDL2
+              run: sudo apt-get install -y --no-install-recommends libsdl2-dev libsdl2-ttf-dev
+
             # The sqlx macros check each query against a real schema at compile
             # time. The runner has sqlite3, so the migrations build that schema.
             - name: Migrate a scratch database

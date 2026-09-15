@@ -1,0 +1,190 @@
+//! The loop that owns the state machine. It receives every `Event` on one
+//! channel, applies it, sends the new `Frame` to the screen and executes the
+//! effects. It runs on its own thread, so the screen thread never blocks.
+
+use std::collections::VecDeque;
+use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
+use std::thread;
+use std::time::{Duration, Instant};
+
+use tracing::{debug, error, info, trace};
+
+use crate::cabinet::{Cabinet, Effect, Event, Outcome};
+use crate::config::{Config, ConfigError};
+use crate::launcher::Launcher;
+use crate::view::{DevCommand, Frame, Input};
+
+/// Without an event for this long, the loop sends itself a `Tick`. The idle
+/// timeout runs on ticks, so this is also its resolution.
+pub const TICK: Duration = Duration::from_millis(250);
+
+/// The screen's side of the two channels. Drop it and the conductor stops.
+/// The screen sends through the methods and never builds an `Event` itself.
+#[derive(Debug)]
+pub struct Handle {
+    events: Sender<Event>,
+    pub frames: Receiver<Frame>,
+}
+
+/// The conductor thread has stopped, so nothing receives events any more.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+#[error("the conductor is gone")]
+pub struct ConductorGone;
+
+impl Handle {
+    pub fn input(&self, input: Input) -> Result<(), ConductorGone> {
+        self.send(Event::Input(input))
+    }
+
+    /// The window is destroyed. The launcher may take the display.
+    pub fn display_released(&self) -> Result<(), ConductorGone> {
+        self.send(Event::DisplayReleased)
+    }
+
+    pub fn command(&self, command: DevCommand) -> Result<(), ConductorGone> {
+        self.send(Event::Command(command))
+    }
+
+    pub fn quit(&self) -> Result<(), ConductorGone> {
+        self.send(Event::Quit)
+    }
+
+    fn send(&self, event: Event) -> Result<(), ConductorGone> {
+        self.events.send(event).map_err(|_| ConductorGone)
+    }
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum StartError {
+    #[error("configuration error")]
+    Config(#[source] ConfigError),
+    #[error("cannot start the conductor thread")]
+    Thread(#[source] std::io::Error),
+}
+
+/// Loads the games, starts the conductor thread and returns its two channels.
+/// The first frame is on the channel before this returns.
+pub fn start(config: Config) -> Result<Handle, StartError> {
+    info!(
+        games = %config.games.display(),
+        rom_dir = %config.rom_dir.display(),
+        launcher = %config.launcher,
+        hiscore_dir = %config.hiscore_dir.display(),
+        template_dir = %config.template_dir.display(),
+        idle_seconds = config.idle_seconds,
+        orientation = %config.orientation,
+        overscan_percent = %config.overscan_percent,
+        window = ?config.window,
+        upright = config.upright,
+        "configuration"
+    );
+    let games = config.load_games().map_err(StartError::Config)?;
+    for game in &games {
+        info!(rom = %game.rom, title = %game.title, orientation = %game.orientation, decoder = ?game.decoder, "game");
+    }
+    let launcher = config.launcher().map_err(StartError::Config)?;
+    let cabinet = Cabinet::new(config.cabinet(games), Instant::now());
+
+    let (events_tx, events_rx) = mpsc::channel();
+    let (frames_tx, frames_rx) = mpsc::channel();
+    let mut conductor = Conductor {
+        cabinet,
+        launcher,
+        frames: frames_tx,
+    };
+    conductor.send_frame(conductor.cabinet.frame());
+
+    thread::Builder::new()
+        .name("conductor".to_owned())
+        .spawn(move || conductor.run(&events_rx))
+        .map_err(StartError::Thread)?;
+
+    Ok(Handle {
+        events: events_tx,
+        frames: frames_rx,
+    })
+}
+
+struct Conductor {
+    cabinet: Cabinet,
+    launcher: Launcher,
+    frames: Sender<Frame>,
+}
+
+impl Conductor {
+    fn run(&mut self, events: &Receiver<Event>) {
+        info!("conductor started");
+        loop {
+            let event = match events.recv_timeout(TICK) {
+                Ok(event) => event,
+                Err(RecvTimeoutError::Timeout) => Event::Tick,
+                Err(RecvTimeoutError::Disconnected) => {
+                    info!("every event sender is gone, conductor stops");
+                    return;
+                }
+            };
+            if !self.handle(event) {
+                info!("conductor stops");
+                return;
+            }
+        }
+    }
+
+    /// Applies one event and every event its effects produce. Returns false
+    /// when the cabinet wants to quit or the screen is gone.
+    fn handle(&mut self, first: Event) -> bool {
+        let mut queue = VecDeque::from([first]);
+        while let Some(event) = queue.pop_front() {
+            let from = self.cabinet.state_name();
+            let is_tick = matches!(event, Event::Tick);
+            let step = self.cabinet.apply(event.clone(), Instant::now());
+            let to = self.cabinet.state_name();
+            if from != to || !step.effects.is_empty() {
+                info!(event = ?event, from, to, effects = ?step.effects, "transition");
+            } else if is_tick {
+                trace!("tick");
+            } else {
+                debug!(event = ?event, state = to, "event without transition");
+            }
+            if let Some(frame) = step.frame
+                && !self.send_frame(frame)
+            {
+                return false;
+            }
+            for effect in step.effects {
+                match effect {
+                    Effect::Launch(game) => {
+                        let started = Instant::now();
+                        let outcome = match self.launcher.run(&game) {
+                            Ok(outcome) => outcome,
+                            Err(e) => {
+                                error!(rom = %game.rom, error = %e, cause = ?std::error::Error::source(&e), "the game did not start");
+                                Outcome {
+                                    rom: game.rom.clone(),
+                                    score: None,
+                                    note: Some("The game could not be started".to_owned()),
+                                }
+                            }
+                        };
+                        debug!(rom = %game.rom, seconds = started.elapsed().as_secs_f64(), "launch effect done");
+                        queue.push_back(Event::GameEnded(outcome));
+                    }
+                    Effect::Quit => return false,
+                }
+            }
+        }
+        true
+    }
+
+    fn send_frame(&self, frame: Frame) -> bool {
+        match &frame {
+            Frame::Show(vm) => debug!(screen = ?vm.screen, "frame"),
+            Frame::Suspended => info!("frame: suspended, the screen must release the display"),
+        }
+        if self.frames.send(frame).is_err() {
+            info!("the screen is gone");
+            return false;
+        }
+        true
+    }
+}

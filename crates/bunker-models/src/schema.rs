@@ -5,6 +5,7 @@ use utoipa::openapi::schema::{ObjectBuilder, Type};
 use utoipa::openapi::{KnownFormat, RefOr, Schema, SchemaFormat};
 use utoipa::{PartialSchema, ToSchema};
 
+use crate::arcade::{ROM_NAME_MAX_LEN, RomName};
 use crate::auth::{PASSWORD_MAX_LEN, PASSWORD_MIN_LEN, Password};
 use crate::bracket::MatchId;
 use crate::event::{
@@ -125,6 +126,19 @@ impl PartialSchema for Handle {
     }
 }
 impl ToSchema for Handle {}
+
+impl PartialSchema for RomName {
+    fn schema() -> RefOr<Schema> {
+        ObjectBuilder::new()
+            .schema_type(Type::String)
+            .min_length(Some(1))
+            .max_length(Some(ROM_NAME_MAX_LEN))
+            .pattern(Some("^[a-z0-9_]+$"))
+            .build()
+            .into()
+    }
+}
+impl ToSchema for RomName {}
 
 impl PartialSchema for Password {
     fn schema() -> RefOr<Schema> {

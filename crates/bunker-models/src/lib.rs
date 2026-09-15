@@ -5,6 +5,7 @@
 //! error type and the serde code. A value that crosses a boundary one time is
 //! valid everywhere below.
 
+mod arcade;
 mod auth;
 mod bracket;
 mod event;
@@ -17,6 +18,7 @@ mod role;
 mod schema;
 mod tournament;
 
+pub use arcade::{ROM_NAME_MAX_LEN, RomName, RomNameError, Score};
 pub use auth::{
     LoginRequest, PASSWORD_MAX_LEN, PASSWORD_MIN_LEN, Password, PasswordChange, PasswordError,
     SignupRequest, TemporaryPassword, TokenResponse,

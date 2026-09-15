@@ -16,7 +16,7 @@ daemon will run on RetroPie arcade cabinets and post scores to the backend.
 web/                  Astro site on Cloudflare Workers. Its own rules: web/CLAUDE.md
 crates/bunker-models  Domain types shared by every Rust crate. No I/O.
 crates/bunker-api     axum + sqlx + SQLite backend. Layers below.
-crates/bunker-cabd    The cabinet daemon. Empty for now.
+crates/bunker-cabd    The cabinet daemon and screen. Design: crates/bunker-cabd/DESIGN.md
 deploy/               What runs on the API box: bootstrap script, systemd units.
 ```
 

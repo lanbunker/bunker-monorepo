@@ -1,0 +1,38 @@
+# The six games, for development on a desktop. The decoder is the one the fake
+# launcher writes. The real decoders arrive with their golden fixtures.
+
+[[games]]
+rom = "bublbobl"
+title = "Bubble Bobble"
+orientation = "landscape"
+decoder = "ascii_decimal"
+
+[[games]]
+rom = "mspacman"
+title = "Ms. Pac-Man"
+orientation = "tate"
+decoder = "ascii_decimal"
+
+[[games]]
+rom = "galaga"
+title = "Galaga"
+orientation = "tate"
+decoder = "ascii_decimal"
+
+[[games]]
+rom = "dkong"
+title = "Donkey Kong"
+orientation = "tate"
+decoder = "ascii_decimal"
+
+[[games]]
+rom = "mrdo"
+title = "Mr. Do!"
+orientation = "tate"
+decoder = "ascii_decimal"
+
+[[games]]
+rom = "ddonpach"
+title = "DoDonPachi"
+orientation = "tate"
+decoder = "ascii_decimal"

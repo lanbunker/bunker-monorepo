@@ -1,4 +1,4 @@
-.PHONY: help install-cli db db-reset migration migrate schema admin openapi api-types dev run test lint fmt checklist web-dev web-build web-fmt web-check web-e2e web-e2e-headed
+.PHONY: help install-cli db db-reset migration migrate schema admin openapi api-types dev run test lint fmt checklist cabd-dev cabd-dev-tate cabd-shots web-dev web-build web-fmt web-check web-e2e web-e2e-headed
 
 # `.env` is the one place the URL lives. The sqlx macros compile each query
 # against this database, so `test` and `lint` make sure it exists first.
@@ -85,6 +85,20 @@ checklist: ## Run this one command before you report that a Rust task is complet
 	cargo fmt --all
 	$(MAKE) lint
 	$(MAKE) test
+
+CABD_ENV := crates/bunker-cabd/dev/cabd.env
+
+orientation ?= landscape
+
+cabd-dev: ## Run the cabinet in a window, with the fake launcher: make cabd-dev orientation=tate
+	set -a; . $(CABD_ENV); set +a; cargo run -p bunker-cabd -- run --orientation $(orientation)
+
+cabd-dev-tate: ## Preview the TATE canvas upright in a portrait window, with the fake launcher
+	set -a; . $(CABD_ENV); set +a; cargo run -p bunker-cabd -- run --orientation tate --window 540x720 --upright
+
+cabd-shots: ## Render every cabinet screen to .dev/shots/*.png, landscape and tate
+	cargo run -q -p bunker-cabd -- screenshots .dev/shots
+	cargo run -q -p bunker-cabd -- screenshots .dev/shots --orientation tate
 
 web-dev: ## Start the Astro dev server against the local API
 	pnpm -C web dev

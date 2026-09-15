@@ -4,13 +4,13 @@ This monorepo contains all software for LAN BUNKER live multiplayer events.
 
 - Main website (Astro)
 - Backend API (Rust)
-- Arcade cabinate software (Rust)
+- Arcade cabinet software (Rust)
 
 ```
 web/                   Astro site, server rendered on Cloudflare Workers
 crates/bunker-models   Domain types shared by every Rust crate
 crates/bunker-api      axum + sqlx + SQLite backend
-crates/bunker-cabd     Cabinet daemon for RetroPie boxes (empty for now)
+crates/bunker-cabd     Cabinet daemon and screen for the RetroPie box. Design: crates/bunker-cabd/DESIGN.md
 deploy/                Container bootstrap, systemd units, one-time setup guide
 ```
 
@@ -34,6 +34,8 @@ make db
 make dev          # the API on :3000, restarts on save
 make web-dev      # the site on :4321, talks to :3000
 make admin handle=dave   # promote a player after signup
+make cabd-dev            # the cabinet in a window, with a fake launcher
+make cabd-shots          # every cabinet screen as PNG under .dev/shots
 ```
 
 An admin can reset a password from the backoffice. The player logs in with the
