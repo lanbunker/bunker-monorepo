@@ -261,7 +261,8 @@ generated types are stale.
 
 `make checklist` runs the Rust suite. `make web-check` checks the format, runs
 both type checkers, lints and builds the site. `make web-e2e` runs Playwright
-against a fresh API on `.dev/e2e.db` and the dev site: signup, login, the roster,
+against a fresh API on `.dev/e2e.db` and the production build of the site, served
+by the Workers runtime as on Cloudflare: signup, login, the roster,
 the profile, every public page, 404s, the backoffice, tournaments and brackets.
 It also asserts that every refusal reaches the page as one readable sentence.
 

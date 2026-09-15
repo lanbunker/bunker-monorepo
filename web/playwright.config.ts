@@ -9,13 +9,10 @@ const WEB_PORT = 4399
 
 export default defineConfig({
     testDir: "./e2e",
-    // Warms the dev server, so the first test does not race the bundler.
-    globalSetup: "./e2e/warmup.ts",
     fullyParallel: false,
     workers: 1,
     retries: 0,
     timeout: 30_000,
-    // The dev server compiles a page on its first visit, which takes seconds.
     expect: { timeout: 10_000 },
     reporter: [["list"]],
     use: {
@@ -35,17 +32,19 @@ export default defineConfig({
             stderr: "pipe",
         },
         {
-            // A Worker var beats the shell in local mode, so the API URL comes
-            // from the `e2e` environment of `wrangler.jsonc`, which holds this
-            // same port. `astro dev` also detaches itself when it detects an
-            // agent, and then Playwright cannot stop it: the variable turns that
-            // detection off, whatever its value.
-            // `--ignore-lock` starts this server beside a dev server the
-            // developer already has, instead of refusing to start.
-            command: `CLOUDFLARE_ENV=e2e ASTRO_DEV_BACKGROUND=0 pnpm astro dev --ignore-lock --host 127.0.0.1 --port ${WEB_PORT}`,
+            // The site under test is the production build, served by the same
+            // runtime that serves it on Cloudflare. The dev server runs the code
+            // through a module runner instead, and on Linux that runner hangs on
+            // the first request to an action route, so the bracket editor never
+            // got an answer in CI. A Worker var beats the shell in local mode, so
+            // the API URL comes from the `e2e` environment of `wrangler.jsonc`,
+            // which holds this same port. `astro preview` detaches itself when it
+            // detects an agent, and then Playwright cannot stop it: the variable
+            // turns that detection off, whatever its value.
+            command: `CLOUDFLARE_ENV=e2e pnpm exec astro build && CLOUDFLARE_ENV=e2e ASTRO_PREVIEW_BACKGROUND=0 pnpm exec astro preview --host 127.0.0.1 --port ${WEB_PORT}`,
             url: `http://127.0.0.1:${WEB_PORT}/`,
             reuseExistingServer: false,
-            timeout: 120_000,
+            timeout: 240_000,
             stdout: "pipe",
             stderr: "pipe",
         },

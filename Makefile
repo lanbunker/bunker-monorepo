@@ -103,7 +103,7 @@ web-check: ## Format, type check, lint and build the site. Run this before you y
 	pnpm -C web check
 	pnpm -C web build
 
-web-e2e: $(DB_FILE) ## Playwright end to end tests against a fresh API and the dev site
+web-e2e: $(DB_FILE) ## Playwright end to end tests against a fresh API and the built site
 	pnpm -C web exec playwright test
 
 web-e2e-headed: $(DB_FILE) ## The same tests in a visible browser: make web-e2e-headed spec=players

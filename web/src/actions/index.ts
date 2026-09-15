@@ -1,4 +1,4 @@
-import type { AstroCookies } from "astro"
+import type { ActionAPIContext } from "astro:actions"
 import { defineAction } from "astro:actions"
 import { z } from "zod"
 
@@ -16,11 +16,14 @@ import { eventActions } from "./events"
 import { tournamentActions } from "./tournaments"
 
 /** Sets the session cookie until the token expires. */
-const storeSession = (cookies: AstroCookies, token: string, expiresAt: string) => {
-    cookies.set(SESSION_COOKIE, token, {
+const storeSession = (context: ActionAPIContext, token: string, expiresAt: string) => {
+    context.cookies.set(SESSION_COOKIE, token, {
         httpOnly: true,
         sameSite: "lax",
-        secure: import.meta.env.PROD,
+        // Secure over a secure connection, so production sets it and a local run
+        // over http, the e2e suite included, does not. `import.meta.env.PROD` is
+        // true for every build, e2e included, so it cannot decide this.
+        secure: context.url.protocol === "https:",
         path: "/",
         expires: new Date(expiresAt),
     })
@@ -41,7 +44,7 @@ export const server = {
                     }),
                 ),
             )
-            storeSession(context.cookies, session.token, session.expiresAt)
+            storeSession(context, session.token, session.expiresAt)
             return { handle: input.handle, next: input.next }
         },
     }),
@@ -57,7 +60,7 @@ export const server = {
                     }),
                 ),
             )
-            storeSession(context.cookies, session.token, session.expiresAt)
+            storeSession(context, session.token, session.expiresAt)
             return { handle: input.handle, next: input.next }
         },
     }),
@@ -88,7 +91,7 @@ export const server = {
             )
             // The API revoked every older token, this session included. Keep the
             // player in.
-            storeSession(context.cookies, session.token, session.expiresAt)
+            storeSession(context, session.token, session.expiresAt)
             return { ok: true }
         },
     }),
