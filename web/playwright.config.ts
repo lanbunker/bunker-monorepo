@@ -20,6 +20,8 @@ export default defineConfig({
     reporter: [["list"]],
     use: {
         baseURL: `http://127.0.0.1:${WEB_PORT}`,
+        // A failure keeps its trace, so a run on another machine can be replayed.
+        trace: "retain-on-failure",
     },
     webServer: [
         {

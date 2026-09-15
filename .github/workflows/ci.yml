@@ -139,6 +139,15 @@ jobs:
             - run: pnpm exec playwright test
               working-directory: web
 
+            # The page snapshot and the trace of each failed test, to read what
+            # the runner saw.
+            - uses: actions/upload-artifact@v4
+              if: failure()
+              with:
+                  name: playwright-results
+                  path: web/test-results
+                  retention-days: 7
+
     # Ships the API to the container behind the Cloudflare Tunnel. Only after
     # every other job is green, and only for a push to main, so a red build never
     # reaches the box. The site deploys on its own in deploy.yml.
