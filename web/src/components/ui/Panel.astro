@@ -3,10 +3,12 @@ type Tone = "default" | "accent" | "warn" | "muted" | "alert"
 
 interface Props {
   tone?: Tone
+  /** A player's glyph color. The border takes it, ahead of the tone. */
+  player?: string
   class?: string
 }
 
-const { tone = "default", class: className } = Astro.props
+const { tone = "default", player, class: className } = Astro.props
 
 const borderClass: Record<Tone, string> = {
   default: "border-border",
@@ -21,7 +23,14 @@ const media = Astro.slots.has("media") ? await Astro.slots.render("media") : ""
 const hasMedia = media.trim().length > 0
 ---
 
-<div class:list={["border bg-panel", borderClass[tone], className]}>
+<div
+  class:list={[
+    "border bg-panel",
+    player ? "border-(--player)" : borderClass[tone],
+    className,
+  ]}
+  style={player && `--player:${player}`}
+>
   {hasMedia && (
     <div class="border-b border-faint">
       <Fragment set:html={media} />

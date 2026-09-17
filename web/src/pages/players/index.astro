@@ -1,7 +1,7 @@
 ---
+import PlayerLink from "../../components/PlayerLink.astro"
 import Alert from "../../components/ui/Alert.astro"
 import Button from "../../components/ui/Button.astro"
-import Glyph from "../../components/ui/Glyph.astro"
 import Pager from "../../components/ui/Pager.astro"
 import Panel from "../../components/ui/Panel.astro"
 import RankMark from "../../components/ui/RankMark.astro"
@@ -87,15 +87,7 @@ const me = Astro.locals.player?.id
               </td>
               <td class="nowrap py-2">
                 <span class="inline-flex items-center gap-2">
-                  <a
-                    href={`/players/${player.handle}`}
-                    class="inline-flex items-center gap-2 no-underline text-bright hover:text-accent"
-                  >
-                    <Glyph glyph={player.glyph} size="1.1em" />
-                    <span class="handle" title={player.handle}>
-                      {player.handle}
-                    </span>
-                  </a>
+                  <PlayerLink player={player} glyph="1.1em" />
                   {player.role === "admin" && (
                     <span class="text-2xs text-warn">admin</span>
                   )}

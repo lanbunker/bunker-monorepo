@@ -3,6 +3,7 @@ import type { PlayedMatch } from "../lib/api"
 import { formatIsoDay } from "../lib/dates"
 import { matchRound } from "../lib/matches"
 import { LOG_LIST, LOG_ROW } from "../lib/styles"
+import PlayerLink from "./PlayerLink.astro"
 
 interface Props {
   matches: PlayedMatch[]
@@ -30,12 +31,7 @@ const { matches, empty = "no matches yet." } = Astro.props
         <span class="min-w-0">
           <span class="text-dim">vs</span>{" "}
           {match.opponent ? (
-            <a
-              href={`/players/${match.opponent.handle}`}
-              class="text-bright no-underline hover:text-accent"
-            >
-              {match.opponent.handle}
-            </a>
+            <PlayerLink player={match.opponent} whole />
           ) : (
             <span class="text-mute">[deleted]</span>
           )}

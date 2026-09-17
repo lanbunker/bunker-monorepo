@@ -229,8 +229,12 @@ export const BracketView = (props: BracketViewProps) => {
                                     size={props.kiosk ? "6rem" : "4rem"}
                                     framed
                                 />
+                                {/* The box is built around this one player, so
+                                    the name wears their color, as the winner of
+                                    a tournament card does. */}
                                 <span
-                                    className={`handle ${props.kiosk ? "text-2xl" : "text-base"} text-accent tracking-wider`}
+                                    className={`handle ${props.kiosk ? "text-2xl" : "text-base"} tracking-wider`}
+                                    style={{ color: champion.player.glyph.color }}
                                     title={champion.player.handle}
                                 >
                                     {champion.player.handle}

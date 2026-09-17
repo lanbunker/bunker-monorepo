@@ -1,6 +1,7 @@
 ---
 import type { Rivalry } from "../lib/api"
 import { played } from "../lib/matches"
+import PlayerLink from "./PlayerLink.astro"
 import Glyph from "./ui/Glyph.astro"
 import Panel from "./ui/Panel.astro"
 import Prompt from "./ui/Prompt.astro"
@@ -37,13 +38,7 @@ const record = `${nemesis.wins} ${nemesis.wins === 1 ? "win" : "wins"}, ${nemesi
     <div class="flex items-center gap-3">
       <Glyph glyph={opponent.glyph} size={GLYPH_SIZE} framed class="shrink-0" />
       <div class="min-w-0">
-        <a
-          href={`/players/${opponent.handle}`}
-          class="handle text-base tracking-wider no-underline text-bright hover:text-alert"
-          title={opponent.handle}
-        >
-          {opponent.handle}
-        </a>
+        <PlayerLink player={opponent} class="text-base tracking-wider" />
         <div class="mt-1 flex flex-wrap items-baseline gap-2 text-2xs text-dim">
           <RankMark rank={standing.rank} labelled />
           <span class="tabular-nums">#{standing.place}</span>

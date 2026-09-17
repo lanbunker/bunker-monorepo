@@ -22,8 +22,10 @@ const standing = player.standing
 const rank = RANKS[standing.rank]
 ---
 
-<Panel tone={own ? "accent" : "default"}>
-  <div class="flex flex-wrap gap-6" style={`--player:${player.glyph.color}`}>
+<!-- The card is about one player, so it wears their color: the glyph frame,
+     the handle and the border are the same. The `you` badge marks the owner. -->
+<Panel player={player.glyph.color}>
+  <div class="flex flex-wrap gap-6">
     <div class="flex shrink-0 flex-col items-center gap-3" style={`width:${GLYPH_SIZE}`}>
       <Glyph glyph={player.glyph} size={GLYPH_SIZE} framed />
       <!-- The cells are decoration, so the name under them is the one thing a

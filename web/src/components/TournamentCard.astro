@@ -6,6 +6,7 @@ import { isRegistrationOpen, statusBadge } from "../lib/tournaments"
 import Badge from "./ui/Badge.astro"
 import Button from "./ui/Button.astro"
 import Countdown from "./ui/Countdown.astro"
+import PlayerLink from "./PlayerLink.astro"
 import Glyph from "./ui/Glyph.astro"
 import Kv from "./ui/Kv.astro"
 import LocalTime from "./ui/LocalTime.astro"
@@ -94,14 +95,11 @@ const winner = t.winner?.player
             <Glyph glyph={winner.glyph} size="5rem" framed />
             <div>
               <div class="text-2xs tracking-wider text-dim">winner</div>
-              <a
-                href={`/players/${winner.handle}`}
-                class="mt-1 block text-[1.375rem] leading-tight tracking-wider text-accent no-underline hover:text-bright"
-              >
-                <span class="handle" title={winner.handle}>
-                  {winner.handle}
-                </span>
-              </a>
+              <PlayerLink
+                player={winner}
+                tone="spotlight"
+                class="mt-1 block text-[1.375rem] leading-tight tracking-wider"
+              />
               <div class="mt-1 text-2xs tracking-wider text-dim">
                 rank: <span class="text-accent">champion</span>
               </div>

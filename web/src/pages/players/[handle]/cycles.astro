@@ -1,5 +1,6 @@
 ---
 import CyclesLog from "../../../components/CyclesLog.astro"
+import PlayerLink from "../../../components/PlayerLink.astro"
 import Alert from "../../../components/ui/Alert.astro"
 import Button from "../../../components/ui/Button.astro"
 import Pager from "../../../components/ui/Pager.astro"
@@ -38,13 +39,7 @@ if (entries && page > entries.totalPages && entries.totalPages > 0) {
   {player && entries ? (
     <Panel>
       <div class="flex flex-wrap items-baseline justify-between gap-3 border-b border-faint pb-3">
-        <a
-          href={`/players/${player.handle}`}
-          class="handle text-base tracking-wider no-underline text-bright hover:text-accent"
-          title={player.handle}
-        >
-          {player.handle}
-        </a>
+        <PlayerLink player={player} class="text-base tracking-wider" />
         <span class="flex flex-wrap items-baseline gap-3 text-xs">
           <RankMark rank={player.standing.rank} labelled />
           <span class="text-accent tabular-nums">
