@@ -1,12 +1,16 @@
 import { expect, test } from "@playwright/test"
 
-import { API, handle, signup, signupAdmin, tokenFor } from "./support"
+import { newPlayer } from "./support"
 
-/** Every public page answers, and no page leaks a stack or an empty shell. */
+/**
+ * Every public page answers, and no page leaks a stack or an empty shell. The
+ * marker of each page is copy the page always carries, never a row, because
+ * another worker writes rows at the same time.
+ */
 
 const PUBLIC_PAGES = [
     { path: "/", heading: /Enter the bunker/i, title: /LAN BUNKER/ },
-    { path: "/events", heading: /archive/i, title: /EVENTS/ },
+    { path: "/events", heading: /upcoming/i, title: /EVENTS/ },
     { path: "/tournaments", heading: /tournaments/i, title: /TOURNAMENTS/ },
     { path: "/players", heading: /players/i, title: /PLAYERS/ },
     { path: "/cycles", heading: /man cycles/i, title: /CYCLES/ },
@@ -15,17 +19,15 @@ const PUBLIC_PAGES = [
     { path: "/about", heading: /cat /i, title: /ABOUT/ },
 ]
 
-for (const entry of PUBLIC_PAGES) {
-    test(`the page ${entry.path} answers 200 and renders its own title`, async ({
-        page,
-    }) => {
+test("every public page answers 200 and renders its own title", async ({ page }) => {
+    for (const entry of PUBLIC_PAGES) {
         const response = await page.goto(entry.path)
-        expect(response?.status()).toBe(200)
-        await expect(page).toHaveTitle(entry.title)
-        await expect(page.locator("main")).toContainText(entry.heading)
-        await expect(page.getByRole("alert")).toHaveCount(0)
-    })
-}
+        expect(response?.status(), entry.path).toBe(200)
+        await expect(page, entry.path).toHaveTitle(entry.title)
+        await expect(page.locator("main"), entry.path).toContainText(entry.heading)
+        await expect(page.getByRole("alert"), entry.path).toHaveCount(0)
+    }
+})
 
 test("an unknown path answers 404 and names the path", async ({ page }) => {
     const response = await page.goto("/no/such/sector")
@@ -59,7 +61,7 @@ test("the media gallery opens an image in the lightbox", async ({ page }) => {
     await expect(page.locator(".pswp--open")).toHaveCount(0)
 })
 
-test("the number keys move between sections, and the status bar follows", async ({
+test("the number keys move between sections, and the nav marks the one shown", async ({
     page,
 }) => {
     await page.goto("/")
@@ -69,11 +71,13 @@ test("the number keys move between sections, and the status bar follows", async 
         "aria-current",
         "page",
     )
+
+    // The script that reads the key sits at the end of the body, so the next
+    // press needs the new document parsed, and not only its URL.
+    await page.waitForLoadState("domcontentloaded")
     await page.keyboard.press("4")
     await expect(page).toHaveURL(/\/players$/)
-})
 
-test("the nav marks the section of the page the visitor is on", async ({ page }) => {
     await page.goto("/tournaments")
     await expect(page.getByRole("link", { name: /3:\s*TOURNAMENTS/ })).toHaveAttribute(
         "aria-current",
@@ -81,77 +85,31 @@ test("the nav marks the section of the page the visitor is on", async ({ page })
     )
 })
 
+test("the homepage reports the uplink, and the way in goes once a player is in", async ({
+    page,
+    context,
+}) => {
+    await page.goto("/")
+    await expect(page.locator("#boot-log")).toContainText("[  OK ] bunkernet uplink")
+    await expect(page.getByText(/\d+ players? enlisted/)).toBeVisible()
+    await expect(page.getByRole("link", { name: "ENTER BUNKERNET" })).toBeVisible()
+
+    await newPlayer(context, "hom")
+    await page.goto("/")
+    await expect(page.getByRole("link", { name: "ENTER BUNKERNET" })).toHaveCount(0)
+})
+
 test("a bare page carries no nav, and a private page stays out of search", async ({
     page,
+    context,
 }) => {
     await page.goto("/signup")
     await expect(page.getByRole("navigation", { name: "Sections" })).toHaveCount(0)
 
-    await signup(page, handle("idx"))
+    await newPlayer(context, "idx")
     await page.goto("/profile")
     await expect(page.locator('meta[name="robots"]')).toHaveAttribute(
         "content",
         "noindex, nofollow",
     )
-})
-
-test("the public bracket page shows the rounds once a bracket exists", async ({
-    page,
-}) => {
-    const admin = await signupAdmin(page)
-    const token = await tokenFor(page, admin)
-    const created = await page.request.post(`${API}/api/admin/tournaments`, {
-        data: {
-            name: `Cup ${handle("b")}`,
-            game: "COD MW2",
-            mode: "1v1",
-            description: "a public bracket",
-            date: "2030-02-02",
-            registrationClosesAt: "2029-12-31T20:00:00Z",
-        },
-        headers: { authorization: `Bearer ${token}` },
-    })
-    const body: Record<string, unknown> = await created.json()
-    const id = String(body.id)
-
-    // Before a bracket exists the page is a 404, not an empty frame.
-    expect((await page.goto(`/tournaments/${id}/bracket`))?.status()).toBe(404)
-
-    for (const name of [handle("q1"), handle("q2")]) {
-        const player = await page.request.post(`${API}/api/auth/signup`, {
-            data: { handle: name, password: "correct-horse-battery" },
-        })
-        expect(player.status()).toBe(201)
-        const found: Record<string, unknown> = await page.request
-            .get(`${API}/api/players/${name}`)
-            .then(r => r.json())
-        const added = await page.request.post(
-            `${API}/api/admin/tournaments/${id}/entrants`,
-            {
-                data: { playerId: found.id },
-                headers: { authorization: `Bearer ${token}` },
-            },
-        )
-        expect(added.status()).toBe(201)
-    }
-    await page.request.post(`${API}/api/admin/tournaments/${id}/status`, {
-        data: { status: "live", winner: null },
-        headers: { authorization: `Bearer ${token}` },
-    })
-    const bracket = await page.request.post(
-        `${API}/api/admin/tournaments/${id}/bracket`,
-        { headers: { authorization: `Bearer ${token}` } },
-    )
-    expect(bracket.ok()).toBe(true)
-
-    await page.goto(`/tournaments/${id}/bracket`)
-    await expect(page.getByText("final", { exact: true })).toBeVisible()
-    await expect(page.locator("[data-match]")).toHaveCount(1)
-    await expect(page.getByText("champion")).toBeVisible()
-    // A public bracket takes no gesture: no side is a control.
-    await expect(page.locator("button[data-pick]")).toHaveCount(0)
-
-    await page.goto(`/tournaments/${id}/kiosk`)
-    await expect(page.getByText("■ live")).toBeVisible()
-    await expect(page.locator("[data-match]")).toHaveCount(1)
 })

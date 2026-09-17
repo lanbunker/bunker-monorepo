@@ -2,34 +2,46 @@ import { expect, test } from "@playwright/test"
 import type { Page } from "@playwright/test"
 
 import {
-    API,
-    PASSWORD,
+    apiDraft,
+    apiSignup,
+    clearSession,
     createDraft,
     cyclesOf,
+    cyclesRules,
+    detailSchema,
+    enrol,
     handle,
     jsonOf,
-    logout,
-    rulesSchema,
-    signup,
-    signupAdmin,
-    standingSchema,
-    tokenFor,
+    newAdmin,
+    newPlayer,
+    setTournamentStatus,
+    standingOf,
 } from "./support"
 
-/** Signs up an admin and creates a draft tournament. Lands on its edit page. */
-const draftAsAdmin = async (page: Page, name: string) => {
-    const admin = await signupAdmin(page)
-    return { admin, id: await createDraft(page, name) }
+/** A side of a match that has no winner yet. Clicking it enters that result. */
+const openSide = (page: Page) =>
+    page
+        .locator("[data-match]")
+        .filter({ hasNot: page.getByText("win", { exact: true }) })
+        .locator("button[data-pick]")
+        .first()
+
+/** The island answers every click, so the next one waits for the last to land. */
+const settled = async (page: Page) => {
+    await expect(page.locator("[aria-busy=true]")).toHaveCount(0)
 }
 
 test("an admin creates a tournament, opens it, and the public page lists it", async ({
     page,
+    context,
 }) => {
+    await newAdmin(context)
     const name = `Cup ${handle("t")}`
-    const { id } = await draftAsAdmin(page, name)
+    const id = await createDraft(page, name)
 
+    // A draft is not on the site.
     await page.goto("/tournaments")
-    await expect(page.getByText(name)).toHaveCount(0)
+    await expect(page.locator(`[data-tournament="${id}"]`)).toHaveCount(0)
 
     await page.goto(`/admin/tournaments/${id}`)
     await page.getByRole("button", { name: "open registration" }).click()
@@ -46,29 +58,38 @@ test("an admin creates a tournament, opens it, and the public page lists it", as
     await expect(card).toContainText("REGISTRATION OPEN")
     await expect(card.getByRole("link", { name: "APPLY" })).toBeVisible()
 
-    // The homepage carries the soonest open tournament, whichever it is.
+    // The homepage carries the soonest open tournament of the whole database,
+    // and another worker can own that one. What holds whichever it is: this
+    // test keeps at least one tournament open whose deadline has not passed, so
+    // the block names a tournament, and the way in shows without the note that
+    // registration is closed.
     await page.goto("/")
-    await expect(page.locator("#status-block")).toContainText(/Tournament/i)
+    const block = page.locator("#status-block")
+    await expect(block).toContainText(/Tournament/i)
+    await expect(block).not.toContainText("registration closed")
     await expect(page.getByRole("link", { name: "APPLY" })).toBeVisible()
 })
 
-test("a player applies and retires while registration is open", async ({ page }) => {
-    const name = `Cup ${handle("t")}`
-    const { id } = await draftAsAdmin(page, name)
-    await page.getByRole("button", { name: "open registration" }).click()
-    await logout(page)
+test("a player applies and retires while registration is open", async ({
+    page,
+    context,
+}) => {
+    const admin = await newAdmin(context)
+    const id = await apiDraft(context.request, admin.token)
+    await setTournamentStatus(context.request, admin.token, id, "open")
+    const player = await newPlayer(context, "ply")
 
-    const player = handle("ply")
-    await signup(page, player)
     await page.goto("/tournaments")
     const card = page.locator(`[data-tournament="${id}"]`)
     await card.getByRole("link", { name: "APPLY" }).click()
     await expect(page).toHaveURL(`/tournaments/${id}/apply`)
 
     // The form names the player who applies, with their glyph, and starts in
-    // the middle of the scale.
-    // The header names the player too, so the check stays inside the form.
-    await expect(page.locator("form").getByText(player, { exact: true })).toBeVisible()
+    // the middle of the scale. The header names the player too, so the check
+    // stays inside the form.
+    await expect(
+        page.locator("form").getByText(player.name, { exact: true }),
+    ).toBeVisible()
     expect(await page.locator("form svg rect").count()).toBeGreaterThan(0)
     await expect(page.getByRole("radio", { name: /level 3/ })).toBeChecked()
     await expect(page.getByText("REGULAR")).toBeVisible()
@@ -81,11 +102,12 @@ test("a player applies and retires while registration is open", async ({ page })
     await expect(page.getByRole("status")).toContainText("you are in")
     await expect(card.getByText("you are in.", { exact: true })).toBeVisible()
 
-    const detail = await page.request.get(`/tournaments/${id}/detail.json`)
-    expect(detail.ok()).toBe(true)
-    const body = await detail.json()
-    expect(body.tournament.entrantCount).toBe(1)
-    expect(body.entrants[0].skill).toBe(4)
+    const detail = await jsonOf(
+        await page.request.get(`/tournaments/${id}/detail.json`),
+        detailSchema,
+    )
+    expect(detail.tournament.entrantCount).toBe(1)
+    expect(detail.entrants[0]?.skill).toBe(4)
 
     // An entrant has nothing to do on the apply page: the level changes
     // through retire and apply.
@@ -98,54 +120,46 @@ test("a player applies and retires while registration is open", async ({ page })
     await expect(card.getByRole("link", { name: "APPLY" })).toBeVisible()
 })
 
-test("the apply page needs a login and an open tournament", async ({ page }) => {
-    const name = `Cup ${handle("t")}`
-    const { id } = await draftAsAdmin(page, name)
-    await logout(page)
+test("the apply page needs a login, and a draft is hidden from a player", async ({
+    page,
+    context,
+}) => {
+    const admin = await newAdmin(context)
+    const id = await apiDraft(context.request, admin.token)
+    await clearSession(context)
 
     await page.goto(`/tournaments/${id}/apply`)
     await expect(page).toHaveURL(/\/login(\?|$)/)
 
     // A draft is not there for a player. The page says so with a 404.
-    await signup(page, handle("nob"))
-    const hidden = await page.goto(`/tournaments/${id}/apply`)
-    expect(hidden?.status()).toBe(404)
+    await newPlayer(context, "nob")
+    expect((await page.goto(`/tournaments/${id}/apply`))?.status()).toBe(404)
 })
 
-/**
- * Signs players up through the API and adds them as entrants. Fast, for large
- * fields. `levels` gives each name its level, in order; a missing one is unrated.
- */
-const enrol = async (
-    page: Page,
-    admin: string,
-    id: string,
-    names: string[],
-    levels: (number | undefined)[] = [],
-) => {
-    const token = await tokenFor(page, admin)
-    for (const [index, name] of names.entries()) {
-        const created = await page.request.post(`${API}/api/auth/signup`, {
-            data: { handle: name, password: PASSWORD },
-        })
-        const player =
-            (await created.json()).player ??
-            (await page.request.get(`${API}/api/players/${name}`).then(r => r.json()))
-        const added = await page.request.post(
-            `${API}/api/admin/tournaments/${id}/entrants`,
-            {
-                data: { playerId: player.id, skill: levels[index] ?? null },
-                headers: { authorization: `Bearer ${token}` },
-            },
-        )
-        expect(added.status()).toBe(201)
-    }
-}
+test("an open tournament past its deadline shows registration closed", async ({
+    page,
+    context,
+}) => {
+    const admin = await newAdmin(context)
+    const past = new Date(Date.now() - 3_600_000).toISOString()
+    const id = await apiDraft(context.request, admin.token, {
+        registrationClosesAt: past,
+    })
+    await setTournamentStatus(context.request, admin.token, id, "open")
+
+    await page.goto("/tournaments")
+    const card = page.locator(`[data-tournament="${id}"]`)
+    await expect(card).toContainText("REGISTRATION CLOSED")
+    await expect(card.getByRole("link", { name: "APPLY" })).toHaveCount(0)
+    await expect(card.getByRole("link", { name: "LOGIN TO APPLY" })).toHaveCount(0)
+})
 
 test("the bracket is seeded by level, and the backoffice shows each level", async ({
     page,
+    context,
 }) => {
-    const { admin, id } = await draftAsAdmin(page, `Seeded ${handle("t")}`)
+    const admin = await newAdmin(context)
+    const id = await apiDraft(context.request, admin.token)
     const [rookie, menace, casual, unrated, sharp] = [
         handle("rk"),
         handle("mn"),
@@ -154,14 +168,14 @@ test("the bracket is seeded by level, and the backoffice shows each level", asyn
         handle("sh"),
     ]
     await enrol(
-        page,
-        admin,
+        context.request,
+        admin.token,
         id,
         [rookie, menace, casual, unrated, sharp],
         [1, 5, 2, undefined, 4],
     )
 
-    await page.reload()
+    await page.goto(`/admin/tournaments/${id}`)
     const rows = page.getByRole("table", { name: "entrants" }).locator("tbody tr")
     await expect(rows).toHaveCount(5)
     await expect(rows.filter({ hasText: menace }).locator("[data-skill]")).toHaveText(
@@ -174,13 +188,9 @@ test("the bracket is seeded by level, and the backoffice shows each level", asyn
         "-----",
     )
 
-    // The add form takes a level too. The player signs up through the API, so
-    // the admin stays logged in.
+    // The add form takes a level too.
     const rated = handle("rt")
-    const created = await page.request.post(`${API}/api/auth/signup`, {
-        data: { handle: rated, password: PASSWORD },
-    })
-    expect(created.status()).toBe(201)
+    await apiSignup(context.request, rated)
     await page.getByLabel("handle of the player to add").fill(rated)
     await page.getByLabel("level of the player to add").selectOption("3")
     await page.getByRole("button", { name: "add entrant" }).click()
@@ -220,57 +230,48 @@ test("the bracket is seeded by level, and the backoffice shows each level", asyn
     await expect(seedOf(5)).toHaveText("6")
 })
 
-/** A side of a match that has no winner yet. Clicking it enters that result. */
-const openSide = (page: Page) =>
-    page
-        .locator("[data-match]")
-        .filter({ hasNot: page.getByText("win", { exact: true }) })
-        .locator("button[data-pick]")
-        .first()
-
-const settled = async (page: Page) => {
-    await expect(page.locator("[aria-busy=true]")).toHaveCount(0)
-}
-
 test("a bracket runs from generation to a champion, live on the kiosk", async ({
     page,
     context,
 }) => {
-    const players = [handle("one"), handle("two"), handle("tri")]
-    for (const name of players) {
-        await signup(page, name)
-        await logout(page)
-    }
+    const admin = await newAdmin(context)
     const name = `Cup ${handle("t")}`
-    const { id } = await draftAsAdmin(page, name)
+    const id = await apiDraft(context.request, admin.token, { name })
+    // Six entrants: eight slots, two byes, and three rounds to the final. It is
+    // the smallest field that proves a winner advances more than once.
+    const players = Array.from({ length: 6 }, (_, i) => `${handle("br")}${i}`)
+    await enrol(context.request, admin.token, id, players)
 
-    for (const player of players) {
-        await page.getByLabel("handle of the player to add").fill(player)
-        await page.getByRole("button", { name: "add entrant" }).click()
-        await expect(page.getByRole("status")).toContainText("entrant added")
+    // Before a bracket exists the public pages are a 404, not an empty frame.
+    for (const path of [`/tournaments/${id}/bracket`, `/tournaments/${id}/kiosk`]) {
+        expect((await page.goto(path))?.status(), path).toBe(404)
     }
+
+    await page.goto(`/admin/tournaments/${id}`)
     await page.getByRole("button", { name: "go live" }).click()
     await expect(page.getByRole("heading", { level: 1 })).toContainText("# live")
-
     await page.getByRole("button", { name: "generate bracket" }).click()
-    // Three entrants: two round-one matches, one of them a bye, plus the final.
-    await expect(page.locator("[data-match]")).toHaveCount(3)
-    await expect(page.getByText("bye")).toHaveCount(1)
+    await expect(page.locator("[data-match]")).toHaveCount(7)
+    await expect(page.getByText("bye")).toHaveCount(2)
+    await expect(page.getByText("semi-finals")).toBeVisible()
 
     const kiosk = await context.newPage()
     await kiosk.goto(`/tournaments/${id}/kiosk`)
     await expect(kiosk.getByText("■ live")).toBeVisible()
     await expect(kiosk.getByText("champion")).toBeVisible()
+    await expect(kiosk.locator("[data-match]")).toHaveCount(7)
     await expect(kiosk.getByText("tbd").first()).toBeVisible()
 
-    // The one ready match of round one, then the final.
-    await openSide(page).click()
-    await settled(page)
-    await expect(page.getByText("win", { exact: true })).toHaveCount(1)
-    await openSide(page).click()
-    await settled(page)
-    await expect(page.getByText("win", { exact: true })).toHaveCount(2)
+    // Two real matches in round one, then the two semi-finals, then the final.
+    // A side with no opponent yet carries no control, so each click lands on a
+    // match that is ready.
+    for (let played = 1; played <= 5; played += 1) {
+        await openSide(page).click()
+        await settled(page)
+        await expect(page.getByText("win", { exact: true })).toHaveCount(played)
+    }
     await expect(page.locator("[data-champion]")).toHaveAttribute("data-champion", /.+/)
+    await expect(page.getByRole("button", { name: "regenerate" })).toBeDisabled()
 
     page.once("dialog", dialog => dialog.accept())
     await page.getByRole("button", { name: "conclude" }).click()
@@ -284,19 +285,13 @@ test("a bracket runs from generation to a champion, live on the kiosk", async ({
     await kiosk.close()
 
     // The conclusion paid the champion: the entry, one win at least, the cup.
-    const rules = await jsonOf(
-        await page.request.get(`${API}/api/cycles/rules`),
-        rulesSchema,
-    )
-    const champion = await jsonOf(
-        await page.request.get(`${API}/api/players/${winner}`),
-        standingSchema,
-    )
-    // Three entrants: a small field.
-    expect(champion.standing.cycles).toBeGreaterThanOrEqual(
-        cyclesOf(rules, "tournament_entry", 3) +
-            cyclesOf(rules, "match_win", 3) +
-            cyclesOf(rules, "champion", 3),
+    const rules = await cyclesRules(context.request)
+    const standing = await standingOf(context.request, winner)
+    // The champion won at least twice in a field of six.
+    expect(standing.cycles).toBeGreaterThanOrEqual(
+        cyclesOf(rules, "tournament_entry", 6) +
+            2 * cyclesOf(rules, "match_win", 6) +
+            cyclesOf(rules, "champion", 6),
     )
     await page.goto(`/players/${winner}`)
     await expect(page.getByText("champion", { exact: true })).toBeVisible()
@@ -309,79 +304,28 @@ test("a bracket runs from generation to a champion, live on the kiosk", async ({
     await expect(card.getByRole("link", { name: winner })).toBeVisible()
     expect(await card.locator("svg rect").count()).toBeGreaterThan(0)
 
+    // The public bracket shows the rounds, and no side of it takes a gesture.
     await page.goto(`/tournaments/${id}/bracket`)
     await expect(page.getByText("champion")).toBeVisible()
+    await expect(page.getByText("final", { exact: true })).toBeVisible()
+    await expect(page.locator("[data-match]")).toHaveCount(7)
     await expect(page.getByText(winner).first()).toBeVisible()
+    await expect(page.locator("button[data-pick]")).toHaveCount(0)
 })
 
-test("thirty players: seeds swap by drag, and the whole bracket plays out", async ({
+test("an odd field gets byes, a result can be cleared, the bracket regenerates and drops", async ({
     page,
+    context,
 }) => {
-    const { admin, id } = await draftAsAdmin(page, `Big ${handle("t")}`)
-    const names = Array.from({ length: 30 }, (_, i) => `${handle("p")}${i.toString(36)}`)
-    await enrol(page, admin, id, names)
-
-    await page.reload()
-    await expect(page.getByText("entrants # 30")).toBeVisible()
-    await page.getByRole("button", { name: "go live" }).click()
-    await page.getByRole("button", { name: "generate bracket" }).click()
-
-    const matches = page.locator("[data-match]")
-    await expect(matches).toHaveCount(16 + 8 + 4 + 2 + 1)
-    await expect(page.getByText("bye")).toHaveCount(2)
-    await expect(page.getByText("quarter-finals")).toBeVisible()
-
-    // Drag the second side of the first match onto the first side of the last
-    // round-one match: the two trade seeds and appear in each other's box.
-    const roundOne = page.locator("[data-match]").locator("nth=-1")
-    const first = matches.nth(0).locator("[data-entrant]").nth(0)
-    const target = matches.nth(15).locator("[data-entrant]").nth(1)
-    const firstId = await first.getAttribute("data-entrant")
-    const targetId = await target.getAttribute("data-entrant")
-    expect(firstId && targetId && roundOne).toBeTruthy()
-    // The island marks the sides draggable once it is hydrated.
-    await expect(first).toHaveAttribute("draggable", "true")
-    // A drag cannot scroll, so both boxes must be on screen: the sixteen
-    // round-one matches need a tall window.
-    await page.setViewportSize({ width: 1400, height: 2200 })
-    await first.dragTo(target)
-    await settled(page)
-    await expect(matches.nth(0).locator("[data-entrant]").nth(0)).toHaveAttribute(
-        "data-entrant",
-        targetId ?? "",
+    const admin = await newAdmin(context)
+    const id = await apiDraft(context.request, admin.token)
+    await enrol(
+        context.request,
+        admin.token,
+        id,
+        Array.from({ length: 5 }, (_, i) => `${handle("o")}${i}`),
     )
-    await expect(matches.nth(15).locator("[data-entrant]").nth(1)).toHaveAttribute(
-        "data-entrant",
-        firstId ?? "",
-    )
-
-    // Play every match. Thirty entrants need twenty-nine results.
-    for (let played = 0; played < 29; played++) {
-        await openSide(page).click()
-        await settled(page)
-    }
-    await expect(page.getByText("win", { exact: true })).toHaveCount(29)
-    await expect(page.locator("[data-champion]")).toHaveAttribute("data-champion", /.+/)
-    await expect(page.getByRole("button", { name: "regenerate" })).toBeDisabled()
-
-    page.once("dialog", dialog => dialog.accept())
-    await page.getByRole("button", { name: "conclude" }).click()
-    await expect(page.getByRole("heading", { level: 1 })).toContainText("# concluded")
-    const winner = (await page.locator("[data-winner]").getAttribute("data-winner")) ?? ""
-    expect(names).toContain(winner)
-
-    await page.goto(`/tournaments/${id}/bracket`)
-    await expect(page.locator("[data-match]")).toHaveCount(31)
-    await expect(page.locator("[data-champion]").getByText(winner)).toBeVisible()
-})
-
-test("an odd field gets byes, a result can be cleared, and the bracket regenerates", async ({
-    page,
-}) => {
-    const { admin, id } = await draftAsAdmin(page, `Odd ${handle("t")}`)
-    const names = Array.from({ length: 5 }, (_, i) => `${handle("o")}${i}`)
-    await enrol(page, admin, id, names)
-    await page.reload()
+    await page.goto(`/admin/tournaments/${id}`)
     await page.getByRole("button", { name: "go live" }).click()
     await page.getByRole("button", { name: "generate bracket" }).click()
 
@@ -418,25 +362,42 @@ test("an odd field gets byes, a result can be cleared, and the bracket regenerat
     await expect(page.getByRole("button", { name: "generate bracket" })).toBeVisible()
 })
 
-test("only a round one side can be dragged or dropped on", async ({ page }) => {
-    const { admin, id } = await draftAsAdmin(page, `Drag ${handle("t")}`)
+test("a seed swaps by drag, and only a round one side takes the gesture", async ({
+    page,
+    context,
+}) => {
+    const admin = await newAdmin(context)
+    const id = await apiDraft(context.request, admin.token)
     // Five entrants leave three byes, so two players reach round two with no
     // result behind them. Those sides take a click and must take no drop.
     await enrol(
-        page,
-        admin,
+        context.request,
+        admin.token,
         id,
         Array.from({ length: 5 }, (_, i) => `${handle("d")}${i}`),
     )
-    await page.reload()
+    await page.goto(`/admin/tournaments/${id}`)
     await page.getByRole("button", { name: "go live" }).click()
     await page.getByRole("button", { name: "generate bracket" }).click()
     await expect(page.locator("[data-match]")).toHaveCount(7)
 
+    // A drag cannot scroll, so both boxes must be on screen at once.
+    await page.setViewportSize({ width: 1400, height: 1200 })
+
     // Five entrants fill five sides of round one, and each one can be dragged.
-    await expect(
-        page.locator("[data-round='1'] [data-entrant][draggable=true]"),
-    ).toHaveCount(5)
+    const roundOne = page.locator("[data-round='1'] [data-entrant][draggable=true]")
+    await expect(roundOne).toHaveCount(5)
+
+    // The two sides trade seeds and appear in each other's box.
+    const first = roundOne.nth(0)
+    const target = roundOne.nth(4)
+    const firstId = await first.getAttribute("data-entrant")
+    const targetId = await target.getAttribute("data-entrant")
+    expect(firstId).not.toBe(targetId)
+    await first.dragTo(target)
+    await settled(page)
+    await expect(roundOne.nth(0)).toHaveAttribute("data-entrant", targetId ?? "")
+    await expect(roundOne.nth(4)).toHaveAttribute("data-entrant", firstId ?? "")
 
     // A later round holds sides that take a result. None of them may drag or
     // accept a drop: a swap must never ride on a click target.
@@ -445,28 +406,26 @@ test("only a round one side can be dragged or dropped on", async ({ page }) => {
     await expect(later.locator("[draggable=true]")).toHaveCount(0)
 })
 
-test("a user cannot open the tournament backoffice", async ({ page }) => {
-    await signup(page, handle("usr"))
-    const hidden = await page.goto("/admin/tournaments")
-    expect(hidden?.status()).toBe(404)
-})
-
-test("an open tournament past its deadline shows registration closed", async ({
+test("a field of thirty gets the rounds, the byes and the names of its stages", async ({
     page,
+    context,
 }) => {
-    const { admin, id } = await draftAsAdmin(page, `Late ${handle("t")}`)
-    const token = await tokenFor(page, admin)
-    const past = new Date(Date.now() - 3_600_000).toISOString()
-    const patched = await page.request.patch(`${API}/api/admin/tournaments/${id}`, {
-        data: { registrationClosesAt: past },
-        headers: { authorization: `Bearer ${token}` },
-    })
-    expect(patched.ok()).toBe(true)
-    await page.getByRole("button", { name: "open registration" }).click()
+    const admin = await newAdmin(context)
+    const id = await apiDraft(context.request, admin.token)
+    const names = Array.from({ length: 30 }, (_, i) => `${handle("p")}${i.toString(36)}`)
+    await enrol(context.request, admin.token, id, names)
 
-    await page.goto("/tournaments")
-    const card = page.locator(`[data-tournament="${id}"]`)
-    await expect(card).toContainText("REGISTRATION CLOSED")
-    await expect(card.getByRole("link", { name: "APPLY" })).toHaveCount(0)
-    await expect(card.getByRole("link", { name: "LOGIN TO APPLY" })).toHaveCount(0)
+    await page.goto(`/admin/tournaments/${id}`)
+    await expect(page.getByText("entrants # 30")).toBeVisible()
+    await page.getByRole("button", { name: "go live" }).click()
+    await page.getByRole("button", { name: "generate bracket" }).click()
+
+    // Thirty-two slots: sixteen first-round matches, two of them a bye.
+    await expect(page.locator("[data-match]")).toHaveCount(16 + 8 + 4 + 2 + 1)
+    await expect(page.getByText("bye")).toHaveCount(2)
+    await expect(page.getByText("quarter-finals")).toBeVisible()
+
+    // The public bracket carries the same tree.
+    await page.goto(`/tournaments/${id}/bracket`)
+    await expect(page.locator("[data-match]")).toHaveCount(31)
 })

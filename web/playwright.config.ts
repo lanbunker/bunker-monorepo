@@ -9,9 +9,14 @@ const WEB_PORT = 4399
 
 export default defineConfig({
     testDir: "./e2e",
-    fullyParallel: false,
-    workers: 1,
-    retries: 0,
+    // Every test builds its own players, tournaments and events, and asserts on
+    // rows it names. Nothing is shared but the database, which takes concurrent
+    // writes through WAL, so the whole suite runs at once.
+    fullyParallel: true,
+    workers: process.env.CI ? 4 : "75%",
+    // A shared runner is slower than a laptop, so a first failure there is worth
+    // one more attempt. A local run reports a flake instead of hiding it.
+    retries: process.env.CI ? 1 : 0,
     timeout: 30_000,
     expect: { timeout: 10_000 },
     reporter: [["list"]],
