@@ -288,6 +288,12 @@ impl TestApi {
         self.send(json_request(Method::POST, path, body)).await
     }
 
+    /// The pool behind the router, for a test that must write a row the API
+    /// refuses to write, such as a status no transition reaches.
+    pub fn pool(&self) -> &bunker_api::storage::DbPool {
+        self.pool.as_ref().expect("this test needs a database")
+    }
+
     /// For a request that the typed helpers cannot make: a wrong method, an absent
     /// header or a bad body.
     pub async fn send(&self, request: Request<Body>) -> Response {

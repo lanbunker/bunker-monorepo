@@ -23,11 +23,11 @@ use crate::routers::{
     health_router, openapi_router, player_router, tournament_router,
 };
 use crate::services::{
-    AuthService, ErrorCode, EventService, PasswordHasher, PlayerService, PointsService,
-    TokenIssuer, TournamentService,
+    AuthService, ErrorCode, EventService, MatchService, PasswordHasher, PlayerService,
+    PointsService, TokenIssuer, TournamentService,
 };
 use crate::storage::{
-    DbPool, EventStorage, PlayerStorage, PointStorage, TournamentStorage, connect,
+    DbPool, EventStorage, MatchStorage, PlayerStorage, PointStorage, TournamentStorage, connect,
     run_pending_migrations,
 };
 
@@ -62,6 +62,7 @@ pub fn build_router(pool: DbPool, config: AppConfig, secrets: &Secrets) -> Route
         auth: AuthService::new(players.clone(), tokens, hasher),
         events: EventService::new(EventStorage::new(pool.clone()), players.clone()),
         tournaments: TournamentService::new(TournamentStorage::new(pool.clone()), players.clone()),
+        matches: MatchService::new(MatchStorage::new(pool.clone()), players.clone()),
         points: PointsService::new(PointStorage::new(pool), players.clone()),
         players: PlayerService::new(players),
     };

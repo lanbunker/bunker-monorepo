@@ -1,5 +1,7 @@
 ---
 import CyclesPanel from "../../components/CyclesPanel.astro"
+import MatchPanel from "../../components/MatchPanel.astro"
+import NemesisPanel from "../../components/NemesisPanel.astro"
 import PlayerCard from "../../components/PlayerCard.astro"
 import StandingPanels from "../../components/StandingPanels.astro"
 import Alert from "../../components/ui/Alert.astro"
@@ -10,10 +12,15 @@ import { call, dataOf, failureOf, isMissing } from "../../lib/api"
 import { RECENT_ENTRIES } from "../../lib/paging"
 
 const handle = Astro.params.handle ?? ""
-const [result, logResult] = await Promise.all([
+const [result, logResult, matchResult] = await Promise.all([
   call(client => client.GET("/api/players/{handle}", { params: { path: { handle } } })),
   call(client =>
     client.GET("/api/players/{handle}/cycles", {
+      params: { path: { handle }, query: { page: 1, pageSize: RECENT_ENTRIES } },
+    }),
+  ),
+  call(client =>
+    client.GET("/api/players/{handle}/matches", {
       params: { path: { handle }, query: { page: 1, pageSize: RECENT_ENTRIES } },
     }),
   ),
@@ -23,6 +30,7 @@ if (failure && isMissing(failure)) return Astro.rewrite("/404")
 
 const player = dataOf(result)
 const log = dataOf(logResult)
+const matches = dataOf(matchResult)
 const own = player !== undefined && Astro.locals.player?.id === player.id
 ---
 
@@ -33,7 +41,11 @@ const own = player !== undefined && Astro.locals.player?.id === player.id
     <>
       <PlayerCard player={player} own={own} />
       <StandingPanels standing={player.standing} totals={log?.totals} />
+      {matches?.nemesis && (
+        <NemesisPanel handle={handle} nemesis={matches.nemesis} own={own} />
+      )}
 
+      <MatchPanel handle={handle} log={matches} own={own} />
       <CyclesPanel handle={handle} log={log} own={own} />
     </>
   ) : (

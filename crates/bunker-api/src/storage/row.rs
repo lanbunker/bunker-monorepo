@@ -2,12 +2,17 @@
 //! value points at the place to look.
 
 use bunker_models::{Glyph, GlyphBits, GlyphColor, Handle, Player, PlayerId, Standing};
-use time::OffsetDateTime;
+use time::macros::format_description;
+use time::{Date, OffsetDateTime};
 use uuid::Uuid;
 
 use super::error::StorageError;
 
 const PLAYERS: &str = "players";
+
+/// A date column holds an ISO day. This is the one place that spells the format.
+pub(super) const DAY: &[time::format_description::BorrowedFormatItem<'_>] =
+    format_description!("[year]-[month]-[day]");
 
 /// A column value that the domain refuses and that has no error type of its own.
 #[derive(Debug, thiserror::Error)]
@@ -28,6 +33,10 @@ pub(super) fn from_micros(
         .map_err(|error| StorageError::malformed_row(table, error))
 }
 
+pub(super) fn parse_day(table: &'static str, raw: &str) -> Result<Date, StorageError> {
+    Date::parse(raw, DAY).map_err(|error| StorageError::malformed_row(table, error))
+}
+
 pub(super) fn parse_uuid(table: &'static str, raw: &str) -> Result<Uuid, StorageError> {
     Uuid::parse_str(raw).map_err(|error| StorageError::malformed_row(table, error))
 }
@@ -46,6 +55,67 @@ pub(super) struct PlayerRow {
     pub(super) cycles: i64,
     pub(super) place: i64,
     pub(super) players: i64,
+}
+
+/// The player columns of a left join, before they are a player. A query that
+/// reads an optional player selects the same nine columns as [`PlayerRow`],
+/// each one nullable.
+#[derive(Debug)]
+pub(super) struct OptionalPlayerRow {
+    pub(super) id: Option<String>,
+    pub(super) handle: Option<String>,
+    pub(super) glyph_bits: Option<i64>,
+    pub(super) glyph_color: Option<String>,
+    pub(super) role: Option<String>,
+    pub(super) created_at: Option<i64>,
+    pub(super) cycles: Option<i64>,
+    pub(super) place: Option<i64>,
+    pub(super) players: Option<i64>,
+}
+
+impl OptionalPlayerRow {
+    /// The columns are all present or all absent: they come from one left join.
+    /// A mix means the join broke, and that is a malformed row of `table`.
+    pub(super) fn into_player(self, table: &'static str) -> Result<Option<Player>, StorageError> {
+        match (
+            self.id,
+            self.handle,
+            self.glyph_bits,
+            self.glyph_color,
+            self.role,
+            self.created_at,
+            self.cycles,
+            self.place,
+            self.players,
+        ) {
+            (
+                Some(id),
+                Some(handle),
+                Some(glyph_bits),
+                Some(glyph_color),
+                Some(role),
+                Some(created_at),
+                Some(cycles),
+                Some(place),
+                Some(players),
+            ) => Ok(Some(
+                PlayerRow {
+                    id,
+                    handle,
+                    glyph_bits,
+                    glyph_color,
+                    role,
+                    created_at,
+                    cycles,
+                    place,
+                    players,
+                }
+                .try_into()?,
+            )),
+            (None, None, None, None, None, None, None, None, None) => Ok(None),
+            _ => Err(StorageError::malformed_row(table, MalformedField("player"))),
+        }
+    }
 }
 
 impl TryFrom<PlayerRow> for Player {

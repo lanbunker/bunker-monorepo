@@ -2989,6 +2989,79 @@
         }
       }
     },
+    "/api/players/{handle}/matches": {
+      "get": {
+        "tags": [
+          "players"
+        ],
+        "operationId": "match_log",
+        "parameters": [
+          {
+            "name": "handle",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Handle"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 1,
+              "minimum": 1
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Newest first, with the record and the nemesis",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MatchLog"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/tournaments": {
       "get": {
         "tags": [
@@ -4036,6 +4109,54 @@
         "type": "string",
         "format": "uuid"
       },
+      "MatchLog": {
+        "type": "object",
+        "description": "Answer of `GET /api/players/{handle}/matches`.",
+        "required": [
+          "record",
+          "matches"
+        ],
+        "properties": {
+          "matches": {
+            "$ref": "#/components/schemas/Paginated_PlayedMatch"
+          },
+          "nemesis": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Rivalry",
+                "description": "Absent until one opponent reaches [`NEMESIS_MIN_LOSSES`] wins over the\nplayer."
+              }
+            ]
+          },
+          "record": {
+            "$ref": "#/components/schemas/MatchRecord",
+            "description": "Over every played match, not only the page."
+          }
+        }
+      },
+      "MatchRecord": {
+        "type": "object",
+        "description": "Wins and losses over every played match. `Record` alone is the name of a\nbuilt-in type in TypeScript, and the site generates its types from this one.",
+        "required": [
+          "wins",
+          "losses"
+        ],
+        "properties": {
+          "losses": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "wins": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          }
+        }
+      },
       "MatchResult": {
         "type": "object",
         "description": "Body of `PUT /api/admin/tournaments/{id}/matches/{matchId}/result`.",
@@ -4179,6 +4300,103 @@
                 },
                 "status": {
                   "$ref": "#/components/schemas/EventStatus"
+                }
+              }
+            }
+          },
+          "page": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 1
+          },
+          "pageSize": {
+            "type": "integer",
+            "format": "int32",
+            "maximum": 100,
+            "minimum": 1
+          },
+          "total": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Every row that matches, ignoring the window.",
+            "minimum": 0
+          },
+          "totalPages": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          }
+        }
+      },
+      "Paginated_PlayedMatch": {
+        "type": "object",
+        "description": "One page of results, and the totals a client needs for a pager.",
+        "required": [
+          "items",
+          "total",
+          "page",
+          "pageSize",
+          "totalPages"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "description": "One played match from the view of the profile owner.",
+              "required": [
+                "id",
+                "tournamentId",
+                "tournamentName",
+                "game",
+                "date",
+                "round",
+                "rounds",
+                "won"
+              ],
+              "properties": {
+                "date": {
+                  "type": "string",
+                  "format": "date",
+                  "description": "The day of the tournament. A match carries no clock of its own."
+                },
+                "game": {
+                  "$ref": "#/components/schemas/GameName"
+                },
+                "id": {
+                  "$ref": "#/components/schemas/MatchId"
+                },
+                "opponent": {
+                  "oneOf": [
+                    {
+                      "type": "null"
+                    },
+                    {
+                      "$ref": "#/components/schemas/Player",
+                      "description": "Absent once the opponent deleted their account."
+                    }
+                  ]
+                },
+                "round": {
+                  "type": "integer",
+                  "format": "int32",
+                  "description": "1 is the first round.",
+                  "minimum": 0
+                },
+                "rounds": {
+                  "type": "integer",
+                  "format": "int32",
+                  "description": "How many rounds the bracket has, so a client can name the final.",
+                  "minimum": 0
+                },
+                "tournamentId": {
+                  "$ref": "#/components/schemas/TournamentId"
+                },
+                "tournamentName": {
+                  "$ref": "#/components/schemas/TournamentName"
+                },
+                "won": {
+                  "type": "boolean"
                 }
               }
             }
@@ -4523,6 +4741,65 @@
         },
         "additionalProperties": false
       },
+      "PlayedMatch": {
+        "type": "object",
+        "description": "One played match from the view of the profile owner.",
+        "required": [
+          "id",
+          "tournamentId",
+          "tournamentName",
+          "game",
+          "date",
+          "round",
+          "rounds",
+          "won"
+        ],
+        "properties": {
+          "date": {
+            "type": "string",
+            "format": "date",
+            "description": "The day of the tournament. A match carries no clock of its own."
+          },
+          "game": {
+            "$ref": "#/components/schemas/GameName"
+          },
+          "id": {
+            "$ref": "#/components/schemas/MatchId"
+          },
+          "opponent": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Player",
+                "description": "Absent once the opponent deleted their account."
+              }
+            ]
+          },
+          "round": {
+            "type": "integer",
+            "format": "int32",
+            "description": "1 is the first round.",
+            "minimum": 0
+          },
+          "rounds": {
+            "type": "integer",
+            "format": "int32",
+            "description": "How many rounds the bracket has, so a client can name the final.",
+            "minimum": 0
+          },
+          "tournamentId": {
+            "$ref": "#/components/schemas/TournamentId"
+          },
+          "tournamentName": {
+            "$ref": "#/components/schemas/TournamentName"
+          },
+          "won": {
+            "type": "boolean"
+          }
+        }
+      },
       "Player": {
         "type": "object",
         "description": "A player, as the API shows it to anyone. It holds no credential.",
@@ -4707,6 +4984,30 @@
             "items": {
               "$ref": "#/components/schemas/TournamentId"
             }
+          }
+        }
+      },
+      "Rivalry": {
+        "type": "object",
+        "description": "A head-to-head record against one opponent, from the view of the profile\nowner.",
+        "required": [
+          "opponent",
+          "wins",
+          "losses"
+        ],
+        "properties": {
+          "losses": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "opponent": {
+            "$ref": "#/components/schemas/Player"
+          },
+          "wins": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
           }
         }
       },

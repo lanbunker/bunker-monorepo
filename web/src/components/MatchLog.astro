@@ -1,0 +1,57 @@
+---
+import type { PlayedMatch } from "../lib/api"
+import { formatIsoDay } from "../lib/dates"
+import { matchRound } from "../lib/matches"
+import { LOG_LIST, LOG_ROW } from "../lib/styles"
+
+interface Props {
+  matches: PlayedMatch[]
+  /** The sentence for an empty log. */
+  empty?: string
+}
+
+const { matches, empty = "no matches yet." } = Astro.props
+---
+
+{matches.length === 0 ? (
+  <p class="m-0 text-xs text-mute">{empty}</p>
+) : (
+  <ol class={LOG_LIST} data-match-log>
+    {matches.map(match => (
+      <li class={LOG_ROW}>
+        <span
+          class:list={[
+            "text-right font-bold tabular-nums",
+            match.won ? "text-accent" : "text-alert",
+          ]}
+        >
+          {match.won ? "WIN" : "LOSS"}
+        </span>
+        <span class="min-w-0">
+          <span class="text-dim">vs</span>{" "}
+          {match.opponent ? (
+            <a
+              href={`/players/${match.opponent.handle}`}
+              class="text-bright no-underline hover:text-accent"
+            >
+              {match.opponent.handle}
+            </a>
+          ) : (
+            <span class="text-mute">[deleted]</span>
+          )}
+          <span class="text-dim">
+            {" // "}
+            <a
+              href={`/tournaments/${match.tournamentId}/bracket`}
+              class="text-dim no-underline hover:text-accent"
+            >
+              {match.tournamentName}
+            </a>
+          </span>{" "}
+          <span class="text-mute">{matchRound(match)}</span>
+        </span>
+        <span class="text-2xs text-mute tabular-nums">{formatIsoDay(match.date)}</span>
+      </li>
+    ))}
+  </ol>
+)}

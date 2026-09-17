@@ -13,6 +13,7 @@ mod handle;
 mod pagination;
 mod player;
 mod points;
+mod rivalry;
 mod role;
 mod schema;
 mod tournament;
@@ -45,6 +46,7 @@ pub use points::{
     Note, NoteError, PointEntry, PointEntryId, PointKind, Rank, RankRule, Standing, TierRule,
     UnknownPointKind, checkin_award, tournament_awards,
 };
+pub use rivalry::{MatchLog, MatchRecord, NEMESIS_MIN_LOSSES, PlayedMatch, Rivalry};
 pub use role::{Role, RoleUpdate, UnknownRole};
 pub use tournament::{
     DESCRIPTION_MAX_LEN, Description, DescriptionError, Entrant, EntrantAdd, EntrantId,

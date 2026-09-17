@@ -1,0 +1,47 @@
+---
+import type { MatchLog as Log } from "../lib/api"
+import { matchesPath, recordLine, winRate } from "../lib/matches"
+import { RECENT_ENTRIES } from "../lib/paging"
+import MatchLog from "./MatchLog.astro"
+import Button from "./ui/Button.astro"
+import Panel from "./ui/Panel.astro"
+import Prompt from "./ui/Prompt.astro"
+
+interface Props {
+  handle: string
+  /** The first page of the log, or nothing when the API did not answer. */
+  log: Log | undefined
+  /** The profile speaks to the player; a public page speaks about them. */
+  own?: boolean
+}
+
+const { handle, log, own = false } = Astro.props
+const record = log?.record
+const rate = record ? winRate(record) : undefined
+const comment =
+  record && rate !== undefined
+    ? `record ${recordLine(record)} // ${rate}% win rate`
+    : undefined
+---
+
+<Prompt
+  command={`tail -n ${RECENT_ENTRIES} ${matchesPath(handle, own)}`}
+  comment={comment}
+/>
+<Panel>
+  {log ? (
+    <MatchLog
+      matches={log.matches.items}
+      empty={own ? "no matches yet. enter a tournament." : "no matches yet."}
+    />
+  ) : (
+    <p class="m-0 text-xs text-alert">the match log is unreachable.</p>
+  )}
+  {log && log.matches.total > RECENT_ENTRIES && (
+    <div class="mt-4">
+      <Button href={`/players/${handle}/matches`} variant="ghost" size="sm">
+        FULL LOG ({log.matches.total}) →
+      </Button>
+    </div>
+  )}
+</Panel>

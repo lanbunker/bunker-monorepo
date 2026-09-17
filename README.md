@@ -109,6 +109,7 @@ or `test`.
 | GET | `/api/players` | none | the leaderboard, first place first. `?page=1&pageSize=20`, pageSize up to 100 |
 | GET | `/api/players/{handle}` | none | one player, with cycles, rank and place |
 | GET | `/api/players/{handle}/cycles` | none | the cycles log, newest first, with the totals by kind |
+| GET | `/api/players/{handle}/matches` | none | the match log, newest first, with the record and the nemesis |
 | GET | `/api/cycles/rules` | none | how cycles are earned, and the ladder |
 | GET | `/api/admin/players` | admin | every player, newest first, same paging as `/api/players` |
 | POST | `/api/admin/players/{id}/cycles` | admin | add or take cycles, with a note |
@@ -208,6 +209,28 @@ decides the winner. Without one, the admin names the winner among the entrants,
 or nobody.
 
 Matches point at entrants and not at players, so a team can enter one day.
+
+### Nemesis
+
+The public profile and the private profile show a match log, and name the
+opponent who beats the player the most. A view, `player_matches`, holds every
+played match two times, one row per side, with the day of its tournament. A bye
+is not a match, and only a `live` or a `concluded` tournament is in the view.
+Every read goes to the bracket rows, so a corrected result changes the answer at
+once.
+
+One opponent must win at least two matches against the player before the site
+names them. A tie on the count goes to the opponent whose last win is the more
+recent. Recency is the day of the tournament, and then its creation instant for
+two tournaments on one day. The handle breaks a full tie, so two reads answer
+the same name. An opponent who deleted their account stays in the log without a
+link, and never holds the title: the next opponent takes it.
+
+`player_matches` is the join point a casual match extends, with a table of its
+own and a `union all` branch in the view. The record and the nemesis read the
+view alone and need no other change. The log also joins `tournaments` for the
+name and the game, and counts the rounds of the bracket, so a match outside a
+tournament needs those two columns to come from the branch itself.
 
 ## Cycles
 

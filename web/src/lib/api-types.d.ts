@@ -484,6 +484,22 @@ export interface paths {
         patch?: never
         trace?: never
     }
+    "/api/players/{handle}/matches": {
+        parameters: {
+            query?: never
+            header?: never
+            path?: never
+            cookie?: never
+        }
+        get: operations["match_log"]
+        put?: never
+        post?: never
+        delete?: never
+        options?: never
+        head?: never
+        patch?: never
+        trace?: never
+    }
     "/api/tournaments": {
         parameters: {
             query?: never
@@ -878,6 +894,23 @@ export interface components {
         }
         /** Format: uuid */
         MatchId: string
+        /** @description Answer of `GET /api/players/{handle}/matches`. */
+        MatchLog: {
+            matches: components["schemas"]["Paginated_PlayedMatch"]
+            nemesis?: null | components["schemas"]["Rivalry"]
+            /** @description Over every played match, not only the page. */
+            record: components["schemas"]["MatchRecord"]
+        }
+        /**
+         * @description Wins and losses over every played match. `Record` alone is the name of a
+         *     built-in type in TypeScript, and the site generates its types from this one.
+         */
+        MatchRecord: {
+            /** Format: int32 */
+            losses: number
+            /** Format: int32 */
+            wins: number
+        }
         /** @description Body of `PUT /api/admin/tournaments/{id}/matches/{matchId}/result`. */
         MatchResult: {
             winner: components["schemas"]["EntrantId"]
@@ -923,6 +956,43 @@ export interface components {
                  */
                 startsAt: string
                 status: components["schemas"]["EventStatus"]
+            }[]
+            /** Format: int32 */
+            page: number
+            /** Format: int32 */
+            pageSize: number
+            /**
+             * Format: int64
+             * @description Every row that matches, ignoring the window.
+             */
+            total: number
+            /** Format: int64 */
+            totalPages: number
+        }
+        /** @description One page of results, and the totals a client needs for a pager. */
+        Paginated_PlayedMatch: {
+            items: {
+                /**
+                 * Format: date
+                 * @description The day of the tournament. A match carries no clock of its own.
+                 */
+                date: string
+                game: components["schemas"]["GameName"]
+                id: components["schemas"]["MatchId"]
+                opponent?: null | components["schemas"]["Player"]
+                /**
+                 * Format: int32
+                 * @description 1 is the first round.
+                 */
+                round: number
+                /**
+                 * Format: int32
+                 * @description How many rounds the bracket has, so a client can name the final.
+                 */
+                rounds: number
+                tournamentId: components["schemas"]["TournamentId"]
+                tournamentName: components["schemas"]["TournamentName"]
+                won: boolean
             }[]
             /** Format: int32 */
             page: number
@@ -1035,6 +1105,30 @@ export interface components {
             currentPassword: components["schemas"]["Password"]
             newPassword: components["schemas"]["Password"]
         }
+        /** @description One played match from the view of the profile owner. */
+        PlayedMatch: {
+            /**
+             * Format: date
+             * @description The day of the tournament. A match carries no clock of its own.
+             */
+            date: string
+            game: components["schemas"]["GameName"]
+            id: components["schemas"]["MatchId"]
+            opponent?: null | components["schemas"]["Player"]
+            /**
+             * Format: int32
+             * @description 1 is the first round.
+             */
+            round: number
+            /**
+             * Format: int32
+             * @description How many rounds the bracket has, so a client can name the final.
+             */
+            rounds: number
+            tournamentId: components["schemas"]["TournamentId"]
+            tournamentName: components["schemas"]["TournamentName"]
+            won: boolean
+        }
         /** @description A player, as the API shows it to anyone. It holds no credential. */
         Player: {
             /** Format: date-time */
@@ -1109,6 +1203,17 @@ export interface components {
          */
         Registrations: {
             tournaments: components["schemas"]["TournamentId"][]
+        }
+        /**
+         * @description A head-to-head record against one opponent, from the view of the profile
+         *     owner.
+         */
+        Rivalry: {
+            /** Format: int32 */
+            losses: number
+            opponent: components["schemas"]["Player"]
+            /** Format: int32 */
+            wins: number
         }
         /**
          * @description What a player may do. Admins reach the backoffice and manage players.
@@ -3342,6 +3447,47 @@ export interface operations {
                 }
                 content: {
                     "application/json": components["schemas"]["CyclesLog"]
+                }
+            }
+            400: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            404: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+        }
+    }
+    match_log: {
+        parameters: {
+            query?: {
+                page?: number
+                pageSize?: number
+            }
+            header?: never
+            path: {
+                handle: components["schemas"]["Handle"]
+            }
+            cookie?: never
+        }
+        requestBody?: never
+        responses: {
+            /** @description Newest first, with the record and the nemesis */
+            200: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["MatchLog"]
                 }
             }
             400: {

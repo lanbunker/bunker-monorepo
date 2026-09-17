@@ -1,15 +1,16 @@
 use bunker_models::{
     Award, Bracket, Description, Entrant, EntrantId, GameMode, GameName, Match, MatchId, PageQuery,
-    Paginated, Player, PlayerId, SkillLevel, Tournament, TournamentId, TournamentName,
-    TournamentStatus, TournamentUpdate,
+    Paginated, PlayerId, SkillLevel, Tournament, TournamentId, TournamentName, TournamentStatus,
+    TournamentUpdate,
 };
-use time::macros::format_description;
 use time::{Date, OffsetDateTime};
 
 use super::db::DbPool;
 use super::error::StorageError;
 use super::point_storage::{AwardSource, insert_awards};
-use super::row::{MalformedField, PlayerRow, from_micros, parse_uuid, to_micros};
+use super::row::{
+    DAY, MalformedField, OptionalPlayerRow, from_micros, parse_day, parse_uuid, to_micros,
+};
 
 const TOURNAMENTS: &str = "tournaments";
 const ENTRANTS: &str = "tournament_entrants";
@@ -17,10 +18,6 @@ const MATCHES: &str = "matches";
 
 /// The unique index on `(tournament_id, player_id)`, as SQLite names it.
 const ENTRANT_CONSTRAINT: &str = "tournament_entrants.tournament_id, tournament_entrants.player_id";
-
-/// The date column holds ISO days. This is the one place that spells the format.
-const DAY: &[time::format_description::BorrowedFormatItem<'_>] =
-    format_description!("[year]-[month]-[day]");
 
 #[derive(Debug, Clone)]
 pub struct NewTournamentRow {
@@ -567,20 +564,16 @@ fn skill_column(skill: SkillLevel) -> i64 {
     i64::from(skill.value())
 }
 
-fn parse_skill(raw: i64) -> Result<SkillLevel, StorageError> {
-    u8::try_from(raw)
-        .ok()
-        .and_then(|level| SkillLevel::try_new(level).ok())
-        .ok_or_else(|| StorageError::malformed_row(ENTRANTS, MalformedField("skill")))
-}
-
 fn format_day(date: Date) -> Result<String, StorageError> {
     date.format(DAY)
         .map_err(|error| StorageError::malformed_row(TOURNAMENTS, error))
 }
 
-fn parse_day(raw: &str) -> Result<Date, StorageError> {
-    Date::parse(raw, DAY).map_err(|error| StorageError::malformed_row(TOURNAMENTS, error))
+fn parse_skill(raw: i64) -> Result<SkillLevel, StorageError> {
+    u8::try_from(raw)
+        .ok()
+        .and_then(|level| SkillLevel::try_new(level).ok())
+        .ok_or_else(|| StorageError::malformed_row(ENTRANTS, MalformedField("skill")))
 }
 
 #[derive(Debug)]
@@ -647,7 +640,7 @@ impl TryFrom<TournamentRow> for Tournament {
                 .map_err(|e| StorageError::malformed_row(TOURNAMENTS, e))?,
             description: Description::try_new(row.description)
                 .map_err(|e| StorageError::malformed_row(TOURNAMENTS, e))?,
-            date: parse_day(&row.date)?,
+            date: parse_day(TOURNAMENTS, &row.date)?,
             registration_closes_at: from_micros(TOURNAMENTS, row.registration_closes_at)?,
             status: row
                 .status
@@ -683,51 +676,18 @@ impl TryFrom<EntrantRow> for Entrant {
     type Error = StorageError;
 
     fn try_from(row: EntrantRow) -> Result<Self, Self::Error> {
-        // The player columns are all present or all absent: they come from one
-        // left join. A mix means the join broke, and that is a malformed row.
-        let player: Option<Player> = match (
-            row.player_id,
-            row.handle,
-            row.glyph_bits,
-            row.glyph_color,
-            row.role,
-            row.player_created_at,
-            row.cycles,
-            row.place,
-            row.players,
-        ) {
-            (
-                Some(id),
-                Some(handle),
-                Some(glyph_bits),
-                Some(glyph_color),
-                Some(role),
-                Some(created_at),
-                Some(cycles),
-                Some(place),
-                Some(players),
-            ) => Some(
-                PlayerRow {
-                    id,
-                    handle,
-                    glyph_bits,
-                    glyph_color,
-                    role,
-                    created_at,
-                    cycles,
-                    place,
-                    players,
-                }
-                .try_into()?,
-            ),
-            (None, None, None, None, None, None, None, None, None) => None,
-            _ => {
-                return Err(StorageError::malformed_row(
-                    ENTRANTS,
-                    MalformedField("player"),
-                ));
-            }
-        };
+        let player = OptionalPlayerRow {
+            id: row.player_id,
+            handle: row.handle,
+            glyph_bits: row.glyph_bits,
+            glyph_color: row.glyph_color,
+            role: row.role,
+            created_at: row.player_created_at,
+            cycles: row.cycles,
+            place: row.place,
+            players: row.players,
+        }
+        .into_player(ENTRANTS)?;
         let seed = row
             .seed
             .map(u32::try_from)

@@ -259,19 +259,17 @@ export const setTournamentStatus = async (
 }
 
 /**
- * Signs the players up and adds them as entrants, all at the same time. A tie
- * on level is drawn at random, so the order of the adds decides nothing.
+ * Adds players that already have an account as entrants, all at the same time.
  * `levels` gives each name its level by index, and a missing one is unrated.
  */
-export const enrol = async (
+const addEntrants = async (
     request: APIRequestContext,
     token: string,
     id: string,
     names: string[],
     levels: (number | undefined)[] = [],
-) => {
-    await Promise.all(names.map(name => apiSignup(request, name)))
-    await Promise.all(
+) =>
+    Promise.all(
         names.map(async (name, index) => {
             const found = await jsonOf(
                 await request.get(`${API}/api/players/${name}`),
@@ -287,6 +285,74 @@ export const enrol = async (
             expect(added.status(), name).toBe(201)
         }),
     )
+
+/**
+ * Signs the players up and adds them as entrants, all at the same time. A tie
+ * on level is drawn at random, so the order of the adds decides nothing.
+ * `levels` gives each name its level by index, and a missing one is unrated.
+ */
+export const enrol = async (
+    request: APIRequestContext,
+    token: string,
+    id: string,
+    names: string[],
+    levels: (number | undefined)[] = [],
+) => {
+    await Promise.all(names.map(name => apiSignup(request, name)))
+    await addEntrants(request, token, id, names, levels)
+}
+
+const bracketSchema = z.object({
+    rounds: z.array(z.array(z.object({ id: z.string() }))),
+})
+
+const adminDetailSchema = z.object({
+    entrants: z.array(
+        z.object({
+            id: z.string(),
+            player: z.object({ handle: z.string() }).nullable(),
+        }),
+    ),
+})
+
+/**
+ * One live tournament on `date` where `winner` beats `loser`, through the API.
+ * Both accounts must exist. Two entrants make one match, so the result needs no
+ * walk of the bracket. Answers the tournament id.
+ */
+export const apiDuel = async (
+    request: APIRequestContext,
+    token: string,
+    winner: string,
+    loser: string,
+    date: string,
+): Promise<string> => {
+    const id = await apiDraft(request, token, { date })
+    await addEntrants(request, token, id, [winner, loser])
+    await setTournamentStatus(request, token, id, "live")
+
+    const generated = await request.post(`${API}/api/admin/tournaments/${id}/bracket`, {
+        data: {},
+        headers: bearer(token),
+    })
+    const bracket = await jsonOf(generated, bracketSchema)
+    const match = bracket.rounds[0]?.[0]
+    const detail = await jsonOf(
+        await request.get(`${API}/api/admin/tournaments/${id}`, {
+            headers: bearer(token),
+        }),
+        adminDetailSchema,
+    )
+    const side = detail.entrants.find(entrant => entrant.player?.handle === winner)
+    if (!match || !side) throw new Error(`no duel between ${winner} and ${loser}`)
+
+    const reported = await request.put(
+        `${API}/api/admin/tournaments/${id}/matches/${match.id}/result`,
+        { data: { winner: side.id }, headers: bearer(token) },
+    )
+    expect(reported.ok(), `${winner} wins`).toBe(true)
+
+    return id
 }
 
 /** The id of a player, read back by handle. */

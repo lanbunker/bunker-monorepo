@@ -3,6 +3,7 @@ import { expect, test } from "@playwright/test"
 import {
     adjustCycles,
     adminNamed,
+    apiDuel,
     apiSignup,
     clearSession,
     cyclesOf,
@@ -13,6 +14,7 @@ import {
     newPlayer,
     playerId,
     readableFailure,
+    setSession,
     signupMany,
 } from "./support"
 
@@ -304,4 +306,56 @@ test("a long log shows its last five lines and pages the rest", async ({
 
     await page.goto(`/players/${player.name}/cycles?page=9`)
     await expect(page).toHaveURL(/\/cycles\?page=2$/)
+})
+
+test("a match log names the opponent, and a second loss names the nemesis", async ({
+    page,
+    context,
+}) => {
+    const admin = await newAdmin(context, "nem")
+    const winner = handle("win")
+    const loser = handle("los")
+    await apiSignup(context.request, winner)
+    const loserToken = await apiSignup(context.request, loser)
+
+    await apiDuel(context.request, admin.token, winner, loser, "2026-03-01")
+
+    await clearSession(context)
+    await page.goto(`/players/${loser}`)
+    const rows = page.locator("[data-match-log] li")
+    await expect(rows).toHaveCount(1)
+    await expect(rows.first()).toContainText("LOSS")
+    await expect(rows.first()).toContainText("final")
+    await expect(rows.first().getByRole("link", { name: winner })).toBeVisible()
+    await expect(page.locator("[data-nemesis]")).toHaveCount(0)
+
+    // The same match, from the other side.
+    await page.goto(`/players/${winner}`)
+    await expect(page.locator("[data-match-log] li").first()).toContainText("WIN")
+    await expect(page.locator("[data-nemesis]")).toHaveCount(0)
+
+    await apiDuel(context.request, admin.token, winner, loser, "2026-03-02")
+
+    await page.goto(`/players/${loser}`)
+    const nemesis = page.locator(`[data-nemesis="${winner}"]`)
+    await expect(nemesis).toBeVisible()
+    await expect(nemesis).toContainText("0-2")
+    await expect(nemesis.getByRole("link", { name: winner })).toHaveAttribute(
+        "href",
+        `/players/${winner}`,
+    )
+
+    // The owner sees the same panel on their own profile.
+    await setSession(context, loserToken)
+    await page.goto("/profile")
+    await expect(page.locator(`[data-nemesis="${winner}"]`)).toBeVisible()
+    await expect(page.locator("[data-match-log] li")).toHaveCount(2)
+
+    // The whole log, newest first.
+    await page.goto(`/players/${loser}/matches`)
+    const all = page.locator("[data-match-log] li")
+    await expect(all).toHaveCount(2)
+    await expect(all.first()).toContainText("02 MAR 2026")
+    await expect(all.last()).toContainText("01 MAR 2026")
+    await expect(page.locator("[data-record]")).toHaveText("0-2")
 })

@@ -1,6 +1,8 @@
 ---
 import { actions } from "astro:actions"
 import CyclesPanel from "../components/CyclesPanel.astro"
+import MatchPanel from "../components/MatchPanel.astro"
+import NemesisPanel from "../components/NemesisPanel.astro"
 import PlayerCard from "../components/PlayerCard.astro"
 import StandingPanels from "../components/StandingPanels.astro"
 import Button from "../components/ui/Button.astro"
@@ -18,9 +20,9 @@ if (loggedOut && !loggedOut.error) return Astro.redirect("/login")
 const session = sessionOf(Astro.locals)
 if (!session) return Astro.redirect("/login")
 const player = session.player
-// The middleware read the player already. The log is the one extra call.
-const log = dataOf(
-  await call(client =>
+// The middleware read the player already. The two logs are the extra calls.
+const [logResult, matchResult] = await Promise.all([
+  call(client =>
     client.GET("/api/players/{handle}/cycles", {
       params: {
         path: { handle: player.handle },
@@ -28,7 +30,17 @@ const log = dataOf(
       },
     }),
   ),
-)
+  call(client =>
+    client.GET("/api/players/{handle}/matches", {
+      params: {
+        path: { handle: player.handle },
+        query: { page: 1, pageSize: RECENT_ENTRIES },
+      },
+    }),
+  ),
+])
+const log = dataOf(logResult)
+const matches = dataOf(matchResult)
 
 // `/password` and `/handle` redirect here after a change. An action result does
 // not survive a redirect, so the flag rides on the query string.
@@ -52,7 +64,11 @@ const notice =
 
   <PlayerCard player={player} own />
   <StandingPanels standing={player.standing} totals={log?.totals} />
+  {matches?.nemesis && (
+    <NemesisPanel handle={player.handle} nemesis={matches.nemesis} own />
+  )}
 
+  <MatchPanel handle={player.handle} log={matches} own />
   <CyclesPanel handle={player.handle} log={log} own />
 
   <div class="mt-6 flex flex-wrap items-center gap-3">

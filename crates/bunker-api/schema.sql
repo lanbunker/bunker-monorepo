@@ -46,6 +46,30 @@ CREATE TABLE matches (
     foreign key (tournament_id, winner) references tournament_entrants (tournament_id, id)
 ) strict;
 
+CREATE VIEW player_matches as
+select m.id         as match_id,
+       m.tournament_id,
+       t.date       as played_on,
+       t.created_at as tournament_created_at,
+       m.round,
+       m.slot,
+       a.player_id  as player_id,
+       b.player_id  as opponent_id,
+       (m.winner = m.entrant_a) as won
+from matches m
+join tournaments t         on t.id = m.tournament_id
+join tournament_entrants a on a.tournament_id = m.tournament_id and a.id = m.entrant_a
+join tournament_entrants b on b.tournament_id = m.tournament_id and b.id = m.entrant_b
+where m.winner is not null and t.status in ('live', 'concluded')
+union all
+select m.id, m.tournament_id, t.date, t.created_at, m.round, m.slot,
+       b.player_id, a.player_id, (m.winner = m.entrant_b)
+from matches m
+join tournaments t         on t.id = m.tournament_id
+join tournament_entrants a on a.tournament_id = m.tournament_id and a.id = m.entrant_a
+join tournament_entrants b on b.tournament_id = m.tournament_id and b.id = m.entrant_b
+where m.winner is not null and t.status in ('live', 'concluded');
+
 CREATE VIEW player_standings as
 select p.id as player_id,
        coalesce(sum(e.amount), 0) as cycles,

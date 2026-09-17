@@ -1,5 +1,5 @@
 ---
-type Tone = "default" | "accent" | "warn" | "muted"
+type Tone = "default" | "accent" | "warn" | "muted" | "alert"
 
 interface Props {
   tone?: Tone
@@ -13,6 +13,7 @@ const borderClass: Record<Tone, string> = {
   accent: "border-accent",
   warn: "border-warn",
   muted: "border-faint",
+  alert: "border-alert",
 }
 
 // A conditional slot still counts as present, so test the rendered output instead.

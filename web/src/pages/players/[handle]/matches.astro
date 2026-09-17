@@ -1,0 +1,80 @@
+---
+import MatchLog from "../../../components/MatchLog.astro"
+import Alert from "../../../components/ui/Alert.astro"
+import Button from "../../../components/ui/Button.astro"
+import Pager from "../../../components/ui/Pager.astro"
+import Panel from "../../../components/ui/Panel.astro"
+import Prompt from "../../../components/ui/Prompt.astro"
+import RankMark from "../../../components/ui/RankMark.astro"
+import Layout from "../../../layouts/Layout.astro"
+import { call, dataOf, failureOf, isMissing } from "../../../lib/api"
+import { recordLine, winRate } from "../../../lib/matches"
+import { PAGE_SIZE, pageFrom } from "../../../lib/paging"
+
+const handle = Astro.params.handle ?? ""
+const page = pageFrom(Astro.url)
+const [result, logResult] = await Promise.all([
+  call(client => client.GET("/api/players/{handle}", { params: { path: { handle } } })),
+  call(client =>
+    client.GET("/api/players/{handle}/matches", {
+      params: { path: { handle }, query: { page, pageSize: PAGE_SIZE } },
+    }),
+  ),
+])
+const failure = failureOf(result)
+if (failure && isMissing(failure)) return Astro.rewrite("/404")
+
+const player = dataOf(result)
+const log = dataOf(logResult)
+const matches = log?.matches
+if (matches && page > matches.totalPages && matches.totalPages > 0) {
+  return Astro.redirect(`/players/${handle}/matches?page=${matches.totalPages}`)
+}
+const rate = log ? winRate(log.record) : undefined
+---
+
+<Layout title={`${player?.handle ?? handle} matches//LAN_BUNKER`} active="players">
+  <Prompt command={`cat /players/${handle}/matches`} comment="every match played" />
+
+  {player && log && matches ? (
+    <Panel>
+      <div class="flex flex-wrap items-baseline justify-between gap-3 border-b border-faint pb-3">
+        <a
+          href={`/players/${player.handle}`}
+          class="handle text-base tracking-wider no-underline text-bright hover:text-accent"
+          title={player.handle}
+        >
+          {player.handle}
+        </a>
+        <span class="flex flex-wrap items-baseline gap-3 text-xs">
+          <RankMark rank={player.standing.rank} labelled />
+          <span class="text-accent tabular-nums" data-record>
+            {recordLine(log.record)}
+          </span>
+          {rate !== undefined && (
+            <span class="text-mute tabular-nums">{rate}% win rate</span>
+          )}
+        </span>
+      </div>
+      <div class="mt-3">
+        <MatchLog matches={matches.items} />
+      </div>
+      <Pager
+        page={page}
+        totalPages={matches.totalPages}
+        total={matches.total}
+        href={`/players/${handle}/matches`}
+        noun="match"
+        plural="matches"
+      />
+    </Panel>
+  ) : (
+    <Alert message="The match log is unreachable." />
+  )}
+
+  <div class="mt-8">
+    <Button href={`/players/${handle}`} variant="ghost" size="sm">
+      ← {handle}
+    </Button>
+  </div>
+</Layout>

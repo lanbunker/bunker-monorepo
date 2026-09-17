@@ -2,15 +2,15 @@ use axum::extract::State;
 use axum::routing::{get, post, put};
 use axum::{Json, Router};
 use bunker_models::{
-    Account, CyclesLog, CyclesRules, Handle, HandleChange, PageQuery, Paginated, PasswordChange,
-    Player, RosterQuery, TokenResponse,
+    Account, CyclesLog, CyclesRules, Handle, HandleChange, MatchLog, PageQuery, Paginated,
+    PasswordChange, Player, RosterQuery, TokenResponse,
 };
 use serde::Deserialize;
 
 use crate::internal::http::{
     ApiError, ApiErrorBody, Authenticated, ValidJson, ValidPath, ValidQuery,
 };
-use crate::services::{AuthService, PlayerService, PointsService};
+use crate::services::{AuthService, MatchService, PlayerService, PointsService};
 
 use super::AppState;
 
@@ -22,6 +22,7 @@ pub fn player_router() -> Router<AppState> {
         .route("/api/players", get(list_players))
         .route("/api/players/{handle}", get(get_player))
         .route("/api/players/{handle}/cycles", get(cycles_history))
+        .route("/api/players/{handle}/matches", get(match_log))
         .route("/api/cycles/rules", get(cycles_rules))
 }
 
@@ -120,6 +121,25 @@ pub(super) async fn cycles_history(
     ValidQuery(query): ValidQuery<PageQuery>,
 ) -> Result<Json<CyclesLog>, ApiError> {
     Ok(Json(points.history(&path.handle, query).await?))
+}
+
+#[utoipa::path(
+    get,
+    path = "/api/players/{handle}/matches",
+    tag = "players",
+    params(PlayerPath, PageQuery),
+    responses(
+        (status = 200, body = MatchLog, description = "Newest first, with the record and the nemesis"),
+        (status = 400, body = ApiErrorBody),
+        (status = 404, body = ApiErrorBody),
+    )
+)]
+pub(super) async fn match_log(
+    State(matches): State<MatchService>,
+    ValidPath(path): ValidPath<PlayerPath>,
+    ValidQuery(query): ValidQuery<PageQuery>,
+) -> Result<Json<MatchLog>, ApiError> {
+    Ok(Json(matches.log(&path.handle, query).await?))
 }
 
 #[utoipa::path(

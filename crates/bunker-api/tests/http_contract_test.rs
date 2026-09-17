@@ -177,6 +177,16 @@ async fn a_path_that_is_not_a_handle_is_rejected() {
 }
 
 #[tokio::test]
+async fn a_match_log_path_that_is_not_a_handle_is_rejected() {
+    let response = TestApi::without_database()
+        .await
+        .get("/api/players/not%20a%20handle!/matches")
+        .await;
+
+    assert_error(response, StatusCode::BAD_REQUEST, "InvalidRequest").await;
+}
+
+#[tokio::test]
 async fn page_zero_is_rejected() {
     let response = TestApi::without_database()
         .await
