@@ -1,6 +1,6 @@
 ---
 import type { Player } from "../lib/api"
-import { RANKS, formatCycles } from "../lib/cycles"
+import { RANKS, formatCycles, isPodium } from "../lib/cycles"
 import { formatDate } from "../lib/dates"
 import Badge from "./ui/Badge.astro"
 import Glyph from "./ui/Glyph.astro"
@@ -14,6 +14,9 @@ interface Props {
   own?: boolean
 }
 
+/** The glyph and the badge under it share one width, so the rank stays centred. */
+const GLYPH_SIZE = "7.5rem"
+
 const { player, own = false } = Astro.props
 const standing = player.standing
 const rank = RANKS[standing.rank]
@@ -21,7 +24,22 @@ const rank = RANKS[standing.rank]
 
 <Panel tone={own ? "accent" : "default"}>
   <div class="flex flex-wrap gap-6" style={`--player:${player.glyph.color}`}>
-    <Glyph glyph={player.glyph} size="7.5rem" framed />
+    <div class="flex shrink-0 flex-col items-center gap-3" style={`width:${GLYPH_SIZE}`}>
+      <Glyph glyph={player.glyph} size={GLYPH_SIZE} framed />
+      <!-- The cells are decoration, so the name under them is the one thing a
+           screen reader reads for the rank. -->
+      <div class="flex flex-col items-center gap-1">
+        <RankMark rank={standing.rank} size="xl" decorative />
+        <span
+          class:list={[
+            "text-[1.5rem] leading-none font-bold tracking-[0.1em]",
+            rank.text,
+          ]}
+        >
+          {rank.label}
+        </span>
+      </div>
+    </div>
     <div class="min-w-[16rem] flex-1">
       <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
         <h1
@@ -31,7 +49,10 @@ const rank = RANKS[standing.rank]
           {player.handle}
         </h1>
         <span
-          class="text-xs tracking-wider text-dim tabular-nums"
+          class:list={[
+            "text-xs tracking-wider tabular-nums",
+            isPodium(standing) ? "font-bold text-accent" : "text-dim",
+          ]}
           data-place={standing.place}
         >
           #{standing.place} <span class="text-mute">of {standing.players}</span>
@@ -46,12 +67,8 @@ const rank = RANKS[standing.rank]
         </div>
       </div>
       <div class="mt-5 flex flex-col gap-1">
-        <Kv label="Rank">
-          <RankMark rank={standing.rank} labelled />
-          <span class="ml-2 text-dim">// lvl {rank.tier}</span>
-        </Kv>
         <Kv label="Cycles" tone="accent">
-          <span class="text-sm" data-cycles>
+          <span class="text-base font-bold tabular-nums" data-cycles>
             {formatCycles(standing.cycles)}
           </span>
         </Kv>

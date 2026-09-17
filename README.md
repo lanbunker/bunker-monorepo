@@ -237,7 +237,7 @@ deleted player.
 The amounts and the ladder live in one file, `crates/bunker-models/src/points.rs`.
 `GET /api/cycles/rules` serves them, and the site renders its legend from that
 call, so the page can never disagree with the ledger. The ranks, bottom first:
-zombie, guest at 100, user at 600, sudoer at 1500, daemon at 3000, kernel at 6000.
+zombie, guest at 80, user at 600, sudoer at 1500, daemon at 3000, kernel at 6000.
 
 A future source, such as an arcade score, is one variant in `PointKind` with its amount, one writer that names its source, and
 one migration that recreates the table with the new kind in the CHECK list,

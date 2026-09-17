@@ -78,6 +78,13 @@ export const sourceTotals = (totals: readonly KindTotal[]): Record<Source, numbe
     }
 }
 
+/**
+ * The places the board marks out. A player earns the podium, so a roster where
+ * nobody has cycles yet has no podium at all.
+ */
+export const isPodium = (standing: Standing): boolean =>
+    standing.place <= 3 && standing.cycles > 0
+
 /** `1,240` or `-80`: a comma every three digits, and the sign of a loss stays. */
 export const formatCycles = (cycles: number): string =>
     new Intl.NumberFormat("en-US").format(cycles)

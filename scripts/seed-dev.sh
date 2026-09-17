@@ -52,7 +52,7 @@ done
 echo "$PLAYERS players: player01 .. $(printf 'player%02d' "$PLAYERS"), password $PASSWORD"
 
 # Cycles from one adjustment each, so the leaderboard shows every rank: the
-# floors are 100, 600, 1500, 3000 and 6000. Amounts stay under the 10 000 cap
+# floors are 80, 600, 1500, 3000 and 6000. Amounts stay under the 10 000 cap
 # of one adjustment. A player who already has cycles is left alone.
 amounts=(9400 7200 4500 3300 2100 1600 900 650 300 120)
 granted=0

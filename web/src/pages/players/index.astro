@@ -9,7 +9,7 @@ import SearchBar from "../../components/ui/SearchBar.astro"
 import Table from "../../components/ui/Table.astro"
 import Layout from "../../layouts/Layout.astro"
 import { call, dataOf, failureOf, messageOf } from "../../lib/api"
-import { formatCycles } from "../../lib/cycles"
+import { formatCycles, isPodium } from "../../lib/cycles"
 import { formatDate } from "../../lib/dates"
 import { PAGE_SIZE, listPath, pageFrom, searchFrom } from "../../lib/paging"
 
@@ -80,9 +80,7 @@ const me = Astro.locals.player?.id
               <td
                 class:list={[
                   "nowrap px-3 py-2 tabular-nums",
-                  player.standing.place <= 3 && player.standing.cycles > 0
-                    ? "font-bold text-bright"
-                    : "text-mute",
+                  isPodium(player.standing) ? "font-bold text-bright" : "text-mute",
                 ]}
               >
                 #{String(player.standing.place).padStart(2, "0")}

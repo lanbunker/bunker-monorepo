@@ -31,9 +31,6 @@ const fresh =
 // 24 cells at text-sm is about 14rem. The panels go side by side only past 48rem,
 // so a half panel is always wider than the bar and the brackets stay on its line.
 const BAR_WIDTH = 24
-// The zombie grey names the rank well but reads as an empty bar. The bar of a
-// zombie borrows the ink color, so the filled cells show.
-const barClass = standing.rank === "zombie" ? "text-ink" : rank.text
 ---
 
 <div class="mt-4 grid gap-4 min-[48rem]:grid-cols-2">
@@ -67,7 +64,7 @@ const barClass = standing.rank === "zombie" ? "text-ink" : rank.text
           aria-hidden="true"
         >
           <span class="text-dim">[</span>
-          <span class={barClass}>{asciiBar(progress, BAR_WIDTH)}</span>
+          <span class={rank.text}>{asciiBar(progress, BAR_WIDTH)}</span>
           <span class="text-dim">]</span>
         </div>
         {standing.next ? (

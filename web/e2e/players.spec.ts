@@ -504,8 +504,8 @@ test("an admin adjusts cycles, and the rank, the bar and the log follow", async 
     // The public page shows the standing and the note.
     await page.goto(`/players/${name}`)
     await expect(page.locator("[data-cycles]")).toHaveText("150")
-    // 150 of the way from 100 to 600 is a tenth.
-    await expect(page.locator("[data-progress]")).toHaveAttribute("data-progress", "10")
+    // 150 sits 70 cycles into the 520 between the guest floor and 600.
+    await expect(page.locator("[data-progress]")).toHaveAttribute("data-progress", "13")
     await expect(page.getByText("+150")).toBeVisible()
     await expect(page.getByText("admin bonus")).toBeVisible()
     await expect(page.getByText("carried the fridge")).toBeVisible()
@@ -518,7 +518,7 @@ test("an admin adjusts cycles, and the rank, the bar and the log follow", async 
 
     // The owner reads the note on the profile.
     await login(page, name)
-    await expect(page.getByText("GUEST")).toBeVisible()
+    await expect(page.getByText("GUEST").first()).toBeVisible()
     await expect(page.getByText("carried the fridge")).toBeVisible()
     await expect(page.getByRole("link", { name: "HOW TO EARN CYCLES" })).toBeVisible()
     await expect(page.locator("[data-coming-soon]")).toBeVisible()
@@ -558,13 +558,13 @@ test("the two ends of the ladder: a fresh player is called in, a kernel is at th
     await page.goto(`/players/${name}`)
     await expect(page.locator("[data-cycles]")).toHaveText("-80")
     await expect(page.locator("[data-progress]")).toHaveAttribute("data-progress", "0")
-    await expect(page.getByText("180 to go")).toBeVisible()
+    await expect(page.getByText("160 to go")).toBeVisible()
     await expect(page.locator("[data-source=adjustments]")).toHaveText("-80")
 
     // At the top of the ladder there is nothing left to fill.
     await adjust(10_000, "founder")
     await page.goto(`/players/${name}`)
-    await expect(page.getByText("[KERNEL]").first()).toBeVisible()
+    await expect(page.getByText("KERNEL").first()).toBeVisible()
     await expect(page.getByText("top of the ladder")).toBeVisible()
     await expect(page.getByText("to go")).toHaveCount(0)
     await expect(page.locator("[data-progress]")).toHaveAttribute("data-progress", "100")

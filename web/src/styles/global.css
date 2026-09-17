@@ -41,8 +41,8 @@
 
     /* The ladder, bottom to top. Grey wakes up into color, and the top is the one
        magenta on the site, so a KERNEL is seen across the room. */
-    --color-rank-zombie: #5e5e5e;
-    --color-rank-guest: #9c9c9c;
+    --color-rank-zombie: #8a8a8a;
+    --color-rank-guest: #b8b8b8;
     --color-rank-user: #7cc4ff;
     --color-rank-sudoer: #b48cff;
     --color-rank-daemon: #ffb000;

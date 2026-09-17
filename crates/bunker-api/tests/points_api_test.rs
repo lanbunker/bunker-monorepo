@@ -119,7 +119,7 @@ async fn an_admin_adjusts_cycles_and_the_standing_follows() {
     let negative = player(&api, "dave").await;
     assert_eq!(negative.standing.cycles, -80);
     assert_eq!(negative.standing.rank, Rank::Zombie);
-    assert_eq!(negative.standing.next.unwrap().floor, 100);
+    assert_eq!(negative.standing.next.unwrap().floor, 80);
 }
 
 #[tokio::test]
@@ -502,7 +502,7 @@ async fn the_rules_are_public_and_name_every_way_to_earn() {
     );
     assert_eq!(rules.ranks.len(), 6);
     assert_eq!(rules.ranks[1].rank, Rank::Guest);
-    assert_eq!(rules.ranks[1].floor, 100);
+    assert_eq!(rules.ranks[1].floor, 80);
     assert_eq!(rules.tiers.len(), 3);
     assert_eq!(rules.tiers[2].tier, FieldTier::Large);
     assert!(rules.awards.iter().all(|a| a.cycles.len() == 3));

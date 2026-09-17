@@ -177,6 +177,8 @@ test("a visitor at the door enlists, comes back, and checks in for 100 cycles", 
     await page.goto("/profile")
     await expect(page.locator("[data-cycles]")).toHaveText("100")
     await expect(page.locator("[data-rank=guest]").first()).toBeVisible()
+    // The guest floor sits below one check-in, so the bar is never empty here.
+    await expect(page.locator("[data-progress]")).toHaveAttribute("data-progress", "4")
     await expect(page.locator("[data-cycles-log]")).toContainText("event check-in")
     await expect(page.locator("[data-cycles-log]")).toContainText("Night ")
 

@@ -60,8 +60,8 @@ fn total_of(awards: &[Award], player: PlayerId) -> i64 {
 fn the_ladder_is_a_threshold_on_the_total() {
     assert_eq!(Rank::for_cycles(0), Rank::Zombie);
     assert_eq!(Rank::for_cycles(-50), Rank::Zombie);
-    assert_eq!(Rank::for_cycles(99), Rank::Zombie);
-    assert_eq!(Rank::for_cycles(100), Rank::Guest);
+    assert_eq!(Rank::for_cycles(79), Rank::Zombie);
+    assert_eq!(Rank::for_cycles(80), Rank::Guest);
     assert_eq!(Rank::for_cycles(599), Rank::Guest);
     assert_eq!(Rank::for_cycles(600), Rank::User);
     assert_eq!(Rank::for_cycles(1500), Rank::Sudoer);

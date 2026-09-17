@@ -136,7 +136,7 @@ impl Rank {
     pub const fn floor(self) -> i64 {
         match self {
             Self::Zombie => 0,
-            Self::Guest => 100,
+            Self::Guest => 80,
             Self::User => 600,
             Self::Sudoer => 1500,
             Self::Daemon => 3000,
