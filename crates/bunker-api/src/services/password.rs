@@ -1,6 +1,9 @@
+use std::sync::Arc;
+
 use argon2::password_hash::{self, PasswordHasher as _, PasswordVerifier as _};
 use argon2::{Algorithm, Argon2, Params, Version};
 use bunker_models::Password;
+use tokio::sync::Semaphore;
 
 use super::error::ServiceError;
 
@@ -13,10 +16,16 @@ const ITERATIONS: u32 = 2;
 const FAST_MEMORY_KIB: u32 = 8;
 const FAST_ITERATIONS: u32 = 1;
 
+/// Each hash holds `MEMORY_KIB` while it runs, so thirty parallel logins would
+/// take more memory than the 512 MB container has. Four is enough for a LAN.
+const CONCURRENT_HASHES: usize = 4;
+
 /// The work runs on the blocking pool, so a login never stalls the async workers.
+/// The clones share one set of permits.
 #[derive(Debug, Clone)]
 pub struct PasswordHasher {
     params: Params,
+    permits: Arc<Semaphore>,
 }
 
 impl PasswordHasher {
@@ -33,7 +42,10 @@ impl PasswordHasher {
         // cannot fail. The default keeps the constructor total.
         let params = Params::new(memory, iterations, 1, None).unwrap_or_default();
 
-        Self { params }
+        Self {
+            params,
+            permits: Arc::new(Semaphore::new(CONCURRENT_HASHES)),
+        }
     }
 
     /// Returns the PHC string that the players table stores. It carries the salt
@@ -41,6 +53,7 @@ impl PasswordHasher {
     /// library draws the salt from the OS.
     pub async fn hash(&self, password: Password) -> Result<String, ServiceError> {
         let argon = self.argon();
+        let _permit = self.permits.acquire().await.map_err(ServiceError::crypto)?;
 
         tokio::task::spawn_blocking(move || {
             argon
@@ -56,6 +69,7 @@ impl PasswordHasher {
     /// parsed, which is a bug or a corrupted row.
     pub async fn verify(&self, password: Password, hash: String) -> Result<bool, ServiceError> {
         let argon = self.argon();
+        let _permit = self.permits.acquire().await.map_err(ServiceError::crypto)?;
 
         tokio::task::spawn_blocking(move || {
             match argon.verify_password(password.as_ref().as_bytes(), hash.as_str()) {

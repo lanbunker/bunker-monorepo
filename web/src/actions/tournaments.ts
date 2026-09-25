@@ -1,25 +1,25 @@
 import { defineAction } from "astro:actions"
-import { z } from "zod"
 
-import { requireAdmin, requireToken, unwrap } from "../lib/action"
+import { playerByHandle, requireAdmin, requireToken, unwrap } from "../lib/action"
 import { call, callEmpty } from "../lib/api"
 import {
-    handle,
-    optionalSkillLevel,
-    skillLevel,
+    applyInput,
+    byId,
+    entrantInput,
+    entrantRemovalInput,
+    matchInput,
+    resultInput,
+    seedOrderInput,
     statusChangeInput,
-    tournamentFields,
     tournamentInput,
-    uuid,
+    tournamentUpdateInput,
 } from "../lib/schemas"
-
-const byId = z.object({ id: uuid })
 
 /** Player and admin actions on tournaments. Forms post, the bracket island calls. */
 export const tournamentActions = {
     applyToTournament: defineAction({
         accept: "form",
-        input: z.object({ id: uuid, skill: skillLevel }),
+        input: applyInput,
         handler: async (input, context) => {
             unwrap(
                 await call(
@@ -68,7 +68,7 @@ export const tournamentActions = {
 
     updateTournament: defineAction({
         accept: "form",
-        input: z.object({ id: uuid, ...tournamentFields }),
+        input: tournamentUpdateInput,
         handler: async (input, context) => {
             unwrap(
                 await call(
@@ -128,18 +128,10 @@ export const tournamentActions = {
 
     addEntrant: defineAction({
         accept: "form",
-        input: z.object({ id: uuid, handle, skill: optionalSkillLevel }),
+        input: entrantInput,
         handler: async (input, context) => {
             const token = requireAdmin(context.locals)
-            const player = unwrap(
-                await call(
-                    client =>
-                        client.GET("/api/players/{handle}", {
-                            params: { path: { handle: input.handle } },
-                        }),
-                    token,
-                ),
-            )
+            const player = await playerByHandle(input.handle, token)
             unwrap(
                 await call(
                     client =>
@@ -156,7 +148,7 @@ export const tournamentActions = {
 
     removeEntrant: defineAction({
         accept: "form",
-        input: z.object({ id: uuid, entrantId: uuid }),
+        input: entrantRemovalInput,
         handler: async (input, context) => {
             unwrap(
                 await callEmpty(
@@ -207,7 +199,7 @@ export const tournamentActions = {
     }),
 
     reorderSeeds: defineAction({
-        input: z.object({ id: uuid, entrants: z.array(uuid).min(2) }),
+        input: seedOrderInput,
         handler: async (input, context) =>
             unwrap(
                 await call(
@@ -222,7 +214,7 @@ export const tournamentActions = {
     }),
 
     reportResult: defineAction({
-        input: z.object({ id: uuid, matchId: uuid, winner: uuid }),
+        input: resultInput,
         handler: async (input, context) =>
             unwrap(
                 await call(
@@ -242,7 +234,7 @@ export const tournamentActions = {
     }),
 
     clearResult: defineAction({
-        input: z.object({ id: uuid, matchId: uuid }),
+        input: matchInput,
         handler: async (input, context) =>
             unwrap(
                 await call(

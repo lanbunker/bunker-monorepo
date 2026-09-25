@@ -91,20 +91,6 @@ async fn a_short_new_password_is_rejected_at_the_boundary() {
     .await;
 }
 
-#[tokio::test]
-async fn a_password_change_needs_a_token() {
-    let api = TestApi::with_database().await;
-
-    let response = api
-        .post(
-            "/api/me/password",
-            &json!({ "currentPassword": PASSWORD, "newPassword": NEW_PASSWORD }),
-        )
-        .await;
-
-    assert_error(response, StatusCode::UNAUTHORIZED, "Unauthorized").await;
-}
-
 /// The whole reset flow: the admin gets a temporary password once, the player
 /// logs in with it, the account says a change is due, the change clears it.
 #[tokio::test]
@@ -267,4 +253,49 @@ async fn an_admin_reset_kills_the_player_session() {
         "Unauthorized",
     )
     .await;
+}
+
+/// A temporary password opens the profile and the change, and nothing else,
+/// whatever client holds it. After the change every route opens.
+#[tokio::test]
+async fn a_temporary_password_opens_only_the_change_until_it_is_done() {
+    let api = TestApi::with_database().await;
+    let root = api.signup_admin("root").await;
+    let _second = api.signup_admin("second").await;
+    let second = api.player("second").await;
+    let (pending, temporary) = api.forced_session(&root, second.id, "second").await;
+
+    for refused in [
+        api.get_as("/api/me/registrations", &pending).await,
+        api.put_as("/api/me/handle", &json!({ "handle": "other" }), &pending)
+            .await,
+        api.get_as("/api/admin/players", &pending).await,
+    ] {
+        assert_error(refused, StatusCode::FORBIDDEN, "PasswordChangeRequired").await;
+    }
+    let account: Account = read_json(api.get_as("/api/me", &pending).await).await;
+    assert!(account.must_change_password);
+
+    let change = api
+        .post_as(
+            "/api/me/password",
+            &json!({ "currentPassword": temporary, "newPassword": NEW_PASSWORD }),
+            &pending,
+        )
+        .await;
+    assert_eq!(change.status(), StatusCode::OK);
+    let settled: TokenResponse = read_json(change).await;
+
+    assert_eq!(
+        api.get_as("/api/me/registrations", &settled.token)
+            .await
+            .status(),
+        StatusCode::OK
+    );
+    assert_eq!(
+        api.get_as("/api/admin/players", &settled.token)
+            .await
+            .status(),
+        StatusCode::OK
+    );
 }

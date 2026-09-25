@@ -11,7 +11,7 @@ use super::player::Player;
 use super::tournament::{GameName, TournamentId, TournamentName};
 
 /// How many times one opponent must beat a player before the profile names
-/// them. One loss is a bad night, two is a pattern.
+/// them.
 pub const NEMESIS_MIN_LOSSES: u32 = 2;
 
 /// Wins and losses over every played match. `Record` alone is the name of a

@@ -1,6 +1,7 @@
 import { match } from "ts-pattern"
 
 import type { Entrant, Tournament, TournamentStatus } from "./api"
+import type { BadgeTone } from "./styles"
 
 /** Players may apply and retire only in this window. */
 export const isRegistrationOpen = (t: Tournament, now = Date.now()): boolean =>
@@ -41,14 +42,12 @@ export const skillMeter = (level: number | null | undefined): string =>
 export const entrantName = (entrant: Entrant | undefined): string =>
     entrant?.player?.handle ?? "[deleted]"
 
-export const STATUS_LABEL: Record<TournamentStatus, string> = {
+const STATUS_LABEL: Record<TournamentStatus, string> = {
     draft: "DRAFT",
     open: "REGISTRATION OPEN",
     live: "LIVE",
     concluded: "CONCLUDED",
 }
-
-export type BadgeTone = "accent" | "warn" | "muted" | "alert"
 
 /** The badge of a card. An open tournament past its deadline says so. */
 export const statusBadge = (

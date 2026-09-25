@@ -1,11 +1,5 @@
 import { z } from "zod"
 
-/**
- * The shape of every form the site posts. The API validates again, and it is
- * the authority. These rules exist so that a typing mistake gets a sentence the
- * player can read instead of a round trip.
- */
-
 const HANDLE_RULE = "A handle is 3 to 20 characters: letters, digits, _ . or -"
 const PASSWORD_RULE = "A password is 8 to 128 characters."
 
@@ -22,11 +16,23 @@ export const handle = z
 
 export const password = z.string().min(8, PASSWORD_RULE).max(128, PASSWORD_RULE)
 
+export const byId = z.object({ id: uuid })
+
+export const handleInput = z.object({ handle })
+
+export const playerHandleInput = z.object({ id: uuid, handle })
+
+export const roleInput = z.object({
+    id: uuid,
+    role: z.enum(["user", "admin"], "Pick user or admin."),
+})
+
 /**
  * Where to go after a login or a signup. Only a path of this site: one slash,
  * then neither a second slash nor a backslash, and no backslash anywhere,
- * because a browser reads `/\evil.example` like `//evil.example`. An empty
- * field, the usual case, means the profile.
+ * because a browser reads `/\evil.example` like `//evil.example`. Only printable
+ * ASCII, because a control character in a `Location` header fails the response.
+ * An empty field, the usual case, means the profile.
  */
 export const localPath = z
     .string()
@@ -35,7 +41,7 @@ export const localPath = z
     .pipe(
         z
             .string()
-            .regex(/^\/(?![/\\])[^\s\\]*$/, "That link is not valid.")
+            .regex(/^\/(?![/\\])[\x21-\x5b\x5d-\x7e]*$/, "That link is not valid.")
             .optional(),
     )
 
@@ -106,10 +112,22 @@ export const adjustmentInput = z.object({
         .max(200, "A note is at most 200 characters."),
 })
 
-export const tournamentFields = {
-    name: z.string().trim().min(1, "A tournament needs a name.").max(60),
-    game: z.string().trim().min(1, "A tournament needs a game.").max(40),
-    mode: z.string().trim().min(1, "A tournament needs a mode.").max(30),
+const tournamentFields = {
+    name: z
+        .string()
+        .trim()
+        .min(1, "A tournament needs a name.")
+        .max(60, "A tournament name is at most 60 characters."),
+    game: z
+        .string()
+        .trim()
+        .min(1, "A tournament needs a game.")
+        .max(40, "A game is at most 40 characters."),
+    mode: z
+        .string()
+        .trim()
+        .min(1, "A tournament needs a mode.")
+        .max(30, "A mode is at most 30 characters."),
     description,
     date: z.iso.date("Pick a date."),
     registrationClosesAt: z.iso.datetime({
@@ -120,9 +138,26 @@ export const tournamentFields = {
 
 export const tournamentInput = z.object(tournamentFields)
 
+export const tournamentUpdateInput = z.object({ id: uuid, ...tournamentFields })
+
+export const applyInput = z.object({ id: uuid, skill: skillLevel })
+
+export const entrantInput = z.object({ id: uuid, handle, skill: optionalSkillLevel })
+
+export const entrantRemovalInput = z.object({ id: uuid, entrantId: uuid })
+
+export const seedOrderInput = z.object({
+    id: uuid,
+    entrants: z.array(uuid).min(2, "A bracket needs at least two entrants."),
+})
+
+export const resultInput = z.object({ id: uuid, matchId: uuid, winner: uuid })
+
+export const matchInput = z.object({ id: uuid, matchId: uuid })
+
 export const statusChangeInput = z.object({
     id: uuid,
-    status: z.enum(["open", "live", "concluded"]),
+    status: z.enum(["open", "live", "concluded"], "Pick a status."),
     // The select is absent on most forms and its empty option is "". Both mean
     // no winner.
     winner: z
@@ -132,8 +167,12 @@ export const statusChangeInput = z.object({
         .pipe(uuid.optional()),
 })
 
-export const eventFields = {
-    name: z.string().trim().min(1, "An event needs a name.").max(60),
+const eventFields = {
+    name: z
+        .string()
+        .trim()
+        .min(1, "An event needs a name.")
+        .max(60, "An event name is at most 60 characters."),
     location: optionalText(60, "A location is at most 60 characters."),
     games: optionalText(200, "The games line is at most 200 characters."),
     description,
@@ -165,8 +204,10 @@ export const eventUpdateInput = z
 
 export const eventStatusInput = z.object({
     id: uuid,
-    status: z.enum(["draft", "published"]),
+    status: z.enum(["draft", "published"], "Pick a status."),
 })
 
 /** The secret in a check-in link. The API has the same shape. */
 export const checkinCode = z.string().regex(/^[a-z0-9]{12}$/, "That link is not valid.")
+
+export const checkinInput = z.object({ code: checkinCode })

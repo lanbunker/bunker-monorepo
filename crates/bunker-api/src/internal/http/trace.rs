@@ -1,8 +1,9 @@
 use std::time::Duration;
 
 use axum::body::Body;
-use axum::extract::Request;
+use axum::extract::{MatchedPath, Request};
 use axum::http::{HeaderName, Response};
+use axum::middleware::Next;
 use tower_http::classify::{ServerErrorsAsFailures, SharedClassifier};
 use tower_http::request_id::{MakeRequestUuid, PropagateRequestIdLayer, SetRequestIdLayer};
 use tower_http::trace::TraceLayer;
@@ -13,6 +14,22 @@ const REQUEST_ID: HeaderName = HeaderName::from_static("x-request-id");
 /// The longest identifier to accept from a caller. A header value can hold 400 KB,
 /// and each event in the span writes the identifier again.
 const REQUEST_ID_MAX_LEN: usize = 64;
+
+/// Removes an `x-request-id` from the caller that is too long or holds other
+/// characters than letters, digits, `-`, `_` and `.`. [`set_request_id`] then
+/// makes a fresh one, so the id in the log and the id in the response agree.
+pub async fn drop_invalid_request_id(mut request: Request, next: Next) -> axum::response::Response {
+    let valid = request
+        .headers()
+        .get(&REQUEST_ID)
+        .and_then(|value| value.to_str().ok())
+        .is_some_and(is_valid_request_id);
+    if !valid {
+        request.headers_mut().remove(&REQUEST_ID);
+    }
+
+    next.run(request).await
+}
 
 /// Uses the `x-request-id` of the caller, or makes one. A request then keeps one
 /// identity across the site and the API.
@@ -42,7 +59,9 @@ type OnRequestFn = fn(&Request, &Span);
 type OnResponseFn = fn(&Response<Body>, Duration, &Span);
 
 /// Opens one span per request. Each log from a handler, a service or the error
-/// renderer gets `request_id`, `method` and `path`, and no code passes them.
+/// renderer gets `request_id`, `method` and `route`, and no code passes them.
+/// `route` is the template, such as `/api/checkin/{code}`: the raw path would
+/// put a check-in code in the journal.
 pub fn trace_requests() -> RequestTraceLayer {
     TraceLayer::new_for_http()
         .make_span_with(make_span as MakeSpanFn)
@@ -58,22 +77,28 @@ fn make_span(request: &Request) -> Span {
         .headers()
         .get(&REQUEST_ID)
         .and_then(|value| value.to_str().ok())
-        .filter(|id| {
-            !id.is_empty()
-                && id.len() <= REQUEST_ID_MAX_LEN
-                && id
-                    .bytes()
-                    .all(|byte| byte.is_ascii_alphanumeric() || b"-_.".contains(&byte))
-        })
+        .filter(|id| is_valid_request_id(id))
         .unwrap_or("unknown");
+    let route = request
+        .extensions()
+        .get::<MatchedPath>()
+        .map_or("unmatched", MatchedPath::as_str);
 
     tracing::info_span!(
         "http.request",
         method = %request.method(),
-        path = %request.uri().path(),
+        route = %route,
         request_id = %request_id,
         status = tracing::field::Empty,
     )
+}
+
+fn is_valid_request_id(id: &str) -> bool {
+    !id.is_empty()
+        && id.len() <= REQUEST_ID_MAX_LEN
+        && id
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || b"-_.".contains(&byte))
 }
 
 fn on_request(_request: &Request, _span: &Span) {

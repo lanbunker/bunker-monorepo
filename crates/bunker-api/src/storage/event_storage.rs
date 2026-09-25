@@ -1,10 +1,10 @@
 use bunker_models::{
     Award, Checkin, CheckinCode, Description, Event, EventFields, EventId, EventName, EventStatus,
-    Games, ImageName, Location, PageQuery, Paginated, PlayerId,
+    EventWindow, Games, ImageName, Location, PageQuery, Paginated, PlayerId,
 };
 use time::OffsetDateTime;
 
-use super::db::DbPool;
+use super::db::{DbPool, begin_write};
 use super::error::StorageError;
 use super::point_storage::{AwardSource, insert_awards};
 use super::row::{PlayerRow, from_micros, parse_uuid, to_micros};
@@ -14,6 +14,10 @@ const CHECKINS: &str = "event_checkins";
 
 /// The primary key of `event_checkins`, as SQLite names it.
 const CHECKIN_CONSTRAINT: &str = "event_checkins.event_id, event_checkins.player_id";
+
+/// The most check-ins one read returns. A night in the bunker has tens of
+/// players, so this bound is never a page, only a cap.
+const CHECKINS_MAX: i64 = 1000;
 
 #[derive(Debug, Clone)]
 pub struct NewEventRow {
@@ -56,8 +60,8 @@ impl EventStorage {
         let games = row.fields.games.as_ref();
         let description = row.fields.description.as_ref();
         let image = row.fields.image.as_ref().map(AsRef::<str>::as_ref);
-        let starts_at = to_micros(EVENTS, row.fields.starts_at)?;
-        let ends_at = to_micros(EVENTS, row.fields.ends_at)?;
+        let starts_at = to_micros(EVENTS, row.fields.window.starts_at())?;
+        let ends_at = to_micros(EVENTS, row.fields.window.ends_at())?;
         let status = EventStatus::Draft.as_str();
         let code = row.checkin_code.as_ref();
         let created_at = to_micros(EVENTS, row.created_at)?;
@@ -183,8 +187,8 @@ impl EventStorage {
         let games = fields.games.as_ref();
         let description = fields.description.as_ref();
         let image = fields.image.as_ref().map(AsRef::<str>::as_ref);
-        let starts_at = to_micros(EVENTS, fields.starts_at)?;
-        let ends_at = to_micros(EVENTS, fields.ends_at)?;
+        let starts_at = to_micros(EVENTS, fields.window.starts_at())?;
+        let ends_at = to_micros(EVENTS, fields.window.ends_at())?;
 
         let result = sqlx::query!(
             "update events
@@ -230,7 +234,7 @@ impl EventStorage {
         Ok(result.rows_affected() > 0)
     }
 
-    /// First at the door first.
+    /// First at the door first, up to [`CHECKINS_MAX`].
     pub async fn checkins(&self, event: EventId) -> Result<Vec<Checkin>, StorageError> {
         let event = event.into_inner().to_string();
         let rows = sqlx::query_as!(
@@ -242,8 +246,10 @@ impl EventStorage {
                join players p on p.id = c.player_id
                join player_standings s on s.player_id = p.id
                where c.event_id = ?1
-               order by c.checked_in_at asc, p.id asc"#,
+               order by c.checked_in_at asc, p.id asc
+               limit ?2"#,
             event,
+            CHECKINS_MAX,
         )
         .fetch_all(&self.pool)
         .await
@@ -266,7 +272,7 @@ impl EventStorage {
         let player_id = player.into_inner().to_string();
         let checked_in_at = to_micros(CHECKINS, at)?;
 
-        let mut tx = self.pool.begin().await.map_err(StorageError::from_query)?;
+        let mut tx = begin_write(&self.pool).await?;
         let inserted = sqlx::query!(
             "insert into event_checkins (event_id, player_id, checked_in_at) values (?1, ?2, ?3)",
             event_id,
@@ -308,12 +314,15 @@ impl EventStorage {
         Ok(CheckedIn::New(from_micros(CHECKINS, checked_in_at)?))
     }
 
-    /// Every event the player checked in to, first night first.
+    /// The events the player checked in to, the latest check-in first, up to
+    /// [`CHECKINS_MAX`], so a cut drops the oldest.
     pub async fn events_of(&self, player: PlayerId) -> Result<Vec<EventId>, StorageError> {
         let player = player.into_inner().to_string();
         let rows = sqlx::query_scalar!(
-            "select event_id from event_checkins where player_id = ?1 order by checked_in_at asc",
+            "select event_id from event_checkins where player_id = ?1
+             order by checked_in_at desc limit ?2",
             player,
+            CHECKINS_MAX,
         )
         .fetch_all(&self.pool)
         .await
@@ -359,8 +368,11 @@ impl TryFrom<EventRow> for StoredEvent {
                 .map(ImageName::try_new)
                 .transpose()
                 .map_err(|e| StorageError::malformed_row(EVENTS, e))?,
-            starts_at: from_micros(EVENTS, row.starts_at)?,
-            ends_at: from_micros(EVENTS, row.ends_at)?,
+            window: EventWindow::try_new(
+                from_micros(EVENTS, row.starts_at)?,
+                from_micros(EVENTS, row.ends_at)?,
+            )
+            .map_err(|e| StorageError::malformed_row(EVENTS, e))?,
             status: row
                 .status
                 .parse()

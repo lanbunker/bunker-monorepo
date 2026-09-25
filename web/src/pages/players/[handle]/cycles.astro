@@ -34,7 +34,11 @@ if (entries && page > entries.totalPages && entries.totalPages > 0) {
 ---
 
 <Layout title={`${player?.handle ?? handle} cycles//LAN_BUNKER`} active="players">
-  <Prompt command={`cat /players/${handle}/cycles`} comment="the whole log" />
+  <Prompt
+    heading="h1"
+    command={`cat /players/${handle}/cycles`}
+    comment="the whole log"
+  />
 
   {player && entries ? (
     <Panel>

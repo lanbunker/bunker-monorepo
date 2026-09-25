@@ -5,6 +5,9 @@ on:
         branches: [main, dev]
     pull_request:
 
+permissions:
+    contents: read
+
 env:
     CARGO_TERM_COLOR: always
     DATABASE_URL: sqlite://.dev/bunker.db?mode=rwc
@@ -12,6 +15,7 @@ env:
 jobs:
     rust:
         runs-on: ubuntu-latest
+        timeout-minutes: 30
         steps:
             - uses: actions/checkout@v4
 
@@ -25,12 +29,7 @@ jobs:
               with:
                   shared-key: rust
 
-            # The sqlx macros check each query against a real schema at compile
-            # time. The runner has sqlite3, so the migrations build that schema.
-            - name: Migrate a scratch database
-              run: |
-                  mkdir -p .dev
-                  for file in crates/bunker-api/migrations/*.sql; do sqlite3 .dev/bunker.db < "$file"; done
+            - uses: ./.github/actions/scratch-db
 
             - name: Format
               run: cargo fmt --all --check
@@ -38,21 +37,34 @@ jobs:
             - name: Lint
               run: cargo clippy --workspace --all-targets -- -D warnings
 
-            # Each test creates its own SQLite file, so no service is needed.
             - name: Test
               run: cargo test --workspace
 
             - name: Check nothing is ignored
               run: |
-                  ignored=$(cargo test --workspace -- --ignored --list 2>/dev/null | grep -c ': test' || true)
+                  list=$(cargo test --workspace -- --ignored --list)
+                  ignored=$(printf '%s\n' "$list" | grep -c ': test$' || true)
                   if [ "$ignored" -ne 0 ]; then
                     echo "expected no ignored tests, found $ignored"
-                    cargo test --workspace -- --ignored --list
+                    printf '%s\n' "$list"
                     exit 1
                   fi
 
+    audit:
+        runs-on: ubuntu-latest
+        timeout-minutes: 20
+        steps:
+            - uses: actions/checkout@v4
+
+            - uses: dtolnay/rust-toolchain@stable
+
+            - run: cargo install cargo-audit --locked
+
+            - run: cargo audit
+
     web:
         runs-on: ubuntu-latest
+        timeout-minutes: 20
         defaults:
             run:
                 working-directory: web
@@ -71,25 +83,25 @@ jobs:
 
             - run: pnpm install --frozen-lockfile
 
-            # The checklist writes the formatting. CI only reads it, so a commit
-            # that skipped the checklist fails here.
+            # The lockfile holds svgo (through astro) and smol-toml (through
+            # @astrojs/cloudflare) at versions with high advisories. Remove
+            # continue-on-error when this step passes.
+            - run: pnpm audit --prod --audit-level high
+              continue-on-error: true
+
             - run: pnpm fmt:check
 
             # `astro:env` and the other virtual modules exist only after a sync.
             - run: pnpm exec astro sync
 
-            # TypeScript 7 reads every .ts and .tsx in under a second.
             - run: pnpm typecheck
 
             - run: pnpm lint
 
-            # `astro check` is the only checker that reads .astro. It needs
-            # TypeScript 6, which is why the two live side by side.
             - run: pnpm check
 
             - run: pnpm build
 
-            # The TypeScript API types are generated from openapi.json and committed.
             - name: Check the generated API types are current
               run: |
                   pnpm exec openapi-typescript ../crates/bunker-api/openapi.json -o /tmp/api-types.d.ts
@@ -98,6 +110,7 @@ jobs:
 
     e2e:
         runs-on: ubuntu-latest
+        timeout-minutes: 30
         needs: [rust, web]
         steps:
             - uses: actions/checkout@v4
@@ -118,11 +131,7 @@ jobs:
                   cache: pnpm
                   cache-dependency-path: web/pnpm-lock.yaml
 
-            # The API compiles against a migrated database, as in the rust job.
-            - name: Migrate a scratch database
-              run: |
-                  mkdir -p .dev
-                  for file in crates/bunker-api/migrations/*.sql; do sqlite3 .dev/bunker.db < "$file"; done
+            - uses: ./.github/actions/scratch-db
 
             - run: pnpm install --frozen-lockfile
               working-directory: web
@@ -135,12 +144,9 @@ jobs:
             # build first, so the one inside Playwright finds nothing to do.
             - run: cargo build -p bunker-api
 
-            # Playwright starts the API on its own database, then the site.
             - run: pnpm exec playwright test
               working-directory: web
 
-            # The page snapshot and the trace of each failed test, to read what
-            # the runner saw.
             - uses: actions/upload-artifact@v4
               if: failure()
               with:
@@ -148,20 +154,17 @@ jobs:
                   path: web/test-results
                   retention-days: 7
 
-    # Ships the API to the container behind the Cloudflare Tunnel. Only after
-    # every other job is green, and only for a push to main, so a red build never
-    # reaches the box. The site deploys on its own in deploy.yml.
     deploy-api:
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         needs: [rust, web, e2e]
         runs-on: ubuntu-latest
-        timeout-minutes: 30
-        permissions:
-            contents: read
+        timeout-minutes: 15
+        environment: production
         concurrency:
             group: deploy-api
             cancel-in-progress: false
         env:
+            # musl: the binary needs no glibc on the box.
             TARGET: x86_64-unknown-linux-musl
             API_HOST: ${{ vars.API_HOST }}
             SSH_HOST: ${{ vars.SSH_HOST }}
@@ -187,18 +190,15 @@ jobs:
               with:
                   key: deploy-musl
 
-            # A static binary runs on any x86_64 Linux, whatever glibc the box has.
             - run: sudo apt-get install -y --no-install-recommends musl-tools
 
-            - name: Migrate a scratch database
-              run: |
-                  mkdir -p .dev
-                  for file in crates/bunker-api/migrations/*.sql; do sqlite3 .dev/bunker.db < "$file"; done
+            - uses: ./.github/actions/scratch-db
 
             - name: Build
+              env:
+                  BUNKER_GIT_SHA: ${{ github.sha }}
               run: cargo build --release --locked -p bunker-api --target "$TARGET"
 
-            # The signed Cloudflare repository, the same source the box uses.
             - name: Install cloudflared
               run: |
                   sudo install -d -m 755 /usr/share/keyrings
@@ -208,23 +208,30 @@ jobs:
                   sudo apt-get update -q
                   sudo apt-get install -y -q cloudflared
 
-            # SSH rides the tunnel: cloudflared on the runner opens the connection,
-            # so the box keeps no open port. The key is the only credential.
             - name: Configure SSH
               env:
                   DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+                  SSH_KNOWN_HOSTS: ${{ vars.SSH_KNOWN_HOSTS }}
               run: |
                   mkdir -p ~/.ssh
                   chmod 700 ~/.ssh
                   printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy
                   chmod 600 ~/.ssh/deploy
+                  if [ -n "$SSH_KNOWN_HOSTS" ]; then
+                    printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+                    checking=yes
+                  else
+                    echo "::warning::SSH_KNOWN_HOSTS is not set, so the runner trusts the first host key it sees"
+                    checking=accept-new
+                  fi
                   cat > ~/.ssh/config <<CONF
                   Host bunker
                     HostName $SSH_HOST
                     User deploy
                     IdentityFile ~/.ssh/deploy
                     IdentitiesOnly yes
-                    StrictHostKeyChecking accept-new
+                    UserKnownHostsFile ~/.ssh/known_hosts
+                    StrictHostKeyChecking $checking
                     ProxyCommand cloudflared access ssh --hostname %h
                   CONF
 
@@ -236,3 +243,49 @@ jobs:
 
             - name: Check the public endpoint
               run: curl -fsS "https://$API_HOST/health/ready"
+
+            # The commit in the answer proves that the public name reaches the
+            # binary this run built.
+            - name: Check the public endpoint runs this commit
+              run: |
+                  live=$(curl -fsS "https://$API_HOST/health/live")
+                  if ! printf '%s' "$live" | jq -e --arg sha "$GITHUB_SHA" '.commit == $sha' >/dev/null; then
+                    echo "expected commit $GITHUB_SHA, /health/live answered: $live" >&2
+                    exit 1
+                  fi
+
+    # After the API, so each route that the new site calls exists when it ships.
+    deploy-web:
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        needs: [deploy-api]
+        runs-on: ubuntu-latest
+        timeout-minutes: 15
+        environment: production
+        concurrency:
+            group: deploy-web
+            cancel-in-progress: false
+        defaults:
+            run:
+                working-directory: web
+        steps:
+            - uses: actions/checkout@v4
+
+            - uses: pnpm/action-setup@v4
+              with:
+                  package_json_file: web/package.json
+
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: 22
+                  cache: pnpm
+                  cache-dependency-path: web/pnpm-lock.yaml
+
+            - run: pnpm install --frozen-lockfile
+
+            - run: pnpm build
+
+            - uses: cloudflare/wrangler-action@v3
+              with:
+                  apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+                  accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+                  workingDirectory: web

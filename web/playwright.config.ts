@@ -2,8 +2,9 @@ import { defineConfig } from "@playwright/test"
 
 // Both servers start from scratch: the API on its own database file under
 // `.dev/`, so a run never touches the development data, and the site pointed at
-// that API. The API binary compiles against `.env` first, then runs elsewhere.
-// The API port must match `env.e2e.vars.API_URL` in `web/wrangler.jsonc`.
+// that API. The API compiles its queries against the `.env` database and then
+// runs on `.dev/e2e.db`. The API port must match `env.e2e.vars.API_URL` in
+// `web/wrangler.jsonc`.
 const API_PORT = 3999
 const WEB_PORT = 4399
 
@@ -39,9 +40,8 @@ export default defineConfig({
         {
             // The site under test is the production build, served by the same
             // runtime that serves it on Cloudflare. The dev server runs the code
-            // through a module runner instead, and on Linux that runner hangs on
-            // the first request to an action route, so the bracket editor never
-            // got an answer in CI. A Worker var beats the shell in local mode, so
+            // through a module runner, which hangs on Linux on the first request
+            // to an action route. A Worker var beats the shell in local mode, so
             // the API URL comes from the `e2e` environment of `wrangler.jsonc`,
             // which holds this same port. `astro preview` detaches itself when it
             // detects an agent, and then Playwright cannot stop it: the variable

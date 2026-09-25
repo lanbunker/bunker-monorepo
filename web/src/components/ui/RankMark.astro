@@ -22,6 +22,8 @@ const {
   class: className,
 } = Astro.props
 const info = RANKS[rank]
+// A phone shows the name only. The cells repeat what the name says. The cells
+// still to earn stay grey, so the ones won read as won at every rank.
 const won = "▮".repeat(info.tier)
 const left = "▯".repeat(RANK_CELLS - info.tier)
 
@@ -42,8 +44,6 @@ const sizeClass: Record<Size, string> = {
   title={`rank ${info.label}`}
   data-rank={rank}
 >
-  <!-- A phone shows the name only. The cells repeat what the name says. The
-       cells still to earn stay grey, so the ones won read as won at every rank. -->
   <span aria-hidden="true" class:list={[labelled && "max-[40rem]:hidden"]}>
     {[<span>{won}</span>, <span class="text-mute">{left}</span>]}
   </span>

@@ -1,4 +1,12 @@
-import type { KindTotal, PointEntry, PointKind, Rank, Standing, TierRule } from "./api"
+import type {
+    CyclesRules,
+    KindTotal,
+    PointEntry,
+    PointKind,
+    Rank,
+    Standing,
+    TierRule,
+} from "./api"
 
 export type RankInfo = {
     /** Position on the ladder, 0 for the bottom. It is the number of lit cells. */
@@ -6,7 +14,6 @@ export type RankInfo = {
     label: string
     /** Tailwind text class. The color tokens live in global.css. */
     text: string
-    border: string
 }
 
 /**
@@ -18,32 +25,27 @@ export const RANKS: Record<Rank, RankInfo> = {
         tier: 0,
         label: "ZOMBIE",
         text: "text-rank-zombie",
-        border: "border-rank-zombie",
     },
     guest: {
         tier: 1,
         label: "GUEST",
         text: "text-rank-guest",
-        border: "border-rank-guest",
     },
-    user: { tier: 2, label: "USER", text: "text-rank-user", border: "border-rank-user" },
+    user: { tier: 2, label: "USER", text: "text-rank-user" },
     sudoer: {
         tier: 3,
         label: "SUDOER",
         text: "text-rank-sudoer",
-        border: "border-rank-sudoer",
     },
     daemon: {
         tier: 4,
         label: "DAEMON",
         text: "text-rank-daemon",
-        border: "border-rank-daemon",
     },
     kernel: {
         tier: 5,
         label: "KERNEL",
         text: "text-rank-kernel",
-        border: "border-rank-kernel",
     },
 }
 
@@ -53,7 +55,7 @@ export const RANK_CELLS = 5
 export type Source = "events" | "tournaments" | "adjustments"
 
 /** Where cycles come from, as a player thinks of it: several kinds make one source. */
-export const SOURCE_OF: Record<PointKind, Source> = {
+const SOURCE_OF: Record<PointKind, Source> = {
     checkin: "events",
     tournament_entry: "tournaments",
     match_win: "tournaments",
@@ -120,7 +122,7 @@ export type KindInfo = {
     blurb: string
 }
 
-/** What each source of cycles is called. The amounts come from the API. */
+/** What each kind of entry is called. */
 export const KINDS: Record<PointKind, KindInfo> = {
     checkin: { label: "event check-in", blurb: "scan the QR code at the entrance" },
     tournament_entry: { label: "tournament entry", blurb: "you showed up and played" },
@@ -156,3 +158,7 @@ export const cyclesRange = (byTier: readonly number[]): string => {
     const high = Math.max(...byTier)
     return low === high ? signed(low) : `${signed(low)} to ${signed(high)}`
 }
+
+/** The cycles a check-in pays. A door has no field of entrants, so every tier pays the same. */
+export const checkinCycles = (rules: CyclesRules | undefined): number | undefined =>
+    rules?.awards.find(award => award.kind === "checkin")?.cycles.at(0)

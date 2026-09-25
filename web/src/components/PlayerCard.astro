@@ -20,16 +20,14 @@ const GLYPH_SIZE = "7.5rem"
 const { player, own = false } = Astro.props
 const standing = player.standing
 const rank = RANKS[standing.rank]
+// The rank cells are decoration, so the name under them is the one thing a
+// screen reader reads for the rank.
 ---
 
-<!-- The card is about one player, so it wears their color: the glyph frame,
-     the handle and the border are the same. The `you` badge marks the owner. -->
 <Panel player={player.glyph.color}>
   <div class="flex flex-wrap gap-6">
     <div class="flex shrink-0 flex-col items-center gap-3" style={`width:${GLYPH_SIZE}`}>
       <Glyph glyph={player.glyph} size={GLYPH_SIZE} framed />
-      <!-- The cells are decoration, so the name under them is the one thing a
-           screen reader reads for the rank. -->
       <div class="flex flex-col items-center gap-1">
         <RankMark rank={standing.rank} size="xl" decorative />
         <span

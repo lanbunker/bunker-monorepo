@@ -6,6 +6,12 @@ export type ActionOutcome = { error?: ActionError | undefined } | undefined
 
 const FALLBACK = "Check the form and send it again."
 
+/** Every field message of a refused input, in field order. */
+const fieldMessages = (error: ActionError): string[] =>
+    isInputError(error)
+        ? Object.values(error.fields).flatMap(messages => messages ?? [])
+        : []
+
 /**
  * The sentence a form shows for a failure.
  *
@@ -20,12 +26,6 @@ export const errorMessage = (error: ActionError | undefined): string | undefined
     return fieldMessages(error).at(0) ?? FALLBACK
 }
 
-/** Every field message of a refused input, in field order. */
-export const fieldMessages = (error: ActionError | undefined): string[] => {
-    if (!error || !isInputError(error)) return []
-    return Object.values(error.fields).flatMap(messages => messages ?? [])
-}
-
 /**
  * The first failure of a page that renders several forms. Astro answers at most
  * one action per request, so at most one of these holds an error.
@@ -35,7 +35,8 @@ export const firstError = (...outcomes: ActionOutcome[]): ActionError | undefine
 
 /**
  * The path a page redirects to after a successful action. The key is a known
- * word, and `who` carries a name the API already validated.
+ * word, and `who` carries the handle the API answered. A reader of the page can
+ * still write any `who` by hand, so the page renders it as text only.
  */
 export const donePath = (base: string, done: string, who?: string): string =>
     `${base}?${new URLSearchParams(who === undefined ? { done } : { done, who })}`
@@ -49,5 +50,6 @@ export const noticeFrom = (
     notices: Readonly<Record<string, string>>,
 ): string | undefined => {
     const key = url.searchParams.get("done")
-    return key === null ? undefined : notices[key]
+    // A plain lookup would also find `valueOf` or `constructor` on the prototype.
+    return key !== null && Object.hasOwn(notices, key) ? notices[key] : undefined
 }

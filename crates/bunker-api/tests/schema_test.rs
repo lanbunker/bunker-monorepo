@@ -9,25 +9,27 @@
     clippy::indexing_slicing
 )]
 
+mod support;
+
 use std::collections::BTreeSet;
 
 use bunker_api::config::{DbConfig, MaxConnections};
-use bunker_api::storage::{connect, run_pending_migrations};
+use bunker_api::storage::connect;
+use sqlx::error::ErrorKind;
+use sqlx::sqlite::SqliteQueryResult;
+use support::migrated_pool;
 
 const SCHEMA_FILE: &str = include_str!("../schema.sql");
 
+/// The kind of constraint that refused a write, or `None` when it passed.
+fn refusal(result: &Result<SqliteQueryResult, sqlx::Error>) -> Option<ErrorKind> {
+    let error = result.as_ref().err()?;
+    Some(error.as_database_error()?.kind())
+}
+
 #[tokio::test]
 async fn schema_sql_matches_the_migrated_database() {
-    let dir = tempfile::tempdir().unwrap();
-    let config = DbConfig {
-        url: format!(
-            "sqlite://{}?mode=rwc",
-            dir.path().join("schema.db").display()
-        ),
-        max_connections: MaxConnections::try_new(1).unwrap(),
-    };
-    let pool = connect(&config).unwrap();
-    run_pending_migrations(&pool).await.unwrap();
+    let (_dir, pool) = migrated_pool().await;
 
     let rows: Vec<(String,)> = sqlx::query_as(
         "select sql from sqlite_master
@@ -55,16 +57,7 @@ async fn schema_sql_matches_the_migrated_database() {
 /// insert must fail at the database, not poison every later read.
 #[tokio::test]
 async fn the_database_refuses_rows_the_domain_refuses() {
-    let dir = tempfile::tempdir().unwrap();
-    let config = DbConfig {
-        url: format!(
-            "sqlite://{}?mode=rwc",
-            dir.path().join("check.db").display()
-        ),
-        max_connections: MaxConnections::try_new(1).unwrap(),
-    };
-    let pool = connect(&config).unwrap();
-    run_pending_migrations(&pool).await.unwrap();
+    let (_dir, pool) = migrated_pool().await;
 
     let bad_rows: [(&str, &str, i64, &str, &str, i64); 6] = [
         (
@@ -117,23 +110,39 @@ async fn the_database_refuses_rows_the_domain_refuses() {
         ),
     ];
 
-    for (id, handle, bits, color, role, created_at) in bad_rows {
-        let result = sqlx::query(
-            "insert into players (id, handle, password_hash, glyph_bits, glyph_color, role, created_at)
-             values (?1, ?2, 'x', ?3, ?4, ?5, ?6)",
-        )
-        .bind(id)
-        .bind(handle)
-        .bind(bits)
-        .bind(color)
-        .bind(role)
-        .bind(created_at)
+    let insert =
+        "insert into players (id, handle, password_hash, glyph_bits, glyph_color, role, created_at)
+                  values (?1, ?2, 'x', ?3, ?4, ?5, ?6)";
+    let valid = sqlx::query(insert)
+        .bind("00000000-0000-0000-0000-000000000000")
+        .bind("valid")
+        .bind(1)
+        .bind("#ffb000")
+        .bind("user")
+        .bind(1)
         .execute(&pool)
         .await;
+    assert_eq!(
+        refusal(&valid),
+        None,
+        "the statement itself works: {valid:?}"
+    );
 
-        assert!(
-            result.is_err(),
-            "the database accepted handle {handle:?}, bits {bits}, color {color}, role {role}, created_at {created_at}"
+    for (id, handle, bits, color, role, created_at) in bad_rows {
+        let result = sqlx::query(insert)
+            .bind(id)
+            .bind(handle)
+            .bind(bits)
+            .bind(color)
+            .bind(role)
+            .bind(created_at)
+            .execute(&pool)
+            .await;
+
+        assert_eq!(
+            refusal(&result),
+            Some(ErrorKind::CheckViolation),
+            "handle {handle:?}, bits {bits}, color {color}, role {role}, created_at {created_at}: {result:?}"
         );
     }
 }
@@ -142,16 +151,7 @@ async fn the_database_refuses_rows_the_domain_refuses() {
 /// entrant go in first, then each bad row must bounce.
 #[tokio::test]
 async fn the_database_refuses_tournament_rows_the_domain_refuses() {
-    let dir = tempfile::tempdir().unwrap();
-    let config = DbConfig {
-        url: format!(
-            "sqlite://{}?mode=rwc",
-            dir.path().join("check.db").display()
-        ),
-        max_connections: MaxConnections::try_new(1).unwrap(),
-    };
-    let pool = connect(&config).unwrap();
-    run_pending_migrations(&pool).await.unwrap();
+    let (_dir, pool) = migrated_pool().await;
 
     const T1: &str = "10000000-0000-0000-0000-000000000001";
     const T2: &str = "10000000-0000-0000-0000-000000000002";
@@ -212,28 +212,50 @@ async fn the_database_refuses_tournament_rows_the_domain_refuses() {
             Some(E1),
         ),
     ];
-    for (id, name, date, status, winner) in bad_tournaments {
-        let result = sqlx::query(
-            "insert into tournaments (id, name, game, mode, description, date, registration_closes_at, status, winner_entrant_id, created_at)
-             values (?1, ?2, 'COD', '1v1', '', ?3, 1, ?4, ?5, 1)",
-        )
-        .bind(id)
-        .bind(name)
-        .bind(date)
-        .bind(status)
-        .bind(winner)
+    let insert = "insert into tournaments (id, name, game, mode, description, date, registration_closes_at, status, winner_entrant_id, created_at)
+                  values (?1, ?2, 'COD', '1v1', '', ?3, 1, ?4, ?5, 1)";
+    let valid = sqlx::query(insert)
+        .bind("30000000-0000-0000-0000-000000000000")
+        .bind("Cup")
+        .bind("2026-10-24")
+        .bind("concluded")
+        .bind(Some(E1))
         .execute(&pool)
         .await;
-        assert!(
-            result.is_err(),
-            "the database accepted name of {} chars, date {date:?}, status {status:?}, winner {winner:?}",
+    assert_eq!(
+        refusal(&valid),
+        None,
+        "the statement itself works: {valid:?}"
+    );
+    for (id, name, date, status, winner) in bad_tournaments {
+        let result = sqlx::query(insert)
+            .bind(id)
+            .bind(name)
+            .bind(date)
+            .bind(status)
+            .bind(winner)
+            .execute(&pool)
+            .await;
+        assert_eq!(
+            refusal(&result),
+            Some(ErrorKind::CheckViolation),
+            "name of {} chars, date {date:?}, status {status:?}, winner {winner:?}: {result:?}",
             name.len()
         );
     }
 
-    for (id, skill) in [
-        ("50000000-0000-0000-0000-000000000001", 0),
-        ("50000000-0000-0000-0000-000000000002", 6),
+    for (id, skill, expected) in [
+        ("50000000-0000-0000-0000-000000000000", 3, None),
+        (
+            "50000000-0000-0000-0000-000000000001",
+            0,
+            Some(ErrorKind::CheckViolation),
+        ),
+        (
+            "50000000-0000-0000-0000-000000000002",
+            6,
+            Some(ErrorKind::CheckViolation),
+        ),
     ] {
         let result = sqlx::query(
             "insert into tournament_entrants (id, tournament_id, player_id, skill, registered_at)
@@ -244,7 +266,7 @@ async fn the_database_refuses_tournament_rows_the_domain_refuses() {
         .bind(skill)
         .execute(&pool)
         .await;
-        assert!(result.is_err(), "the database accepted skill {skill}");
+        assert_eq!(refusal(&result), expected, "skill {skill}: {result:?}");
     }
 
     // The ledger. A valid adjustment and a valid award go in, then each bad row
@@ -411,54 +433,62 @@ async fn the_database_refuses_tournament_rows_the_domain_refuses() {
         }
     }
 
-    type MatchRow<'a> = (&'a str, Option<&'a str>, Option<&'a str>, Option<&'a str>);
-    let bad_matches: [MatchRow; 2] = [
+    let insert =
+        "insert into matches (id, tournament_id, round, slot, entrant_a, entrant_b, winner)
+                  values (?1, ?2, 1, ?3, ?4, ?5, ?6)";
+    type MatchRow<'a> = (
+        &'a str,
+        i64,
+        Option<&'a str>,
+        Option<&'a str>,
+        Option<&'a str>,
+        Option<ErrorKind>,
+    );
+    let matches: [MatchRow; 3] = [
+        // A match between two entrants of the tournament.
+        (
+            "40000000-0000-0000-0000-000000000003",
+            0,
+            Some(E1),
+            Some(E2),
+            Some(E1),
+            None,
+        ),
         // The winner is not one of the two sides.
         (
             "40000000-0000-0000-0000-000000000001",
+            1,
             Some(E1),
             Some(E2),
             Some(E_OTHER),
+            Some(ErrorKind::CheckViolation),
         ),
         // An entrant of another tournament.
         (
             "40000000-0000-0000-0000-000000000002",
+            2,
             Some(E1),
             Some(E_OTHER),
             None,
+            Some(ErrorKind::ForeignKeyViolation),
         ),
     ];
-    for (id, a, b, winner) in bad_matches {
-        let result = sqlx::query(
-            "insert into matches (id, tournament_id, round, slot, entrant_a, entrant_b, winner)
-             values (?1, ?2, 1, 0, ?3, ?4, ?5)",
-        )
-        .bind(id)
-        .bind(T1)
-        .bind(a)
-        .bind(b)
-        .bind(winner)
-        .execute(&pool)
-        .await;
-        assert!(
-            result.is_err(),
-            "the database accepted match a {a:?}, b {b:?}, winner {winner:?}"
+    for (id, slot, a, b, winner, expected) in matches {
+        let result = sqlx::query(insert)
+            .bind(id)
+            .bind(T1)
+            .bind(slot)
+            .bind(a)
+            .bind(b)
+            .bind(winner)
+            .execute(&pool)
+            .await;
+        assert_eq!(
+            refusal(&result),
+            expected,
+            "match a {a:?}, b {b:?}, winner {winner:?}: {result:?}"
         );
     }
-
-    let good = sqlx::query(
-        "insert into matches (id, tournament_id, round, slot, entrant_a, entrant_b, winner)
-         values ('40000000-0000-0000-0000-000000000003', ?1, 1, 0, ?2, ?3, ?2)",
-    )
-    .bind(T1)
-    .bind(E1)
-    .bind(E2)
-    .execute(&pool)
-    .await;
-    assert!(
-        good.is_ok(),
-        "a match between two entrants of the tournament is accepted"
-    );
 }
 
 /// The file holds one statement per `;`, plus comment lines that this skips.
@@ -488,16 +518,7 @@ fn normalize(sql: &str) -> String {
 /// of twelve lowercase characters, and one check-in per player per event.
 #[tokio::test]
 async fn the_database_refuses_event_rows_the_domain_refuses() {
-    let dir = tempfile::tempdir().unwrap();
-    let config = DbConfig {
-        url: format!(
-            "sqlite://{}?mode=rwc",
-            dir.path().join("events.db").display()
-        ),
-        max_connections: MaxConnections::try_new(1).unwrap(),
-    };
-    let pool = connect(&config).unwrap();
-    run_pending_migrations(&pool).await.unwrap();
+    let (_dir, pool) = migrated_pool().await;
 
     const EVENT: &str = "90000000-0000-0000-0000-000000000001";
     const PLAYER: &str = "90000000-0000-0000-0000-000000000002";
@@ -595,9 +616,10 @@ async fn the_database_refuses_event_rows_the_domain_refuses() {
             .bind(code)
             .execute(&pool)
             .await;
-        assert!(
-            result.is_err(),
-            "the database accepted image {image:?}, window {starts_at}..{ends_at}, status {status:?}, code {code:?}"
+        assert_eq!(
+            refusal(&result),
+            Some(ErrorKind::CheckViolation),
+            "image {image:?}, window {starts_at}..{ends_at}, status {status:?}, code {code:?}: {result:?}"
         );
     }
 
@@ -612,7 +634,11 @@ async fn the_database_refuses_event_rows_the_domain_refuses() {
         .bind("abcdefghij12")
         .execute(&pool)
         .await;
-    assert!(taken.is_err(), "two events share a check-in code");
+    assert_eq!(
+        refusal(&taken),
+        Some(ErrorKind::UniqueViolation),
+        "two events share a check-in code"
+    );
 
     sqlx::query(
         "insert into players (id, handle, password_hash, glyph_bits, glyph_color, created_at)
@@ -637,15 +663,20 @@ async fn the_database_refuses_event_rows_the_domain_refuses() {
         .bind(16)
         .execute(&pool)
         .await;
-    assert!(twice.is_err(), "a player checked in twice to one event");
+    assert_eq!(
+        refusal(&twice),
+        Some(ErrorKind::UniqueViolation),
+        "a player checked in twice to one event"
+    );
     let nowhere = sqlx::query(checkin)
         .bind("a0000000-0000-0000-0000-000000000099")
         .bind(PLAYER)
         .bind(16)
         .execute(&pool)
         .await;
-    assert!(
-        nowhere.is_err(),
+    assert_eq!(
+        refusal(&nowhere),
+        Some(ErrorKind::ForeignKeyViolation),
         "a check-in to an event that does not exist"
     );
 }

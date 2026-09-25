@@ -1,5 +1,5 @@
 use bunker_models::{
-    Account, LoginRequest, Password, PasswordChange, PlayerId, SignupRequest, TemporaryPassword,
+    LoginRequest, Password, PasswordChange, PlayerId, Role, SignupRequest, TemporaryPassword,
     TokenResponse, generate_glyph,
 };
 use time::OffsetDateTime;
@@ -10,6 +10,16 @@ use crate::storage::{Created, NewPlayer, PlayerStorage};
 use super::error::ServiceError;
 use super::password::PasswordHasher;
 use super::token::TokenIssuer;
+
+/// Who sends a request, as a valid token and the players table say.
+#[derive(Debug, Clone, Copy)]
+pub struct Caller {
+    pub id: PlayerId,
+    pub role: Role,
+    /// Set after an admin reset. Only `/api/me` and `/api/me/password` take a
+    /// caller with this flag.
+    pub must_change_password: bool,
+}
 
 #[derive(Debug, Clone)]
 pub struct AuthService {
@@ -127,11 +137,11 @@ impl AuthService {
 
     /// Signature, expiry, then the account: a deleted player and a token issued
     /// before the last password change are both refused as unauthorized.
-    pub async fn authenticate(&self, token: &str) -> Result<Account, ServiceError> {
+    pub async fn authenticate(&self, token: &str) -> Result<Caller, ServiceError> {
         let verified = self.tokens.verify(token)?;
         let stored = self
             .players
-            .get_by_id(verified.player)
+            .access(verified.player)
             .await?
             .ok_or_else(|| ServiceError::invalid_token(StaleToken::UnknownPlayer))?;
 
@@ -139,7 +149,11 @@ impl AuthService {
             return Err(ServiceError::invalid_token(StaleToken::PasswordChanged));
         }
 
-        Ok(stored.account)
+        Ok(Caller {
+            id: stored.id,
+            role: stored.role,
+            must_change_password: stored.must_change_password,
+        })
     }
 }
 

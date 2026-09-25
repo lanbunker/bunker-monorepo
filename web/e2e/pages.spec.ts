@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test"
 
-import { newPlayer } from "./support"
+import { SITE, newPlayer } from "./support"
 
 /**
  * Every public page answers, and no page leaks a stack or an empty shell. The
@@ -26,6 +26,29 @@ test("every public page answers 200 and renders its own title", async ({ page })
         await expect(page, entry.path).toHaveTitle(entry.title)
         await expect(page.locator("main"), entry.path).toContainText(entry.heading)
         await expect(page.getByRole("alert"), entry.path).toHaveCount(0)
+    }
+})
+
+test("the home page shows its tagline, with or without scripts", async ({ browser }) => {
+    for (const javaScriptEnabled of [true, false]) {
+        const context = await browser.newContext({ baseURL: SITE, javaScriptEnabled })
+        const page = await context.newPage()
+        await page.goto("/")
+        await expect(
+            page.getByText("Enter the bunker."),
+            `js ${javaScriptEnabled}`,
+        ).toBeVisible()
+        await expect(page.locator("#status-block")).toBeVisible()
+        await context.close()
+    }
+})
+
+test("a done key the page does not know shows no notice", async ({ page }) => {
+    // A plain lookup would find these on the prototype of the notice table.
+    for (const key of ["valueOf", "constructor", "toString", "__proto__"]) {
+        const response = await page.goto(`/tournaments?done=${key}`)
+        expect(response?.status(), key).toBe(200)
+        await expect(page.getByRole("status"), key).toHaveCount(0)
     }
 })
 

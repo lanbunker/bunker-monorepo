@@ -5,9 +5,10 @@
 use nutype::nutype;
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
-use utoipa::ToSchema;
-use uuid::Uuid;
+use utoipa::openapi::{RefOr, Schema};
+use utoipa::{PartialSchema, ToSchema};
 
+use super::id::uuid_id;
 use super::player::{Player, PlayerId};
 use super::tournament::Description;
 
@@ -17,24 +18,7 @@ pub const GAMES_MAX_LEN: usize = 200;
 pub const IMAGE_NAME_MAX_LEN: usize = 80;
 pub const CHECKIN_CODE_LEN: usize = 12;
 
-#[nutype(derive(
-    Debug,
-    Clone,
-    Copy,
-    PartialEq,
-    Eq,
-    Hash,
-    Display,
-    Serialize,
-    Deserialize
-))]
-pub struct EventId(Uuid);
-
-impl EventId {
-    pub fn generate() -> Self {
-        Self::new(Uuid::new_v4())
-    }
-}
+uuid_id!(EventId);
 
 #[nutype(
     sanitize(trim),
@@ -61,7 +45,8 @@ pub struct Location(String);
 )]
 pub struct Games(String);
 
-/// The file name of a cover under the images of the site: no path, no space.
+/// The file name of a cover under the images of the site: no path, no space,
+/// and a letter or a digit first, so `.`, `..` and a hidden file are refused.
 /// The site owns the files, and a name it does not know renders no cover.
 #[nutype(
     sanitize(trim),
@@ -72,6 +57,7 @@ pub struct ImageName(String);
 
 fn is_image_name(value: &str) -> bool {
     (1..=IMAGE_NAME_MAX_LEN).contains(&value.chars().count())
+        && value.starts_with(|c: char| c.is_ascii_alphanumeric())
         && value
             .chars()
             .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-'))
@@ -134,45 +120,36 @@ impl std::str::FromStr for EventStatus {
 #[error("the end must come after the start")]
 pub struct EventWindowError;
 
-/// Where `now` sits against the window of an event. The door pays only while
-/// it is `Open`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, ToSchema)]
-#[serde(rename_all = "lowercase")]
-pub enum CheckinWindow {
-    Early,
-    Open,
-    Over,
+/// From the doors to the last game. The end comes after the start, so a window
+/// is never empty and never runs backwards.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct EventWindow {
+    starts_at: OffsetDateTime,
+    ends_at: OffsetDateTime,
 }
 
-/// An event as every client sees it. The check-in code is not here: only an
-/// admin reads it, through [`EventDetail`].
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
-#[serde(rename_all = "camelCase")]
-pub struct Event {
-    pub id: EventId,
-    pub name: EventName,
-    pub location: Location,
-    pub games: Games,
-    pub description: Description,
-    pub image: Option<ImageName>,
-    /// The doors open, and with them the check-in.
-    #[serde(with = "time::serde::rfc3339")]
-    #[schema(value_type = String, format = DateTime)]
-    pub starts_at: OffsetDateTime,
-    /// The last game. Past it the check-in is over.
-    #[serde(with = "time::serde::rfc3339")]
-    #[schema(value_type = String, format = DateTime)]
-    pub ends_at: OffsetDateTime,
-    pub status: EventStatus,
-    pub checkin_count: u32,
-    #[serde(with = "time::serde::rfc3339")]
-    #[schema(value_type = String, format = DateTime)]
-    pub created_at: OffsetDateTime,
-}
+impl EventWindow {
+    pub fn try_new(
+        starts_at: OffsetDateTime,
+        ends_at: OffsetDateTime,
+    ) -> Result<Self, EventWindowError> {
+        if ends_at <= starts_at {
+            return Err(EventWindowError);
+        }
+        Ok(Self { starts_at, ends_at })
+    }
 
-impl Event {
-    /// The check-in opens with the doors and closes with the last game.
-    pub fn checkin_window(&self, now: OffsetDateTime) -> CheckinWindow {
+    pub const fn starts_at(self) -> OffsetDateTime {
+        self.starts_at
+    }
+
+    pub const fn ends_at(self) -> OffsetDateTime {
+        self.ends_at
+    }
+
+    /// The check-in opens with the doors and closes with the last game: the
+    /// start is in, the end is out.
+    pub fn checkin(self, now: OffsetDateTime) -> CheckinWindow {
         if now < self.starts_at {
             CheckinWindow::Early
         } else if now < self.ends_at {
@@ -183,39 +160,172 @@ impl Event {
     }
 }
 
+/// Where `now` sits against the window of an event. The door pays only while
+/// it is `Open`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "lowercase")]
+pub enum CheckinWindow {
+    Early,
+    Open,
+    Over,
+}
+
+/// An event as every client sees it. On the wire the window is two flat fields,
+/// `startsAt` and `endsAt`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(into = "EventWire", try_from = "EventWire")]
+pub struct Event {
+    pub id: EventId,
+    pub name: EventName,
+    pub location: Location,
+    pub games: Games,
+    pub description: Description,
+    pub image: Option<ImageName>,
+    pub window: EventWindow,
+    pub status: EventStatus,
+    pub checkin_count: u32,
+    pub created_at: OffsetDateTime,
+}
+
+impl Event {
+    pub fn checkin_window(&self, now: OffsetDateTime) -> CheckinWindow {
+        self.window.checkin(now)
+    }
+}
+
+/// An event as every client sees it. The check-in code is not here: only an
+/// admin reads it, through [`EventDetail`].
+#[derive(Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+struct EventWire {
+    id: EventId,
+    name: EventName,
+    location: Location,
+    games: Games,
+    description: Description,
+    image: Option<ImageName>,
+    /// The doors open.
+    #[serde(with = "time::serde::rfc3339")]
+    #[schema(value_type = String, format = DateTime)]
+    starts_at: OffsetDateTime,
+    /// The last game.
+    #[serde(with = "time::serde::rfc3339")]
+    #[schema(value_type = String, format = DateTime)]
+    ends_at: OffsetDateTime,
+    status: EventStatus,
+    checkin_count: u32,
+    #[serde(with = "time::serde::rfc3339")]
+    #[schema(value_type = String, format = DateTime)]
+    created_at: OffsetDateTime,
+}
+
+impl From<Event> for EventWire {
+    fn from(event: Event) -> Self {
+        Self {
+            id: event.id,
+            name: event.name,
+            location: event.location,
+            games: event.games,
+            description: event.description,
+            image: event.image,
+            starts_at: event.window.starts_at,
+            ends_at: event.window.ends_at,
+            status: event.status,
+            checkin_count: event.checkin_count,
+            created_at: event.created_at,
+        }
+    }
+}
+
+impl TryFrom<EventWire> for Event {
+    type Error = EventWindowError;
+
+    fn try_from(wire: EventWire) -> Result<Self, Self::Error> {
+        Ok(Self {
+            id: wire.id,
+            name: wire.name,
+            location: wire.location,
+            games: wire.games,
+            description: wire.description,
+            image: wire.image,
+            window: EventWindow::try_new(wire.starts_at, wire.ends_at)?,
+            status: wire.status,
+            checkin_count: wire.checkin_count,
+            created_at: wire.created_at,
+        })
+    }
+}
+
+/// What an admin sends to create or replace an event. On the wire the window
+/// is two flat fields, and a window out of order fails the parse.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(try_from = "EventFieldsWire")]
+pub struct EventFields {
+    pub name: EventName,
+    pub location: Location,
+    pub games: Games,
+    pub description: Description,
+    pub image: Option<ImageName>,
+    pub window: EventWindow,
+}
+
 /// Body of `POST /api/admin/events` and of `PUT /api/admin/events/{id}`. A
 /// put replaces every field, so an absent cover clears the cover. A new event
 /// is always a draft.
-#[derive(Debug, Clone, Deserialize, ToSchema)]
+#[derive(Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct EventFields {
-    pub name: EventName,
+struct EventFieldsWire {
+    name: EventName,
     #[serde(default)]
-    pub location: Location,
+    location: Location,
     #[serde(default)]
-    pub games: Games,
+    games: Games,
     #[serde(default)]
-    pub description: Description,
+    description: Description,
     #[serde(default)]
-    pub image: Option<ImageName>,
+    image: Option<ImageName>,
     #[serde(with = "time::serde::rfc3339")]
     #[schema(value_type = String, format = DateTime)]
-    pub starts_at: OffsetDateTime,
+    starts_at: OffsetDateTime,
     #[serde(with = "time::serde::rfc3339")]
     #[schema(value_type = String, format = DateTime)]
-    pub ends_at: OffsetDateTime,
+    ends_at: OffsetDateTime,
 }
 
-impl EventFields {
-    /// The one rule two fields share, so no single field can hold it: the
-    /// night ends after it starts.
-    pub fn check_window(&self) -> Result<(), EventWindowError> {
-        if self.ends_at <= self.starts_at {
-            return Err(EventWindowError);
-        }
-        Ok(())
+impl TryFrom<EventFieldsWire> for EventFields {
+    type Error = EventWindowError;
+
+    fn try_from(wire: EventFieldsWire) -> Result<Self, Self::Error> {
+        Ok(Self {
+            name: wire.name,
+            location: wire.location,
+            games: wire.games,
+            description: wire.description,
+            image: wire.image,
+            window: EventWindow::try_new(wire.starts_at, wire.ends_at)?,
+        })
     }
 }
+
+/// The schema of a type that crosses the wire through a private shape: the
+/// name stays the public one, and the fields are those of the shape.
+macro_rules! wire_schema {
+    ($($public:ty => $wire:ty),+ $(,)?) => {$(
+        impl PartialSchema for $public {
+            fn schema() -> RefOr<Schema> {
+                <$wire as PartialSchema>::schema()
+            }
+        }
+
+        impl ToSchema for $public {
+            fn schemas(schemas: &mut Vec<(String, RefOr<Schema>)>) {
+                <$wire as ToSchema>::schemas(schemas);
+            }
+        }
+    )+};
+}
+
+wire_schema!(Event => EventWire, EventFields => EventFieldsWire);
 
 /// Body of `POST /api/admin/events/{id}/status`.
 #[derive(Debug, Clone, Deserialize, ToSchema)]

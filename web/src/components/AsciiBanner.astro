@@ -80,7 +80,7 @@ if (hollow && !text.toUpperCase().endsWith(hollow.toUpperCase())) {
 
   // "#" is a lit cell, "." is dark. The hollow letters sit inside a lit block
   // with one cell of padding: their strokes are dark ("o") and the block around
-  // them is lit ("b"). The block starts one column after the last solid letter.
+  // them is lit ("b").
   const buildMask = (text: string, hollowFrom: number) => {
     const letters = Array.from(text)
     const hasBlock = hollowFrom < letters.length

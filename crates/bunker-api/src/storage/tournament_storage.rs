@@ -1,11 +1,11 @@
 use bunker_models::{
-    Award, Bracket, Description, Entrant, EntrantId, GameMode, GameName, Match, MatchId, PageQuery,
-    Paginated, PlayerId, SkillLevel, Tournament, TournamentId, TournamentName, TournamentStatus,
-    TournamentUpdate,
+    Award, Bracket, Description, Entrant, EntrantId, GameMode, GameName, MAX_ENTRANTS, Match,
+    MatchId, PageQuery, Paginated, PlayerId, SkillLevel, Tournament, TournamentId, TournamentName,
+    TournamentStatus, TournamentUpdate,
 };
 use time::{Date, OffsetDateTime};
 
-use super::db::DbPool;
+use super::db::{DbPool, begin_write};
 use super::error::StorageError;
 use super::point_storage::{AwardSource, insert_awards};
 use super::row::{
@@ -18,6 +18,10 @@ const MATCHES: &str = "matches";
 
 /// The unique index on `(tournament_id, player_id)`, as SQLite names it.
 const ENTRANT_CONSTRAINT: &str = "tournament_entrants.tournament_id, tournament_entrants.player_id";
+
+/// The most tournaments one read of a player's registrations returns. Years of
+/// nights fit, and the newest come first, so a cut drops the oldest.
+const REGISTRATIONS_MAX: i64 = 1000;
 
 #[derive(Debug, Clone)]
 pub struct NewTournamentRow {
@@ -40,12 +44,37 @@ pub struct NewEntrant {
     pub registered_at: OffsetDateTime,
 }
 
-/// What an insert of an entrant did. A second registration is a result, not a
-/// failure, and the service says what it means.
-#[derive(Debug)]
+/// What an insert of an entrant did. A second registration and a refused guard
+/// are results, not failures, and the service says what they mean.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Enrolled {
     New,
     Already,
+    Refused,
+}
+
+/// The state of a tournament that an entrant write expects. The write checks it
+/// in the statement that writes, so a status change, a new bracket or a passed
+/// deadline between the read and the write refuses the write.
+///
+/// Every entrant write also needs the tournament to have no bracket, and an
+/// insert needs a free place under `MAX_ENTRANTS`: a bracket fixes the field,
+/// and the field has a size.
+#[derive(Debug, Clone, Copy)]
+pub struct EntrantGuard {
+    pub status: TournamentStatus,
+    /// The deadline must still be after this instant. `None` ignores it.
+    pub open_at: Option<OffsetDateTime>,
+}
+
+/// What a write of the whole bracket did.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BracketWrite {
+    Done,
+    /// A match holds a result, so the bracket stays.
+    Locked,
+    /// The status or the entrants changed since the service read them.
+    Changed,
 }
 
 #[derive(Debug, Clone)]
@@ -180,13 +209,16 @@ impl TournamentStorage {
         ))
     }
 
-    /// `false` when no row has the id. An absent field keeps its value.
+    /// `false` when no row has the id and `expected` status. An absent field
+    /// keeps its value.
     pub async fn update(
         &self,
         id: TournamentId,
+        expected: TournamentStatus,
         update: &TournamentUpdate,
     ) -> Result<bool, StorageError> {
         let id = id.into_inner().to_string();
+        let expected = expected.as_str();
         let name = update.name.as_ref().map(AsRef::<str>::as_ref);
         let game = update.game.as_ref().map(AsRef::<str>::as_ref);
         let mode = update.mode.as_ref().map(AsRef::<str>::as_ref);
@@ -205,7 +237,7 @@ impl TournamentStorage {
                  description = coalesce(?4, description),
                  date = coalesce(?5, date),
                  registration_closes_at = coalesce(?6, registration_closes_at)
-             where id = ?7",
+             where id = ?7 and status = ?8",
             name,
             game,
             mode,
@@ -213,6 +245,7 @@ impl TournamentStorage {
             date,
             closes_at,
             id,
+            expected,
         )
         .execute(&self.pool)
         .await
@@ -221,34 +254,42 @@ impl TournamentStorage {
         Ok(result.rows_affected() > 0)
     }
 
-    /// The status, the winner and the cycles the conclusion pays, in one
-    /// transaction: a concluded tournament is never half paid.
+    /// Moves the status from `from` to `to`, with the winner and the cycles the
+    /// move pays, in one transaction: a concluded tournament is never half paid.
+    /// `false` when the status is no longer `from`, and then nothing is written,
+    /// so two concurrent conclusions pay one time.
     pub async fn set_status(
         &self,
         id: TournamentId,
-        status: TournamentStatus,
+        from: TournamentStatus,
+        to: TournamentStatus,
         winner: Option<EntrantId>,
         awards: &[Award],
         at: OffsetDateTime,
     ) -> Result<bool, StorageError> {
         let tournament = id.into_inner().to_string();
-        let status = status.as_str();
+        let from = from.as_str();
+        let to = to.as_str();
         let winner = winner.map(|w| w.into_inner().to_string());
 
-        let mut tx = self.pool.begin().await.map_err(StorageError::from_query)?;
+        let mut tx = begin_write(&self.pool).await?;
         let result = sqlx::query!(
-            "update tournaments set status = ?1, winner_entrant_id = ?2 where id = ?3",
-            status,
+            "update tournaments set status = ?1, winner_entrant_id = ?2 where id = ?3 and status = ?4",
+            to,
             winner,
             tournament,
+            from,
         )
         .execute(&mut *tx)
         .await
         .map_err(StorageError::from_query)?;
+        if result.rows_affected() == 0 {
+            return Ok(false);
+        }
         insert_awards(&mut tx, AwardSource::Tournament(id), awards, at).await?;
         tx.commit().await.map_err(StorageError::from_query)?;
 
-        Ok(result.rows_affected() > 0)
+        Ok(true)
     }
 
     /// Entrants and matches go with it. `true` when a row was removed.
@@ -265,6 +306,7 @@ impl TournamentStorage {
     /// Seeded entrants first in seed order, then the rest by registration.
     pub async fn entrants(&self, tournament: TournamentId) -> Result<Vec<Entrant>, StorageError> {
         let tournament = tournament.into_inner().to_string();
+        let limit = i64::from(MAX_ENTRANTS);
         let rows = sqlx::query_as!(
             EntrantRow,
             r#"select e.id, e.seed, e.skill, e.registered_at,
@@ -275,8 +317,10 @@ impl TournamentStorage {
                left join players p on p.id = e.player_id
                left join player_standings s on s.player_id = p.id
                where e.tournament_id = ?1
-               order by e.seed is null, e.seed asc, e.registered_at asc, e.id asc"#,
+               order by e.seed is null, e.seed asc, e.registered_at asc, e.id asc
+               limit ?2"#,
             tournament,
+            limit,
         )
         .fetch_all(&self.pool)
         .await
@@ -312,16 +356,18 @@ impl TournamentStorage {
         row.map(TryInto::try_into).transpose()
     }
 
-    /// Every tournament the player entered, in any status. The index on
-    /// `player_id` makes this one lookup.
+    /// The tournaments the player entered, in any status, the newest entry
+    /// first, up to [`REGISTRATIONS_MAX`].
     pub async fn tournaments_of(
         &self,
         player: PlayerId,
     ) -> Result<Vec<TournamentId>, StorageError> {
         let player = player.into_inner().to_string();
         let rows = sqlx::query_scalar!(
-            "select tournament_id from tournament_entrants where player_id = ?1 order by registered_at asc",
+            "select tournament_id from tournament_entrants where player_id = ?1
+             order by registered_at desc limit ?2",
             player,
+            REGISTRATIONS_MAX,
         )
         .fetch_all(&self.pool)
         .await
@@ -332,26 +378,50 @@ impl TournamentStorage {
             .collect()
     }
 
-    pub async fn add_entrant(&self, entrant: &NewEntrant) -> Result<Enrolled, StorageError> {
+    pub async fn add_entrant(
+        &self,
+        entrant: &NewEntrant,
+        guard: EntrantGuard,
+    ) -> Result<Enrolled, StorageError> {
         let id = entrant.id.into_inner().to_string();
         let tournament = entrant.tournament.into_inner().to_string();
         let player = entrant.player.into_inner().to_string();
         let skill = entrant.skill.map(skill_column);
         let registered_at = to_micros(ENTRANTS, entrant.registered_at)?;
+        let status = guard.status.as_str();
+        let open_at = guard
+            .open_at
+            .map(|at| to_micros(TOURNAMENTS, at))
+            .transpose()?;
+        let max = i64::from(MAX_ENTRANTS);
 
+        // A player already in keeps the place, so a full field still lets them
+        // reach the unique index and answer `Already`.
         let inserted = sqlx::query!(
             "insert into tournament_entrants (id, tournament_id, player_id, skill, registered_at)
-             values (?1, ?2, ?3, ?4, ?5)",
+             select ?1, ?2, ?3, ?4, ?5
+             where exists (
+                 select 1 from tournaments t
+                 where t.id = ?2 and t.status = ?6
+                   and (?7 is null or t.registration_closes_at > ?7)
+                   and not exists (select 1 from matches m where m.tournament_id = t.id)
+                   and ((select count(*) from tournament_entrants e where e.tournament_id = t.id) < ?8
+                        or exists (select 1 from tournament_entrants e
+                                   where e.tournament_id = t.id and e.player_id = ?3)))",
             id,
             tournament,
             player,
             skill,
             registered_at,
+            status,
+            open_at,
+            max,
         )
         .execute(&self.pool)
         .await;
 
         match inserted {
+            Ok(result) if result.rows_affected() == 0 => Ok(Enrolled::Refused),
             Ok(_) => Ok(Enrolled::New),
             Err(error) => match StorageError::from_query(error) {
                 StorageError::UniqueViolation { constraint, .. }
@@ -364,41 +434,71 @@ impl TournamentStorage {
         }
     }
 
-    /// The level of the entry of `player`. An absent entry changes nothing.
+    /// The level of the entry of `player`. `false` when the guard refuses, or
+    /// when the player has no entry.
     pub async fn set_skill(
         &self,
         tournament: TournamentId,
         player: PlayerId,
         skill: SkillLevel,
-    ) -> Result<(), StorageError> {
+        guard: EntrantGuard,
+    ) -> Result<bool, StorageError> {
         let tournament = tournament.into_inner().to_string();
         let player = player.into_inner().to_string();
         let skill = skill_column(skill);
-        sqlx::query!(
-            "update tournament_entrants set skill = ?1 where tournament_id = ?2 and player_id = ?3",
+        let status = guard.status.as_str();
+        let open_at = guard
+            .open_at
+            .map(|at| to_micros(TOURNAMENTS, at))
+            .transpose()?;
+        let result = sqlx::query!(
+            "update tournament_entrants set skill = ?1
+             where tournament_id = ?2 and player_id = ?3
+               and exists (
+                   select 1 from tournaments t
+                   where t.id = ?2 and t.status = ?4
+                     and (?5 is null or t.registration_closes_at > ?5)
+                     and not exists (select 1 from matches m where m.tournament_id = t.id))",
             skill,
             tournament,
             player,
+            status,
+            open_at,
         )
         .execute(&self.pool)
         .await
         .map_err(StorageError::from_query)?;
 
-        Ok(())
+        Ok(result.rows_affected() > 0)
     }
 
-    /// `true` when a row was removed.
+    /// `true` when a row was removed. `false` when the guard refuses, or when
+    /// there was no such entrant.
     pub async fn remove_entrant(
         &self,
         tournament: TournamentId,
         entrant: EntrantId,
+        guard: EntrantGuard,
     ) -> Result<bool, StorageError> {
         let tournament = tournament.into_inner().to_string();
         let entrant = entrant.into_inner().to_string();
+        let status = guard.status.as_str();
+        let open_at = guard
+            .open_at
+            .map(|at| to_micros(TOURNAMENTS, at))
+            .transpose()?;
         let result = sqlx::query!(
-            "delete from tournament_entrants where tournament_id = ?1 and id = ?2",
+            "delete from tournament_entrants
+             where tournament_id = ?1 and id = ?2
+               and exists (
+                   select 1 from tournaments t
+                   where t.id = ?1 and t.status = ?3
+                     and (?4 is null or t.registration_closes_at > ?4)
+                     and not exists (select 1 from matches m where m.tournament_id = t.id))",
             tournament,
             entrant,
+            status,
+            open_at,
         )
         .execute(&self.pool)
         .await
@@ -407,17 +507,32 @@ impl TournamentStorage {
         Ok(result.rows_affected() > 0)
     }
 
+    /// The same as [`Self::remove_entrant`], by the player of the entry.
     pub async fn remove_entrant_of(
         &self,
         tournament: TournamentId,
         player: PlayerId,
+        guard: EntrantGuard,
     ) -> Result<bool, StorageError> {
         let tournament = tournament.into_inner().to_string();
         let player = player.into_inner().to_string();
+        let status = guard.status.as_str();
+        let open_at = guard
+            .open_at
+            .map(|at| to_micros(TOURNAMENTS, at))
+            .transpose()?;
         let result = sqlx::query!(
-            "delete from tournament_entrants where tournament_id = ?1 and player_id = ?2",
+            "delete from tournament_entrants
+             where tournament_id = ?1 and player_id = ?2
+               and exists (
+                   select 1 from tournaments t
+                   where t.id = ?1 and t.status = ?3
+                     and (?4 is null or t.registration_closes_at > ?4)
+                     and not exists (select 1 from matches m where m.tournament_id = t.id))",
             tournament,
             player,
+            status,
+            open_at,
         )
         .execute(&self.pool)
         .await
@@ -426,14 +541,17 @@ impl TournamentStorage {
         Ok(result.rows_affected() > 0)
     }
 
-    /// Every match, in round and slot order. Empty when there is no bracket.
+    /// Every match, in round and slot order. Empty when there is no bracket. A
+    /// bracket of `MAX_ENTRANTS` has one match less than that.
     pub async fn matches(&self, tournament: TournamentId) -> Result<Vec<Match>, StorageError> {
         let tournament = tournament.into_inner().to_string();
+        let limit = i64::from(MAX_ENTRANTS);
         let rows = sqlx::query_as!(
             MatchRow,
             "select id, round, slot, entrant_a, entrant_b, winner
-             from matches where tournament_id = ?1 order by round asc, slot asc",
+             from matches where tournament_id = ?1 order by round asc, slot asc limit ?2",
             tournament,
+            limit,
         )
         .fetch_all(&self.pool)
         .await
@@ -443,16 +561,24 @@ impl TournamentStorage {
     }
 
     /// Replaces the whole bracket: the seeds follow `order`, and the old matches
-    /// go away. One transaction, so a reader never sees half a bracket.
+    /// go away. One transaction, so a reader never sees half a bracket. The
+    /// status and the results are read inside it, so a result entered or a
+    /// status moved since the service looked refuses the write.
     pub async fn replace_bracket(
         &self,
         tournament: TournamentId,
+        expected: TournamentStatus,
         order: &[EntrantId],
         bracket: &Bracket,
-    ) -> Result<(), StorageError> {
+    ) -> Result<BracketWrite, StorageError> {
+        let id = tournament;
         let tournament = tournament.into_inner().to_string();
 
-        let mut tx = self.pool.begin().await.map_err(StorageError::from_query)?;
+        let mut tx = begin_write(&self.pool).await?;
+        let blocked = bracket_blocked(&mut tx, id, expected).await?;
+        if blocked != BracketWrite::Done {
+            return Ok(blocked);
+        }
         sqlx::query!(
             "update tournament_entrants set seed = null where tournament_id = ?1",
             tournament
@@ -460,8 +586,7 @@ impl TournamentStorage {
         .execute(&mut *tx)
         .await
         .map_err(StorageError::from_query)?;
-        for (index, entrant) in order.iter().enumerate() {
-            let seed = i64::try_from(index + 1).unwrap_or(i64::MAX);
+        for (seed, entrant) in (1_i64..).zip(order) {
             let entrant = entrant.into_inner().to_string();
             let updated = sqlx::query!(
                 "update tournament_entrants set seed = ?1 where tournament_id = ?2 and id = ?3",
@@ -472,13 +597,10 @@ impl TournamentStorage {
             .execute(&mut *tx)
             .await
             .map_err(StorageError::from_query)?;
-            // The service checked the order. A miss here means a match would point
-            // at an entrant without a seed, so the whole write is dropped.
+            // The service checked the order against the entrants it read. A miss
+            // means one left since, so the whole write is dropped.
             if updated.rows_affected() != 1 {
-                return Err(StorageError::malformed_row(
-                    ENTRANTS,
-                    MalformedField("seed"),
-                ));
+                return Ok(BracketWrite::Changed);
             }
         }
         sqlx::query!("delete from matches where tournament_id = ?1", tournament)
@@ -509,15 +631,24 @@ impl TournamentStorage {
         }
         tx.commit().await.map_err(StorageError::from_query)?;
 
-        Ok(())
+        Ok(BracketWrite::Done)
     }
 
-    /// Removes the matches and the seeds. A tournament with no bracket is left as
-    /// it was.
-    pub async fn delete_bracket(&self, tournament: TournamentId) -> Result<(), StorageError> {
+    /// Removes the matches and the seeds, under the same guard as
+    /// [`Self::replace_bracket`]. A tournament with no bracket is left as it was.
+    pub async fn delete_bracket(
+        &self,
+        tournament: TournamentId,
+        expected: TournamentStatus,
+    ) -> Result<BracketWrite, StorageError> {
+        let id = tournament;
         let tournament = tournament.into_inner().to_string();
 
-        let mut tx = self.pool.begin().await.map_err(StorageError::from_query)?;
+        let mut tx = begin_write(&self.pool).await?;
+        let blocked = bracket_blocked(&mut tx, id, expected).await?;
+        if blocked != BracketWrite::Done {
+            return Ok(blocked);
+        }
         sqlx::query!("delete from matches where tournament_id = ?1", tournament)
             .execute(&mut *tx)
             .await
@@ -531,33 +662,102 @@ impl TournamentStorage {
         .map_err(StorageError::from_query)?;
         tx.commit().await.map_err(StorageError::from_query)?;
 
-        Ok(())
+        Ok(BracketWrite::Done)
     }
 
-    /// Writes the sides and the winner of each given match. A result touches two
-    /// matches, and both land or neither does.
-    pub async fn update_matches(&self, matches: &[Match]) -> Result<(), StorageError> {
-        let mut tx = self.pool.begin().await.map_err(StorageError::from_query)?;
-        for m in matches {
-            let id = m.id.into_inner().to_string();
-            let a = m.entrant_a.map(|e| e.into_inner().to_string());
-            let b = m.entrant_b.map(|e| e.into_inner().to_string());
-            let winner = m.winner.map(|e| e.into_inner().to_string());
-            sqlx::query!(
-                "update matches set entrant_a = ?1, entrant_b = ?2, winner = ?3 where id = ?4",
+    /// Writes each change of a result: the match as the service read it, and the
+    /// match as it must become. A row that no longer holds the value read, or
+    /// that is not in this tournament, refuses the whole write: `false`. So a
+    /// result entered while the bracket is rebuilt, or two results that feed
+    /// one match at once, never lose a write in silence.
+    pub async fn update_matches(
+        &self,
+        tournament: TournamentId,
+        expected: TournamentStatus,
+        changes: &[(&Match, &Match)],
+    ) -> Result<bool, StorageError> {
+        let tournament_key = tournament.into_inner().to_string();
+        let expected_status = expected.as_str();
+
+        let mut tx = begin_write(&self.pool).await?;
+        let status_holds = sqlx::query_scalar!(
+            r#"select exists(select 1 from tournaments where id = ?1 and status = ?2) as "holds!: bool""#,
+            tournament_key,
+            expected_status,
+        )
+        .fetch_one(&mut *tx)
+        .await
+        .map_err(StorageError::from_query)?;
+        if !status_holds {
+            return Ok(false);
+        }
+        for (before, after) in changes {
+            let id = after.id.into_inner().to_string();
+            let side = |entrant: Option<EntrantId>| entrant.map(|e| e.into_inner().to_string());
+            let (a, b, winner) = (
+                side(after.entrant_a),
+                side(after.entrant_b),
+                side(after.winner),
+            );
+            let (old_a, old_b, old_winner) = (
+                side(before.entrant_a),
+                side(before.entrant_b),
+                side(before.winner),
+            );
+            let updated = sqlx::query!(
+                "update matches set entrant_a = ?1, entrant_b = ?2, winner = ?3
+                 where id = ?4 and tournament_id = ?5
+                   and entrant_a is ?6 and entrant_b is ?7 and winner is ?8",
                 a,
                 b,
                 winner,
                 id,
+                tournament_key,
+                old_a,
+                old_b,
+                old_winner,
             )
             .execute(&mut *tx)
             .await
             .map_err(StorageError::from_query)?;
+            if updated.rows_affected() != 1 {
+                return Ok(false);
+            }
         }
         tx.commit().await.map_err(StorageError::from_query)?;
 
-        Ok(())
+        Ok(true)
     }
+}
+
+/// `Done` when the tournament still has the `expected` status and no match has
+/// a result, which is what a rebuild and a removal of the bracket need.
+async fn bracket_blocked(
+    tx: &mut sqlx::SqliteConnection,
+    tournament: TournamentId,
+    expected: TournamentStatus,
+) -> Result<BracketWrite, StorageError> {
+    let tournament = tournament.into_inner().to_string();
+    let expected = expected.as_str();
+    let row = sqlx::query!(
+        r#"select exists(select 1 from tournaments where id = ?1 and status = ?2) as "status_holds!: bool",
+                  exists(select 1 from matches
+                         where tournament_id = ?1 and winner is not null
+                           and entrant_a is not null and entrant_b is not null) as "played!: bool""#,
+        tournament,
+        expected,
+    )
+    .fetch_one(&mut *tx)
+    .await
+    .map_err(StorageError::from_query)?;
+
+    Ok(if !row.status_holds {
+        BracketWrite::Changed
+    } else if row.played {
+        BracketWrite::Locked
+    } else {
+        BracketWrite::Done
+    })
 }
 
 fn skill_column(skill: SkillLevel) -> i64 {

@@ -13,13 +13,11 @@ mod support;
 use axum::http::StatusCode;
 use bunker_models::{
     Bracket, CyclesLog, ENTRY_CYCLES, FieldTier, MATCH_WIN_CYCLES, Paginated, Player, PlayerId,
-    PointEntry, PointKind, Rank, TournamentId,
+    PointEntry, PointKind, Rank,
 };
 use serde_json::json;
-use support::{TestApi, assert_error, read_json};
+use support::{HOUR, TestApi, assert_error, read_json};
 use uuid::Uuid;
-
-const HOUR: i64 = 3600;
 
 /// What a placement pays in a small field, which every tournament here is.
 fn pays(kind: PointKind) -> i64 {
@@ -45,10 +43,6 @@ async fn adjust(
     read_json(response).await
 }
 
-async fn player(api: &TestApi, handle: &str) -> Player {
-    read_json(api.get(&format!("/api/players/{handle}")).await).await
-}
-
 /// The page of the log. `log` answers the whole body when the totals matter.
 async fn history(api: &TestApi, handle: &str, token: Option<&str>) -> Paginated<PointEntry> {
     log(api, handle, token).await.entries
@@ -70,7 +64,7 @@ async fn a_new_player_is_a_zombie_in_first_place_with_no_history() {
     let api = TestApi::with_database().await;
     api.signup_player("dave").await;
 
-    let dave = player(&api, "dave").await;
+    let dave = api.player("dave").await;
     assert_eq!(dave.standing.cycles, 0);
     assert_eq!(dave.standing.rank, Rank::Zombie);
     assert_eq!(dave.standing.place, 1);
@@ -95,13 +89,13 @@ async fn an_admin_adjusts_cycles_and_the_standing_follows() {
     assert_eq!(entry.note.unwrap().as_ref(), "helped at the door");
     assert!(entry.tournament_id.is_none());
 
-    let after = player(&api, "dave").await;
+    let after = api.player("dave").await;
     assert_eq!(after.standing.cycles, 120);
     assert_eq!(after.standing.rank, Rank::Guest);
     assert_eq!(after.standing.place, 1);
 
     adjust(&api, &admin, dave.id, -50, "took it back").await;
-    let corrected = player(&api, "dave").await;
+    let corrected = api.player("dave").await;
     assert_eq!(corrected.standing.cycles, 70);
     assert_eq!(
         corrected.standing.rank,
@@ -116,10 +110,24 @@ async fn an_admin_adjusts_cycles_and_the_standing_follows() {
 
     // A total can go below zero. It stays a zombie and keeps its sign.
     adjust(&api, &admin, dave.id, -150, "and more").await;
-    let negative = player(&api, "dave").await;
+    let negative = api.player("dave").await;
     assert_eq!(negative.standing.cycles, -80);
     assert_eq!(negative.standing.rank, Rank::Zombie);
     assert_eq!(negative.standing.next.unwrap().floor, 80);
+}
+
+/// The answer of the write is the row the history shows, to the microsecond
+/// the column keeps.
+#[tokio::test]
+async fn an_adjustment_answers_the_line_as_the_ledger_holds_it() {
+    let api = TestApi::with_database().await;
+    let admin = api.signup_admin("root").await;
+    let dave = api.signup_player("dave").await;
+
+    let entry = adjust(&api, &admin, dave.id, 25, "fixed a cable").await;
+
+    let log = history(&api, "dave", None).await;
+    assert_eq!(log.items, [entry]);
 }
 
 #[tokio::test]
@@ -165,8 +173,7 @@ async fn an_adjustment_is_checked_at_the_boundary_and_by_the_rules() {
         .await;
     assert_error(ghost, StatusCode::NOT_FOUND, "ItemNotFound").await;
 
-    // An admin never pays themself.
-    let root = player(&api, "root").await;
+    let root = api.player("root").await;
     let selfish = api
         .post_as(
             &format!("/api/admin/players/{}/cycles", root.id),
@@ -177,7 +184,7 @@ async fn an_adjustment_is_checked_at_the_boundary_and_by_the_rules() {
     assert_error(selfish, StatusCode::FORBIDDEN, "Forbidden").await;
 
     assert_eq!(
-        player(&api, "dave").await.standing.cycles,
+        api.player("dave").await.standing.cycles,
         0,
         "nothing landed"
     );
@@ -188,7 +195,7 @@ async fn the_history_is_public_with_its_notes() {
     let api = TestApi::with_database().await;
     let admin = api.signup_admin("root").await;
     let dave = api.signup("dave").await.token;
-    let dave_id = player(&api, "dave").await.id;
+    let dave_id = api.player("dave").await.id;
     let erin = api.signup("erin").await.token;
     adjust(&api, &admin, dave_id, 100, "won the raffle").await;
 
@@ -231,8 +238,10 @@ async fn the_history_paginates_like_every_list() {
     assert_eq!((first.entries.total, first.entries.total_pages), (5, 3));
     assert_eq!(first.entries.items.len(), 2);
     assert_eq!(third.entries.items.len(), 1);
-    // The totals cover the whole log on every page.
-    assert_eq!(first.totals, third.totals);
+    assert_eq!(
+        first.totals, third.totals,
+        "the totals cover the whole log on every page"
+    );
     assert_eq!(first.totals.len(), 1);
     assert_eq!(first.totals[0].kind, PointKind::Adjustment);
     assert_eq!(first.totals[0].cycles, 15);
@@ -277,40 +286,17 @@ async fn the_leaderboard_sorts_by_cycles_and_equal_totals_share_a_place() {
         "every standing counts the whole field"
     );
 
-    // The backoffice keeps the roster order: the last signup first.
     let roster: Paginated<Player> = read_json(api.get_as("/api/admin/players", &admin).await).await;
     let handles: Vec<&str> = roster.items.iter().map(|p| p.handle.as_ref()).collect();
-    assert_eq!(handles, ["top", "midb", "mida", "low", "root"]);
+    assert_eq!(
+        handles,
+        ["top", "midb", "mida", "low", "root"],
+        "the backoffice keeps the roster order: the last signup first"
+    );
     assert_eq!(
         roster.items[0].standing.cycles, 700,
         "with the standing on every row"
     );
-}
-
-async fn report(
-    api: &TestApi,
-    admin: &str,
-    tournament: TournamentId,
-    bracket: &Bracket,
-) -> Bracket {
-    let next = bracket
-        .flat()
-        .find(|m| m.is_ready() && m.winner.is_none())
-        .cloned()
-        .unwrap();
-    let response = api
-        .put_as(
-            &format!(
-                "/api/admin/tournaments/{tournament}/matches/{}/result",
-                next.id
-            ),
-            &json!({ "winner": next.entrant_a.unwrap() }),
-            admin,
-        )
-        .await;
-    assert_eq!(response.status(), StatusCode::OK);
-
-    read_json(response).await
 }
 
 #[tokio::test]
@@ -332,7 +318,7 @@ async fn a_concluded_bracket_pays_entry_wins_and_placements_one_time() {
     let mut bracket: Bracket = read_json(generated).await;
     // Side a always wins: seed 1 takes two matches and the cup.
     for _ in 0..3 {
-        bracket = report(&api, &admin, created.id, &bracket).await;
+        bracket = api.play_next(&admin, created.id, &bracket).await;
     }
     let detail: bunker_models::TournamentDetail = read_json(
         api.get_as(&format!("/api/admin/tournaments/{}", created.id), &admin)
@@ -356,7 +342,7 @@ async fn a_concluded_bracket_pays_entry_wins_and_placements_one_time() {
         (handle_of(1), handle_of(3), handle_of(2), handle_of(4));
 
     assert_eq!(
-        player(&api, &champion).await.standing.cycles,
+        api.player(&champion).await.standing.cycles,
         0,
         "nothing before the conclusion"
     );
@@ -367,21 +353,21 @@ async fn a_concluded_bracket_pays_entry_wins_and_placements_one_time() {
     );
 
     assert_eq!(
-        player(&api, &champion).await.standing.cycles,
+        api.player(&champion).await.standing.cycles,
         ENTRY_CYCLES + 2 * MATCH_WIN_CYCLES + pays(PointKind::Champion)
     );
     assert_eq!(
-        player(&api, &finalist).await.standing.cycles,
+        api.player(&finalist).await.standing.cycles,
         ENTRY_CYCLES + MATCH_WIN_CYCLES + pays(PointKind::Finalist)
     );
     for semi in [semi_a, semi_b] {
         assert_eq!(
-            player(&api, &semi).await.standing.cycles,
+            api.player(&semi).await.standing.cycles,
             ENTRY_CYCLES + pays(PointKind::Semifinalist)
         );
     }
     assert_eq!(
-        player(&api, "root").await.standing.cycles,
+        api.player("root").await.standing.cycles,
         0,
         "the admin was not in"
     );
@@ -422,16 +408,18 @@ async fn a_concluded_bracket_pays_entry_wins_and_placements_one_time() {
         "the totals follow the order of the legend, not of the write"
     );
 
-    // A second conclude is a no-op and pays nobody twice.
     api.set_status(&admin, created.id, "concluded").await;
-    assert_eq!(history(&api, &champion, None).await.total, 4);
+    assert_eq!(
+        history(&api, &champion, None).await.total,
+        4,
+        "a second conclude pays nobody twice"
+    );
 
-    // The cycles go with the tournament.
     let deleted = api
         .delete_as(&format!("/api/admin/tournaments/{}", created.id), &admin)
         .await;
     assert_eq!(deleted.status(), StatusCode::NO_CONTENT);
-    assert_eq!(player(&api, &champion).await.standing.cycles, 0);
+    assert_eq!(api.player(&champion).await.standing.cycles, 0);
     assert_eq!(history(&api, &champion, None).await.total, 0);
 }
 
@@ -454,10 +442,10 @@ async fn a_conclusion_without_a_bracket_pays_the_entry_and_the_named_winner() {
     assert_eq!(response.status(), StatusCode::OK);
 
     assert_eq!(
-        player(&api, "dave").await.standing.cycles,
+        api.player("dave").await.standing.cycles,
         ENTRY_CYCLES + pays(PointKind::Champion)
     );
-    assert_eq!(player(&api, "erin").await.standing.cycles, ENTRY_CYCLES);
+    assert_eq!(api.player("erin").await.standing.cycles, ENTRY_CYCLES);
     let kinds: Vec<PointKind> = history(&api, "dave", None)
         .await
         .items
@@ -468,16 +456,20 @@ async fn a_conclusion_without_a_bracket_pays_the_entry_and_the_named_winner() {
     assert!(kinds.contains(&PointKind::Champion));
     assert!(kinds.contains(&PointKind::TournamentEntry));
 
-    // A deleted player takes their rows with them: the ledger has no orphan.
+    let dave_id = dave.player.unwrap().id;
     let deleted = api
-        .delete_as(
-            &format!("/api/admin/players/{}", dave.player.unwrap().id),
-            &admin,
-        )
+        .delete_as(&format!("/api/admin/players/{dave_id}"), &admin)
         .await;
     assert_eq!(deleted.status(), StatusCode::NO_CONTENT);
     let gone = api.get("/api/players/dave/cycles").await;
     assert_error(gone, StatusCode::NOT_FOUND, "ItemNotFound").await;
+    let (orphans,): (i64,) =
+        sqlx::query_as("select count(*) from point_entries where player_id = ?1")
+            .bind(dave_id.to_string())
+            .fetch_one(api.pool())
+            .await
+            .unwrap();
+    assert_eq!(orphans, 0, "a deleted player takes their rows with them");
 }
 
 #[tokio::test]

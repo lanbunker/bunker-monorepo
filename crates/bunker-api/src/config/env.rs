@@ -20,8 +20,8 @@ pub const JWT_SECRET_MIN_LEN: usize = 32;
 /// is in the root `.gitignore`.
 const DEFAULT_DATABASE_URL: &str = "sqlite://.dev/bunker.db?mode=rwc";
 
-/// Each value the process reads from its environment. The parse runs at startup,
-/// so no handler and no service uses `std::env`.
+/// Each value the process reads from its environment. `clippy.toml` refuses
+/// `std::env::var` in every other file.
 #[derive(Clone)]
 pub struct Env {
     pub app_env: AppEnv,
@@ -32,6 +32,8 @@ pub struct Env {
     pub port: u16,
     pub database: DbConfig,
     pub jwt_secret: JwtSecret,
+    /// Replaces the log filter that `app_env` selects.
+    pub rust_log: Option<String>,
 }
 
 impl Env {
@@ -47,6 +49,12 @@ impl Env {
         let config = resolve_app_config(app_env);
 
         let jwt_secret = match optional(lookup, "JWT_SECRET")? {
+            Some(secret) if config.jwt_secret_required && secret == DEV_JWT_SECRET => {
+                return Err(EnvError::InvalidValue {
+                    name: "JWT_SECRET".to_owned(),
+                    reason: "the development secret is public".to_owned(),
+                });
+            }
             Some(secret) => {
                 JwtSecret::try_new(secret).map_err(|reason| EnvError::InvalidValue {
                     name: "JWT_SECRET".to_owned(),
@@ -72,7 +80,19 @@ impl Env {
             port: parsed(lookup, "PORT", 3000)?,
             database: DbConfig::read_with(lookup)?,
             jwt_secret,
+            rust_log: optional(lookup, "RUST_LOG")?,
         })
+    }
+}
+
+/// Loads `.env` into the process environment, except when the process already
+/// runs as `prod`: there the service unit sets every variable, and a stray file
+/// next to the binary must not add one.
+pub fn load_dotenv() {
+    let prod = matches!(from_process("APP_ENV"), Ok(Some(value)) if value == AppEnv::Prod.as_str());
+    if !prod {
+        // A missing `.env` is normal: a deployment sets the variables directly.
+        drop(dotenvy::dotenv());
     }
 }
 
@@ -87,16 +107,15 @@ impl fmt::Debug for Env {
             .field("port", &self.port)
             .field("database", &self.database)
             .field("jwt_secret", &"<redacted>")
+            .field("rust_log", &self.rust_log)
             .finish()
     }
 }
 
-/// The value exists, but it is not valid UTF-8. A named type tells the call site
-/// what failed. `Err(())` does not.
+/// The value exists, but it is not valid UTF-8.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct NotUnicode;
 
-/// How the code reads one variable.
 pub type Lookup<'a> = dyn Fn(&str) -> Result<Option<String>, NotUnicode> + 'a;
 
 /// How to reach SQLite. The URL is what `sqlx` and the `sqlx` CLI both read, so
@@ -144,6 +163,7 @@ pub enum EnvError {
     Missing { name: String },
 }
 
+#[allow(clippy::disallowed_methods)]
 fn from_process(name: &str) -> Result<Option<String>, NotUnicode> {
     match env::var(name) {
         Ok(value) => Ok(Some(value)),
@@ -168,8 +188,7 @@ fn or_default(lookup: &Lookup<'_>, name: &str, fallback: &str) -> Result<String,
     Ok(optional(lookup, name)?.unwrap_or_else(|| fallback.to_owned()))
 }
 
-/// The error does not hold the raw value. This helper also parses secrets, and
-/// the message goes to the logs.
+/// The error does not hold the raw value, because the message goes to the logs.
 fn parsed<T>(lookup: &Lookup<'_>, name: &str, fallback: T) -> Result<T, EnvError>
 where
     T: FromStr,

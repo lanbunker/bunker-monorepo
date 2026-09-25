@@ -15,37 +15,58 @@ const DEFAULT_INTERVAL_MS = 3000
 
 /**
  * The kiosk view. It starts from the server-rendered detail, then asks the
- * site for a fresh copy on a timer and swaps the state. A concluded tournament
- * stops the timer: nothing changes any more. A body that does not parse leaves
- * the last good state on screen, so a screen across the room never goes blank.
+ * site for a fresh copy and swaps the state. The next request waits for the
+ * answer to the last one, so a slow site never stacks requests. A concluded or
+ * deleted tournament stops the polling: nothing changes any more. A body that
+ * does not parse leaves the last good state on screen, so a screen across the
+ * room never goes blank.
  */
 export const LiveBracket = (props: LiveBracketProps) => {
     const [detail, setDetail] = useState(props.initial)
     const [offline, setOffline] = useState(false)
+    const [gone, setGone] = useState(false)
     const concluded = detail.tournament.status === "concluded"
     const intervalMs = props.intervalMs ?? DEFAULT_INTERVAL_MS
     const source = props.source
 
     useEffect(() => {
-        if (concluded) return
+        if (concluded || gone) return
+        const controller = new AbortController()
+        // Each poll schedules the next one, so the cleanup must reach the latest.
+        let timer: number | undefined
         const poll = async () => {
-            const fresh = await fetch(source, { cache: "no-store" })
-                .then(response => (response.ok ? response.json() : undefined))
-                .then(parseTournamentDetail)
-                .catch(() => undefined)
+            const response = await fetch(source, {
+                cache: "no-store",
+                signal: controller.signal,
+            }).catch(() => undefined)
+            if (response?.status === 404) {
+                setGone(true)
+                return
+            }
+            const body: unknown = response?.ok
+                ? await response.json().catch(() => undefined)
+                : undefined
+            if (controller.signal.aborted) return
+            const fresh = parseTournamentDetail(body)
             if (fresh) setDetail(fresh)
             setOffline(fresh === undefined)
+            timer = window.setTimeout(poll, intervalMs)
         }
-        const timer = window.setInterval(poll, intervalMs)
-        return () => window.clearInterval(timer)
-    }, [source, intervalMs, concluded])
+        timer = window.setTimeout(poll, intervalMs)
+        return () => {
+            controller.abort()
+            window.clearTimeout(timer)
+        }
+    }, [source, intervalMs, concluded, gone])
 
     const t = detail.tournament
     const state = concluded
         ? { tone: "text-accent", label: "■ concluded" }
-        : offline
-          ? { tone: "text-alert", label: "■ site offline, showing the last state" }
-          : { tone: "text-accent-soft", label: "■ live" }
+        : gone
+          ? { tone: "text-alert", label: "■ tournament removed, showing the last state" }
+          : offline
+            ? { tone: "text-alert", label: "■ site offline, showing the last state" }
+            : { tone: "text-accent-soft", label: "■ live" }
 
     return (
         <div className="flex flex-col gap-6">
@@ -58,7 +79,7 @@ export const LiveBracket = (props: LiveBracketProps) => {
                 <div className="text-right text-xs">
                     <div className={state.tone}>{state.label}</div>
                     <div className="text-2xs text-mute mt-1">
-                        {t.entrantCount} entrants
+                        {t.entrantCount} {t.entrantCount === 1 ? "entrant" : "entrants"}
                     </div>
                 </div>
             </div>

@@ -5,6 +5,7 @@ import Button from "../components/ui/Button.astro"
 import Panel from "../components/ui/Panel.astro"
 import Prompt from "../components/ui/Prompt.astro"
 import Layout from "../layouts/Layout.astro"
+import { donePath } from "../lib/form"
 import { SITE_FIELD } from "../lib/styles"
 import { sessionOf } from "../lib/session"
 
@@ -12,13 +13,13 @@ const session = sessionOf(Astro.locals)
 if (!session) return Astro.redirect("/login")
 
 const result = Astro.getActionResult(actions.changeHandle)
-if (result && !result.error) return Astro.redirect("/profile?changed=handle")
+if (result && !result.error) return Astro.redirect(donePath("/profile", "handle"))
 // A refused rename keeps what was typed, not the handle in force.
 const typed = Astro.locals.submitted.handle ?? session.player.handle
 ---
 
 <Layout title="RENAME//LAN_BUNKER" noindex>
-  <Prompt command="usermod --login" comment="your glyph stays" />
+  <Prompt heading="h1" command="usermod --login" comment="your glyph stays" />
 
   <Panel class="max-w-[28rem]">
     <form method="POST" action={actions.changeHandle} class="flex flex-col gap-3 text-xs">

@@ -13,14 +13,11 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 
 use axum::http::StatusCode;
 use bunker_models::{
-    Bracket, Entrant, EntrantId, Match, Tournament, TournamentDetail, TournamentId,
-    TournamentStatus,
+    Bracket, Entrant, EntrantId, Match, Tournament, TournamentDetail, TournamentStatus,
 };
 use serde_json::json;
-use support::{TestApi, assert_error, read_json};
+use support::{HOUR, TestApi, assert_error, read_json};
 use uuid::Uuid;
-
-const HOUR: i64 = 3600;
 
 /// A live tournament with `count` entrants, ready for a bracket. Handles stay
 /// unique across calls, so one test can hold two tournaments.
@@ -38,45 +35,6 @@ async fn live_tournament(api: &TestApi, admin: &str, count: usize) -> (Tournamen
     let live = api.set_status(admin, created.id, "live").await;
 
     (live, entrants)
-}
-
-async fn generate(api: &TestApi, admin: &str, tournament: TournamentId) -> Bracket {
-    let response = api
-        .post_as(
-            &format!("/api/admin/tournaments/{tournament}/bracket"),
-            &json!({}),
-            admin,
-        )
-        .await;
-    assert_eq!(
-        response.status(),
-        StatusCode::OK,
-        "bracket generation failed"
-    );
-
-    read_json(response).await
-}
-
-async fn report(
-    api: &TestApi,
-    admin: &str,
-    tournament: TournamentId,
-    m: &Match,
-    winner: EntrantId,
-) -> Bracket {
-    let response = api
-        .put_as(
-            &format!(
-                "/api/admin/tournaments/{tournament}/matches/{}/result",
-                m.id
-            ),
-            &json!({ "winner": winner }),
-            admin,
-        )
-        .await;
-    assert_eq!(response.status(), StatusCode::OK, "report failed");
-
-    read_json(response).await
 }
 
 #[tokio::test]
@@ -113,7 +71,7 @@ async fn five_entrants_give_three_rounds_and_three_byes() {
     let admin = api.signup_admin("root").await;
     let (tournament, entrants) = live_tournament(&api, &admin, 5).await;
 
-    let bracket = generate(&api, &admin, tournament.id).await;
+    let bracket = api.generate_bracket(&admin, tournament.id).await;
 
     assert_eq!(
         bracket.rounds.iter().map(Vec::len).collect::<Vec<_>>(),
@@ -146,22 +104,22 @@ async fn a_bracket_regenerates_and_deletes_until_a_result_lands() {
     let (tournament, _) = live_tournament(&api, &admin, 4).await;
     let bracket_path = format!("/api/admin/tournaments/{}/bracket", tournament.id);
 
-    let first = generate(&api, &admin, tournament.id).await;
-    let second = generate(&api, &admin, tournament.id).await;
+    let first = api.generate_bracket(&admin, tournament.id).await;
+    let second = api.generate_bracket(&admin, tournament.id).await;
     assert_ne!(
         first.rounds[0][0].id, second.rounds[0][0].id,
         "regeneration makes new matches"
     );
 
     let m = second.rounds[0][0].clone();
-    report(&api, &admin, tournament.id, &m, m.entrant_a.unwrap()).await;
+    api.report(&admin, tournament.id, &m, m.entrant_a.unwrap())
+        .await;
 
     let locked = api.post_as(&bracket_path, &json!({}), &admin).await;
     assert_error(locked, StatusCode::CONFLICT, "InvalidState").await;
     let locked = api.delete_as(&bracket_path, &admin).await;
     assert_error(locked, StatusCode::CONFLICT, "InvalidState").await;
 
-    // Clear the result, and the bracket is free again.
     let cleared = api
         .delete_as(
             &format!(
@@ -205,7 +163,7 @@ async fn seeds_follow_the_given_order() {
         .await;
     assert_error(before, StatusCode::CONFLICT, "InvalidState").await;
 
-    generate(&api, &admin, tournament.id).await;
+    api.generate_bracket(&admin, tournament.id).await;
 
     let response = api
         .put_as(&seeds_path, &json!({ "entrants": ids }), &admin)
@@ -253,7 +211,7 @@ async fn results_move_winners_up_and_the_champion_concludes_the_tournament() {
     let admin = api.signup_admin("root").await;
     let (tournament, _) = live_tournament(&api, &admin, 4).await;
     let status_path = format!("/api/admin/tournaments/{}/status", tournament.id);
-    let bracket = generate(&api, &admin, tournament.id).await;
+    let bracket = api.generate_bracket(&admin, tournament.id).await;
 
     let incomplete = api
         .post_as(&status_path, &json!({ "status": "concluded" }), &admin)
@@ -262,27 +220,24 @@ async fn results_move_winners_up_and_the_champion_concludes_the_tournament() {
 
     let top = bracket.rounds[0][0].clone();
     let bottom = bracket.rounds[0][1].clone();
-    let after_top = report(&api, &admin, tournament.id, &top, top.entrant_b.unwrap()).await;
+    let after_top = api
+        .report(&admin, tournament.id, &top, top.entrant_b.unwrap())
+        .await;
     assert_eq!(after_top.rounds[1][0].entrant_a, top.entrant_b);
-    let after_bottom = report(
-        &api,
-        &admin,
-        tournament.id,
-        &bottom,
-        bottom.entrant_a.unwrap(),
-    )
-    .await;
+    let after_bottom = api
+        .report(&admin, tournament.id, &bottom, bottom.entrant_a.unwrap())
+        .await;
     assert_eq!(after_bottom.rounds[1][0].entrant_b, bottom.entrant_a);
 
     let final_match = after_bottom.rounds[1][0].clone();
-    let done = report(
-        &api,
-        &admin,
-        tournament.id,
-        &final_match,
-        bottom.entrant_a.unwrap(),
-    )
-    .await;
+    let done = api
+        .report(
+            &admin,
+            tournament.id,
+            &final_match,
+            bottom.entrant_a.unwrap(),
+        )
+        .await;
     assert_eq!(done.champion(), bottom.entrant_a);
 
     let named = api
@@ -315,7 +270,7 @@ async fn a_result_respects_the_match_and_its_neighbours() {
     let api = TestApi::with_database().await;
     let admin = api.signup_admin("root").await;
     let (tournament, _) = live_tournament(&api, &admin, 4).await;
-    let bracket = generate(&api, &admin, tournament.id).await;
+    let bracket = api.generate_bracket(&admin, tournament.id).await;
     let top = bracket.rounds[0][0].clone();
     let bottom = bracket.rounds[0][1].clone();
     let final_match = bracket.rounds[1][0].clone();
@@ -357,23 +312,12 @@ async fn a_result_respects_the_match_and_its_neighbours() {
         .await;
     assert_error(unknown, StatusCode::NOT_FOUND, "ItemNotFound").await;
 
-    report(&api, &admin, tournament.id, &top, top.entrant_a.unwrap()).await;
-    report(
-        &api,
-        &admin,
-        tournament.id,
-        &bottom,
-        bottom.entrant_a.unwrap(),
-    )
-    .await;
-    report(
-        &api,
-        &admin,
-        tournament.id,
-        &final_match,
-        top.entrant_a.unwrap(),
-    )
-    .await;
+    api.report(&admin, tournament.id, &top, top.entrant_a.unwrap())
+        .await;
+    api.report(&admin, tournament.id, &bottom, bottom.entrant_a.unwrap())
+        .await;
+    api.report(&admin, tournament.id, &final_match, top.entrant_a.unwrap())
+        .await;
 
     let decided = api
         .put_as(
@@ -392,7 +336,7 @@ async fn a_bye_cannot_be_cleared_and_entrants_are_frozen_by_the_bracket() {
     let api = TestApi::with_database().await;
     let admin = api.signup_admin("root").await;
     let (tournament, entrants) = live_tournament(&api, &admin, 3).await;
-    let bracket = generate(&api, &admin, tournament.id).await;
+    let bracket = api.generate_bracket(&admin, tournament.id).await;
     let bye = bracket.rounds[0].iter().find(|m| !m.is_ready()).unwrap();
 
     let cleared = api
@@ -451,13 +395,12 @@ async fn thirty_entrants_play_through_the_api_to_a_champion() {
     let api = TestApi::with_database().await;
     let admin = api.signup_admin("root").await;
     let (tournament, entrants) = live_tournament(&api, &admin, 30).await;
-    let mut bracket = generate(&api, &admin, tournament.id).await;
+    let mut bracket = api.generate_bracket(&admin, tournament.id).await;
     assert_eq!(
         bracket.rounds.iter().map(Vec::len).collect::<Vec<_>>(),
         [16, 8, 4, 2, 1]
     );
 
-    // Reverse the seeds, then check the entrants carry the new order.
     let reversed: Vec<EntrantId> = entrants.iter().rev().map(|e| e.id).collect();
     let response = api
         .put_as(
@@ -488,7 +431,9 @@ async fn thirty_entrants_play_through_the_api_to_a_champion() {
             .find(|m| m.is_ready() && m.winner.is_none())
             .cloned()
             .expect("a playable match");
-        bracket = report(&api, &admin, tournament.id, &next, next.entrant_b.unwrap()).await;
+        bracket = api
+            .report(&admin, tournament.id, &next, next.entrant_b.unwrap())
+            .await;
         played += 1;
     }
     assert_eq!(played, 29);
@@ -510,7 +455,7 @@ async fn a_player_deleted_during_a_live_bracket_leaves_the_bracket_intact() {
     let api = TestApi::with_database().await;
     let admin = api.signup_admin("root").await;
     let (tournament, entrants) = live_tournament(&api, &admin, 4).await;
-    let bracket = generate(&api, &admin, tournament.id).await;
+    let bracket = api.generate_bracket(&admin, tournament.id).await;
     let gone = entrants[0].player.as_ref().unwrap().id;
 
     let deleted = api
@@ -540,7 +485,7 @@ async fn a_player_deleted_during_a_live_bracket_leaves_the_bracket_intact() {
         .iter()
         .find(|m| m.entrant_a == Some(entrants[0].id) || m.entrant_b == Some(entrants[0].id))
         .unwrap();
-    let after = report(&api, &admin, tournament.id, m, entrants[0].id).await;
+    let after = api.report(&admin, tournament.id, m, entrants[0].id).await;
     assert!(
         after.rounds[1]
             .iter()
@@ -555,7 +500,7 @@ async fn a_regenerated_bracket_reseeds_every_entrant() {
     let (tournament, _) = live_tournament(&api, &admin, 7).await;
 
     for _ in 0..3 {
-        generate(&api, &admin, tournament.id).await;
+        api.generate_bracket(&admin, tournament.id).await;
         let detail: TournamentDetail = read_json(
             api.get_as(&format!("/api/admin/tournaments/{}", tournament.id), &admin)
                 .await,
@@ -577,7 +522,7 @@ async fn match_and_entrant_ids_are_scoped_to_their_tournament() {
     let api = TestApi::with_database().await;
     let admin = api.signup_admin("root").await;
     let (a, entrants_a) = live_tournament(&api, &admin, 2).await;
-    let bracket_a = generate(&api, &admin, a.id).await;
+    let bracket_a = api.generate_bracket(&admin, a.id).await;
     let (b, _) = live_tournament(&api, &admin, 2).await;
     let final_a = &bracket_a.rounds[0][0];
 
@@ -617,7 +562,7 @@ async fn a_duplicated_seed_is_refused() {
     let api = TestApi::with_database().await;
     let admin = api.signup_admin("root").await;
     let (tournament, entrants) = live_tournament(&api, &admin, 2).await;
-    generate(&api, &admin, tournament.id).await;
+    api.generate_bracket(&admin, tournament.id).await;
 
     let response = api
         .put_as(
@@ -640,14 +585,16 @@ async fn a_played_bracket_goes_with_its_tournament() {
     let api = TestApi::with_database().await;
     let admin = api.signup_admin("root").await;
     let (tournament, _) = live_tournament(&api, &admin, 3).await;
-    let mut bracket = generate(&api, &admin, tournament.id).await;
+    let mut bracket = api.generate_bracket(&admin, tournament.id).await;
     while bracket.champion().is_none() {
         let next = bracket
             .flat()
             .find(|m| m.is_ready() && m.winner.is_none())
             .cloned()
             .unwrap();
-        bracket = report(&api, &admin, tournament.id, &next, next.entrant_a.unwrap()).await;
+        bracket = api
+            .report(&admin, tournament.id, &next, next.entrant_a.unwrap())
+            .await;
     }
 
     let deleted = api
@@ -666,7 +613,7 @@ async fn every_admin_route_refuses_a_user() {
     let admin = api.signup_admin("root").await;
     let user = api.signup("dave").await.token;
     let (tournament, entrants) = live_tournament(&api, &admin, 2).await;
-    let bracket = generate(&api, &admin, tournament.id).await;
+    let bracket = api.generate_bracket(&admin, tournament.id).await;
     let t = tournament.id;
     let m = bracket.rounds[0][0].id;
 
@@ -744,7 +691,7 @@ async fn the_bracket_is_seeded_by_level_and_neighbours_meet_in_round_one() {
         .await;
     api.set_status(&admin, created.id, "live").await;
 
-    let bracket = generate(&api, &admin, created.id).await;
+    let bracket = api.generate_bracket(&admin, created.id).await;
 
     // Five entrants: the three top seeds get the byes, seeds 4 and 5 play.
     assert_eq!(bracket.rounds[0][0].winner, Some(menace.id));
@@ -764,13 +711,16 @@ async fn the_bracket_is_seeded_by_level_and_neighbours_meet_in_round_one() {
     assert_eq!(seed_of(unrated.id), Some(3));
     assert_eq!(seed_of(casual.id), Some(4));
     assert_eq!(seed_of(rookie.id), Some(5));
-    // The entrants come seeded first, in seed order.
     let handles: Vec<&str> = detail
         .entrants
         .iter()
         .map(|e| e.player.as_ref().unwrap().handle.as_ref())
         .collect();
-    assert_eq!(handles, ["menace", "sharp", "unrated", "casual", "rookie"]);
+    assert_eq!(
+        handles,
+        ["menace", "sharp", "unrated", "casual", "rookie"],
+        "the entrants come seeded first, in seed order"
+    );
 }
 
 #[tokio::test]
@@ -786,7 +736,7 @@ async fn entrants_of_one_level_are_drawn_at_random() {
 
     let mut draws = std::collections::HashSet::new();
     for _ in 0..12 {
-        let bracket = generate(&api, &admin, created.id).await;
+        let bracket = api.generate_bracket(&admin, created.id).await;
         let order: Vec<EntrantId> = bracket.rounds[0]
             .iter()
             .flat_map(|m| [m.entrant_a.unwrap(), m.entrant_b.unwrap()])

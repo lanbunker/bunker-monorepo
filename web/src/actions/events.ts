@@ -1,24 +1,33 @@
 import { defineAction } from "astro:actions"
-import { z } from "zod"
+import type { z } from "zod"
 
-import { requireAdmin, requireToken, unwrap } from "../lib/action"
+import { playerByHandle, requireAdmin, requireToken, unwrap } from "../lib/action"
 import { call, callEmpty } from "../lib/api"
 import {
-    checkinCode,
+    byId,
+    checkinInput,
     eventInput,
-    handle,
     eventStatusInput,
     eventUpdateInput,
-    uuid,
+    playerHandleInput,
 } from "../lib/schemas"
 
-const byId = z.object({ id: uuid })
+/** The body the create and the update routes share. */
+const eventBody = (input: z.output<typeof eventInput>) => ({
+    name: input.name,
+    location: input.location,
+    games: input.games,
+    description: input.description,
+    image: input.image ?? null,
+    startsAt: input.startsAt,
+    endsAt: input.endsAt,
+})
 
 /** The door for a player, and the backoffice for an admin. Every form posts. */
 export const eventActions = {
     checkIn: defineAction({
         accept: "form",
-        input: z.object({ code: checkinCode }),
+        input: checkinInput,
         handler: async (input, context) => {
             const receipt = unwrap(
                 await call(
@@ -42,17 +51,7 @@ export const eventActions = {
             const created = unwrap(
                 await call(
                     client =>
-                        client.POST("/api/admin/events", {
-                            body: {
-                                name: input.name,
-                                location: input.location,
-                                games: input.games,
-                                description: input.description,
-                                image: input.image ?? null,
-                                startsAt: input.startsAt,
-                                endsAt: input.endsAt,
-                            },
-                        }),
+                        client.POST("/api/admin/events", { body: eventBody(input) }),
                     requireAdmin(context.locals),
                 ),
             )
@@ -69,15 +68,7 @@ export const eventActions = {
                     client =>
                         client.PUT("/api/admin/events/{id}", {
                             params: { path: { id: input.id } },
-                            body: {
-                                name: input.name,
-                                location: input.location,
-                                games: input.games,
-                                description: input.description,
-                                image: input.image ?? null,
-                                startsAt: input.startsAt,
-                                endsAt: input.endsAt,
-                            },
+                            body: eventBody(input),
                         }),
                     requireAdmin(context.locals),
                 ),
@@ -106,18 +97,10 @@ export const eventActions = {
 
     addCheckin: defineAction({
         accept: "form",
-        input: z.object({ id: uuid, handle }),
+        input: playerHandleInput,
         handler: async (input, context) => {
             const token = requireAdmin(context.locals)
-            const player = unwrap(
-                await call(
-                    client =>
-                        client.GET("/api/players/{handle}", {
-                            params: { path: { handle: input.handle } },
-                        }),
-                    token,
-                ),
-            )
+            const player = await playerByHandle(input.handle, token)
             unwrap(
                 await call(
                     client =>

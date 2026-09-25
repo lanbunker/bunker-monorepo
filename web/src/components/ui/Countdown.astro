@@ -2,14 +2,17 @@
 interface Props {
   deadline: string
   label?: string
+  /** What a screen reader hears once the deadline has passed. */
+  expiredLabel?: string
 }
 
-const { deadline, label = "T-" } = Astro.props
+const { deadline, label = "T-", expiredLabel = "Registration closed" } = Astro.props
 ---
 
 <div
   class="countdown inline-flex items-center gap-1 text-xs tracking-wider text-accent tabular-nums"
   data-deadline={deadline}
+  data-expired-label={expiredLabel}
   role="timer"
 >
   <span class="mr-1 text-2xs text-dim">{label}</span>
@@ -48,7 +51,7 @@ const { deadline, label = "T-" } = Astro.props
 </style>
 
 <script>
-  const pad2 = (n: number) => String(n).padStart(2, "0")
+  import { pad2 } from "../../lib/dates"
 
   const tick = () => {
     for (const el of document.querySelectorAll<HTMLElement>(".countdown")) {
@@ -68,7 +71,7 @@ const { deadline, label = "T-" } = Astro.props
       el.setAttribute(
         "aria-label",
         remaining <= 0
-          ? "Registration closed"
+          ? (el.dataset.expiredLabel ?? "")
           : `${parts.d} days ${parts.h} hours ${parts.m} minutes remaining`,
       )
       for (const seg of el.querySelectorAll<HTMLElement>(".cd-segment")) {

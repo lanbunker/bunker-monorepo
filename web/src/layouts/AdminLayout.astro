@@ -1,5 +1,6 @@
 ---
 import "../styles/global.css"
+import { adminSessionOf } from "../lib/session"
 
 type Section = "overview" | "players" | "events" | "tournaments" | "scores"
 
@@ -9,7 +10,7 @@ interface Props {
 }
 
 const { title, active } = Astro.props
-const player = Astro.locals.player
+const player = adminSessionOf(Astro.locals)?.player
 
 const sections: { key: Section; label: string; href: string; ready: boolean }[] = [
   { key: "overview", label: "overview", href: "/admin", ready: true },
@@ -124,7 +125,12 @@ const sections: { key: Section; label: string; href: string; ready: boolean }[] 
       )) {
         const hidden = local.form?.elements.namedItem(local.dataset.isoFor ?? "")
         if (!(hidden instanceof HTMLInputElement)) continue
-        if (local.dataset.iso) local.value = toLocalInput(local.dataset.iso)
+        if (local.dataset.iso) {
+          local.value = toLocalInput(
+            local.dataset.iso,
+            Intl.DateTimeFormat().resolvedOptions().timeZone,
+          )
+        }
         const sync = () => {
           if (local.value) hidden.value = new Date(local.value).toISOString()
         }

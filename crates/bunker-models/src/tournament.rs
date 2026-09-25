@@ -2,9 +2,9 @@ use nutype::nutype;
 use serde::{Deserialize, Serialize};
 use time::{Date, OffsetDateTime};
 use utoipa::ToSchema;
-use uuid::Uuid;
 
 use super::bracket::Bracket;
+use super::id::uuid_id;
 use super::player::{Player, PlayerId};
 
 pub const TOURNAMENT_NAME_MAX_LEN: usize = 60;
@@ -14,45 +14,13 @@ pub const DESCRIPTION_MAX_LEN: usize = 1000;
 pub const SKILL_LEVEL_MIN: u8 = 1;
 pub const SKILL_LEVEL_MAX: u8 = 5;
 
-#[nutype(derive(
-    Debug,
-    Clone,
-    Copy,
-    PartialEq,
-    Eq,
-    Hash,
-    Display,
-    Serialize,
-    Deserialize
-))]
-pub struct TournamentId(Uuid);
+uuid_id!(TournamentId);
 
-impl TournamentId {
-    pub fn generate() -> Self {
-        Self::new(Uuid::new_v4())
-    }
-}
-
-/// One entry in a tournament. Matches point at entrants and not at players, so a
-/// team can enter one day without a new bracket model.
-#[nutype(derive(
-    Debug,
-    Clone,
-    Copy,
-    PartialEq,
-    Eq,
-    Hash,
-    Display,
-    Serialize,
-    Deserialize
-))]
-pub struct EntrantId(Uuid);
-
-impl EntrantId {
-    pub fn generate() -> Self {
-        Self::new(Uuid::new_v4())
-    }
-}
+uuid_id!(
+    /// One entry in a tournament. Matches point at entrants and not at players, so a
+    /// team can enter one day without a new bracket model.
+    EntrantId
+);
 
 #[nutype(
     sanitize(trim),

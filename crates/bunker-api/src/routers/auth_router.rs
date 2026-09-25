@@ -4,15 +4,17 @@ use axum::routing::post;
 use axum::{Json, Router};
 use bunker_models::{LoginRequest, SignupRequest, TokenResponse};
 
-use crate::internal::http::{ApiError, ApiErrorBody, ValidJson};
+use crate::internal::http::{ApiError, ApiErrorBody, ValidJson, no_store};
 use crate::services::AuthService;
 
 use super::AppState;
+use super::responses::BodyErrors;
 
 pub fn auth_router() -> Router<AppState> {
     Router::new()
         .route("/api/auth/signup", post(signup))
         .route("/api/auth/login", post(login))
+        .route_layer(no_store())
 }
 
 #[utoipa::path(
@@ -21,9 +23,9 @@ pub fn auth_router() -> Router<AppState> {
     tag = "auth",
     request_body = SignupRequest,
     responses(
-        (status = 201, body = TokenResponse),
+        BodyErrors,
+        (status = 201, body = TokenResponse, description = "Logged in. Sent with `Cache-Control: no-store`"),
         (status = 409, body = ApiErrorBody),
-        (status = 422, body = ApiErrorBody),
     )
 )]
 pub(super) async fn signup(
@@ -41,9 +43,9 @@ pub(super) async fn signup(
     tag = "auth",
     request_body = LoginRequest,
     responses(
-        (status = 200, body = TokenResponse),
+        BodyErrors,
+        (status = 200, body = TokenResponse, description = "Sent with `Cache-Control: no-store`"),
         (status = 401, body = ApiErrorBody),
-        (status = 422, body = ApiErrorBody),
     )
 )]
 pub(super) async fn login(

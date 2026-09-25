@@ -1,14 +1,18 @@
 import { expect, test } from "@playwright/test"
+import { z } from "zod"
 
 import {
     API,
     apiDraft,
     apiSignup,
     bearer,
+    clearSession,
     createDraft,
     handle,
+    jsonOf,
     newAdmin,
     newPlayer,
+    playerId,
     signupMany,
 } from "./support"
 
@@ -21,9 +25,39 @@ test("the backoffice is closed to a user and open to an admin", async ({
     page,
     context,
 }) => {
+    const admin = await newAdmin(context)
+    const tournament = await apiDraft(context.request, admin.token)
+    const event = await jsonOf(
+        await context.request.post(`${API}/api/admin/events`, {
+            data: {
+                name: `Night ${handle("ev")}`,
+                startsAt: "2030-01-01T18:00:00Z",
+                endsAt: "2030-01-02T02:00:00Z",
+            },
+            headers: bearer(admin.token),
+        }),
+        z.object({ id: z.string() }),
+    )
+    const paths = [
+        "/admin",
+        "/admin/players",
+        "/admin/events",
+        `/admin/events/${event.id}`,
+        "/admin/tournaments",
+        `/admin/tournaments/${tournament}`,
+    ]
+
+    // A stranger and a plain user get the 404 of any dead link, on every page.
+    await clearSession(context)
+    for (const path of paths) {
+        expect((await page.goto(path))?.status(), `stranger ${path}`).toBe(404)
+        await expect(page.locator("main")).toContainText("no such file or directory")
+    }
     await newPlayer(context, "usr")
-    expect((await page.goto("/admin"))?.status()).toBe(404)
-    expect((await page.goto("/admin/tournaments"))?.status()).toBe(404)
+    for (const path of paths) {
+        expect((await page.goto(path))?.status(), `user ${path}`).toBe(404)
+        await expect(page.locator("main")).toContainText("no such file or directory")
+    }
 
     await newAdmin(context)
     await page.goto("/admin")
@@ -73,11 +107,13 @@ test("a player cannot promote themself through a hand-made post", async ({
     context,
 }) => {
     const victim = await newPlayer(context, "vic")
-    const promotion = await page.request.patch(`${API}/api/admin/players/me`, {
+    const id = await playerId(context.request, victim.name)
+    const promotion = await page.request.patch(`${API}/api/admin/players/${id}`, {
         data: { role: "admin" },
         headers: bearer(victim.token),
     })
-    expect(promotion.status()).toBeGreaterThanOrEqual(400)
+    expect(promotion.status()).toBe(403)
+    expect(await promotion.json()).toMatchObject({ code: "Forbidden" })
 
     // The admin sees them still as a user.
     await newAdmin(context)

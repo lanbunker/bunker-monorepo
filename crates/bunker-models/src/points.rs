@@ -1,25 +1,18 @@
 //! Cycles: the points a player collects. The ledger is a list of signed
 //! entries, and everything else is derived: the total is a sum, the rank is a
 //! threshold on the total, the place is the position among all players.
-//!
-//! The rules that turn a tournament into entries are here as pure functions, so
-//! they are tested without a database and any crate can reuse them.
 
 use nutype::nutype;
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 use utoipa::ToSchema;
-use uuid::Uuid;
 
 use super::bracket::Bracket;
 use super::event::{EventId, EventName};
+use super::id::uuid_id;
 use super::pagination::Paginated;
 use super::player::PlayerId;
 use super::tournament::{Entrant, EntrantId, TournamentId, TournamentName};
-
-// The one place that says how many cycles anything pays. `CyclesRules::current`
-// sends these to every client, so a legend on the site can never disagree with
-// what the ledger writes.
 
 /// A player who scans the code at the door of an event gets this, one time
 /// per event.
@@ -68,24 +61,7 @@ impl FieldTier {
 pub const ADJUSTMENT_MAX: i64 = 10_000;
 pub const NOTE_MAX_LEN: usize = 200;
 
-#[nutype(derive(
-    Debug,
-    Clone,
-    Copy,
-    PartialEq,
-    Eq,
-    Hash,
-    Display,
-    Serialize,
-    Deserialize
-))]
-pub struct PointEntryId(Uuid);
-
-impl PointEntryId {
-    pub fn generate() -> Self {
-        Self::new(Uuid::new_v4())
-    }
-}
+uuid_id!(PointEntryId);
 
 /// A signed amount of cycles for one admin adjustment. Zero changes nothing
 /// and is refused, so every row in the ledger means something.
@@ -96,7 +72,7 @@ impl PointEntryId {
 pub struct Amount(i64);
 
 fn is_adjustment_amount(value: &i64) -> bool {
-    *value != 0 && value.abs() <= ADJUSTMENT_MAX
+    *value != 0 && (-ADJUSTMENT_MAX..=ADJUSTMENT_MAX).contains(value)
 }
 
 /// Why an admin gave or took cycles. Shown to the player.
@@ -141,17 +117,6 @@ impl Rank {
             Self::Sudoer => 1500,
             Self::Daemon => 3000,
             Self::Kernel => 6000,
-        }
-    }
-
-    pub const fn as_str(self) -> &'static str {
-        match self {
-            Self::Zombie => "zombie",
-            Self::Guest => "guest",
-            Self::User => "user",
-            Self::Sudoer => "sudoer",
-            Self::Daemon => "daemon",
-            Self::Kernel => "kernel",
         }
     }
 
@@ -230,7 +195,7 @@ pub enum PointKind {
 
 impl PointKind {
     /// Every kind, in the order a legend lists them. `CyclesRules` is built
-    /// from this list, so a new variant appears there without a second edit.
+    /// from this list, and a test fails when a kind is missing from it.
     pub const ALL: [Self; 7] = [
         Self::Checkin,
         Self::TournamentEntry,
@@ -253,9 +218,8 @@ impl PointKind {
         }
     }
 
-    /// What a tournament of this size pays for this kind. The entry and a win
-    /// are the same in every field: a bigger bracket already has more wins in
-    /// it. A check-in has no field at all. An adjustment has no fixed amount.
+    /// What this kind pays in a field of this tier. Only a placement depends on
+    /// the tier. An adjustment has no fixed amount.
     pub const fn cycles(self, tier: FieldTier) -> Option<i64> {
         use FieldTier::{Large, Medium, Small};
         match (self, tier) {
@@ -284,7 +248,8 @@ impl PointKind {
 pub struct CyclesRules {
     /// Smallest field first.
     pub tiers: Vec<TierRule>,
-    /// In the order a player earns them: entry, wins, then placements.
+    /// In the order of `PointKind::ALL`, without the kinds that have no fixed
+    /// amount.
     pub awards: Vec<AwardRule>,
     pub adjustment_max: i64,
     /// Bottom first.
@@ -438,10 +403,12 @@ pub fn checkin_award(event: EventId, player: PlayerId) -> Award {
 }
 
 /// Everything a concluded tournament pays. Every entrant with an account gets
-/// the entry cycles. With a bracket, each played match pays its winner, the
-/// champion, the finalist and the two semifinalists get their placement.
-/// Without a bracket only the named winner gets a placement. The placements
-/// follow the tier of the field, every entrant counted.
+/// the entry cycles. With a bracket, each played match pays its winner, and the
+/// champion, the finalist and the two semifinalists get their placement. The
+/// final decides the champion, so `winner` is ignored, and a final without a
+/// result pays no champion and no finalist. Without a bracket only `winner`
+/// gets a placement. The placements follow the tier of the field, every
+/// entrant counted.
 pub fn tournament_awards(
     tournament: TournamentId,
     entrants: &[Entrant],

@@ -22,12 +22,19 @@ const { handle, nemesis, own = false } = Astro.props
 const opponent = nemesis.opponent
 const standing = opponent.standing
 const total = played(nemesis)
+// The score renders as an array of elements, which carries no text node between
+// them, so the record reads as one number and not as three words. A paragraph
+// takes no accessible name, so the spoken form needs a role that does.
 const record = `${nemesis.wins} ${nemesis.wins === 1 ? "win" : "wins"}, ${nemesis.losses} ${nemesis.losses === 1 ? "loss" : "losses"}`
 ---
 
 <Prompt
   command={own ? "cat ~/.nemesis" : `cat /players/${handle}/nemesis`}
-  comment={own ? `beat you ${nemesis.losses} times` : undefined}
+  comment={
+    own
+      ? `beat you ${nemesis.losses} ${nemesis.losses === 1 ? "time" : "times"}`
+      : undefined
+  }
 />
 <Panel tone="alert" class="mt-4">
   <h2 class="m-0 text-sm font-normal tracking-wider text-alert">nemesis</h2>
@@ -46,9 +53,6 @@ const record = `${nemesis.wins} ${nemesis.wins === 1 ? "win" : "wins"}, ${nemesi
       </div>
     </div>
     <div class="text-right">
-      <!-- An array of elements carries no text node between them, so the record
-           reads as one number and not as three words. A paragraph takes no
-           accessible name, so the spoken form needs a role that does. -->
       <p
         class="m-0 text-[1.75rem] leading-none font-bold tabular-nums"
         role="img"

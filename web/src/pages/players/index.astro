@@ -12,6 +12,7 @@ import { call, dataOf, failureOf, messageOf } from "../../lib/api"
 import { formatCycles, isPodium } from "../../lib/cycles"
 import { formatDate } from "../../lib/dates"
 import { PAGE_SIZE, listPath, pageFrom, searchFrom } from "../../lib/paging"
+import { sessionOf } from "../../lib/session"
 
 const page = pageFrom(Astro.url)
 const q = searchFrom(Astro.url)
@@ -23,7 +24,7 @@ if (roster && page > roster.totalPages && roster.totalPages > 0) {
   return Astro.redirect(listPath("/players", q, roster.totalPages))
 }
 const failure = failureOf(result)
-const me = Astro.locals.player?.id
+const me = sessionOf(Astro.locals)?.player.id
 ---
 
 <Layout title="PLAYERS//LAN_BUNKER" active="players">
@@ -38,6 +39,7 @@ const me = Astro.locals.player?.id
           ? `bunkernet // ${roster.total} enlisted, by cycles`
           : `${roster.total} ${roster.total === 1 ? "match" : "matches"}, by cycles`
     }
+    heading="h1"
     class="mt-8 mb-4"
   />
 

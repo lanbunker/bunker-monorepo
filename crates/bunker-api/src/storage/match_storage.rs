@@ -50,8 +50,6 @@ impl MatchStorage {
     /// takes each maximum from a different loss: an opponent could win the
     /// comparison with the date of one loss and the instant of another. The day
     /// is a fixed width ISO string, so the pair sorts as text.
-    /// [`NEMESIS_MIN_LOSSES`] and the handle are bound, and the day comes from
-    /// the column, so no value a caller sent reaches the SQL.
     ///
     /// An opponent who deleted their account leaves no row in `players` to
     /// join, so they never hold the title.
@@ -92,11 +90,7 @@ impl MatchStorage {
     /// The played matches of the player, newest first. The count and the page
     /// run in one transaction.
     ///
-    /// The order ends on the slot, which no pair of rows reaches today: a
-    /// player meets one opponent at most one time per round. It is there
-    /// because `(tournament, round, slot)` is the unique key of `matches`, so
-    /// the order stays total, and a page stays stable, without the caller
-    /// trusting that rule.
+    /// The slot makes the order total, so a page is stable.
     pub async fn history(
         &self,
         player: PlayerId,

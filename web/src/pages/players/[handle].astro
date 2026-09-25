@@ -10,6 +10,7 @@ import Prompt from "../../components/ui/Prompt.astro"
 import Layout from "../../layouts/Layout.astro"
 import { call, dataOf, failureOf, isMissing } from "../../lib/api"
 import { RECENT_ENTRIES } from "../../lib/paging"
+import { sessionOf } from "../../lib/session"
 
 const handle = Astro.params.handle ?? ""
 const [result, logResult, matchResult] = await Promise.all([
@@ -31,11 +32,11 @@ if (failure && isMissing(failure)) return Astro.rewrite("/404")
 const player = dataOf(result)
 const log = dataOf(logResult)
 const matches = dataOf(matchResult)
-const own = player !== undefined && Astro.locals.player?.id === player.id
+const own = player !== undefined && sessionOf(Astro.locals)?.player.id === player.id
 ---
 
 <Layout title={`${player?.handle ?? handle}//LAN_BUNKER`} active="players">
-  <Prompt command={`cat /players/${handle}`} />
+  <Prompt heading="p" command={`cat /players/${handle}`} />
 
   {player ? (
     <>

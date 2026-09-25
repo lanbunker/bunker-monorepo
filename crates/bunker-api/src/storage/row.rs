@@ -19,7 +19,8 @@ pub(super) const DAY: &[time::format_description::BorrowedFormatItem<'_>] =
 #[error("column `{0}` holds a value outside the domain")]
 pub(super) struct MalformedField(pub(super) &'static str);
 
-/// Unix micros. One unit for every timestamp column, so a query can compare them.
+/// Unix micros, the unit of every instant column but `credentials_changed_at`,
+/// which holds the seconds of a token `iat`.
 pub(super) fn to_micros(table: &'static str, at: OffsetDateTime) -> Result<i64, StorageError> {
     let micros = at.unix_timestamp_nanos() / 1_000;
     i64::try_from(micros).map_err(|error| StorageError::malformed_row(table, error))
@@ -43,7 +44,7 @@ pub(super) fn parse_uuid(table: &'static str, raw: &str) -> Result<Uuid, Storage
 
 /// The public columns of a player, as every query that reads players selects
 /// them: the row of `players` joined with `player_standings`, the view that
-/// sums the ledger. The join is what keeps the total on every player current.
+/// sums the ledger.
 #[derive(Debug)]
 pub(super) struct PlayerRow {
     pub(super) id: String,

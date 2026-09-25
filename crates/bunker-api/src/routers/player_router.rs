@@ -8,17 +8,19 @@ use bunker_models::{
 use serde::Deserialize;
 
 use crate::internal::http::{
-    ApiError, ApiErrorBody, Authenticated, ValidJson, ValidPath, ValidQuery,
+    ApiError, ApiErrorBody, Authenticated, PendingPassword, ValidJson, ValidPath, ValidQuery,
+    no_store,
 };
 use crate::services::{AuthService, MatchService, PlayerService, PointsService};
 
 use super::AppState;
+use super::responses::{BearerErrors, BodyErrors, PathErrors, TokenErrors};
 
 pub fn player_router() -> Router<AppState> {
     Router::new()
-        .route("/api/me", get(me))
-        .route("/api/me/password", post(change_password))
-        .route("/api/me/handle", put(change_handle))
+        .route("/api/me", get(me).layer(no_store()))
+        .route("/api/me/password", post(change_password).layer(no_store()))
+        .route("/api/me/handle", put(change_handle).layer(no_store()))
         .route("/api/players", get(list_players))
         .route("/api/players/{handle}", get(get_player))
         .route("/api/players/{handle}/cycles", get(cycles_history))
@@ -31,15 +33,22 @@ pub(super) struct PlayerPath {
     handle: Handle,
 }
 
+/// Takes a temporary password too, so the site can see that a change is due.
 #[utoipa::path(
     get,
     path = "/api/me",
     tag = "players",
     security(("bearer" = [])),
-    responses((status = 200, body = Account), (status = 401, body = ApiErrorBody))
+    responses(
+        TokenErrors,
+        (status = 200, body = Account, description = "Sent with `Cache-Control: no-store`, like every `/api/me` answer"),
+    )
 )]
-pub(super) async fn me(Authenticated(account): Authenticated) -> Result<Json<Account>, ApiError> {
-    Ok(Json(account))
+pub(super) async fn me(
+    State(players): State<PlayerService>,
+    PendingPassword(caller): PendingPassword,
+) -> Result<Json<Account>, ApiError> {
+    Ok(Json(players.account(caller.id).await?))
 }
 
 #[utoipa::path(
@@ -49,18 +58,18 @@ pub(super) async fn me(Authenticated(account): Authenticated) -> Result<Json<Acc
     security(("bearer" = [])),
     request_body = PasswordChange,
     responses(
-        (status = 200, body = TokenResponse, description = "A fresh token. Older tokens are refused from now on"),
-        (status = 400, body = ApiErrorBody),
-        (status = 401, body = ApiErrorBody),
-        (status = 422, body = ApiErrorBody),
+        TokenErrors,
+        BodyErrors,
+        (status = 200, body = TokenResponse, description = "A fresh token. Older tokens are refused from now on. The one route besides `/api/me` that a temporary password opens"),
+        (status = 400, body = ApiErrorBody, description = "The current password is wrong, or the body is not valid JSON"),
     )
 )]
 pub(super) async fn change_password(
     State(auth): State<AuthService>,
-    Authenticated(account): Authenticated,
+    PendingPassword(caller): PendingPassword,
     ValidJson(change): ValidJson<PasswordChange>,
 ) -> Result<Json<TokenResponse>, ApiError> {
-    Ok(Json(auth.change_password(account.player.id, change).await?))
+    Ok(Json(auth.change_password(caller.id, change).await?))
 }
 
 #[utoipa::path(
@@ -70,21 +79,18 @@ pub(super) async fn change_password(
     security(("bearer" = [])),
     request_body = HandleChange,
     responses(
+        BearerErrors,
+        BodyErrors,
         (status = 200, body = Player, description = "The player with the new handle. The glyph does not change"),
-        (status = 400, body = ApiErrorBody),
-        (status = 401, body = ApiErrorBody),
         (status = 409, body = ApiErrorBody),
-        (status = 422, body = ApiErrorBody),
     )
 )]
 pub(super) async fn change_handle(
     State(players): State<PlayerService>,
-    Authenticated(account): Authenticated,
+    Authenticated(caller): Authenticated,
     ValidJson(change): ValidJson<HandleChange>,
 ) -> Result<Json<Player>, ApiError> {
-    Ok(Json(
-        players.rename(account.player.id, change.handle).await?,
-    ))
+    Ok(Json(players.rename(caller.id, change.handle).await?))
 }
 
 #[utoipa::path(
@@ -94,7 +100,7 @@ pub(super) async fn change_handle(
     params(RosterQuery),
     responses(
         (status = 200, body = Paginated<Player>, description = "The leaderboard: first place first"),
-        (status = 400, body = ApiErrorBody),
+        (status = 400, body = ApiErrorBody, description = "A query parameter is malformed"),
     )
 )]
 pub(super) async fn list_players(
@@ -111,7 +117,7 @@ pub(super) async fn list_players(
     params(PlayerPath, PageQuery),
     responses(
         (status = 200, body = CyclesLog, description = "Newest first, with the totals by kind"),
-        (status = 400, body = ApiErrorBody),
+        (status = 400, body = ApiErrorBody, description = "The handle or a query parameter is malformed"),
         (status = 404, body = ApiErrorBody),
     )
 )]
@@ -130,7 +136,7 @@ pub(super) async fn cycles_history(
     params(PlayerPath, PageQuery),
     responses(
         (status = 200, body = MatchLog, description = "Newest first, with the record and the nemesis"),
-        (status = 400, body = ApiErrorBody),
+        (status = 400, body = ApiErrorBody, description = "The handle or a query parameter is malformed"),
         (status = 404, body = ApiErrorBody),
     )
 )]
@@ -147,7 +153,11 @@ pub(super) async fn match_log(
     path = "/api/players/{handle}",
     tag = "players",
     params(PlayerPath),
-    responses((status = 200, body = Player), (status = 404, body = ApiErrorBody))
+    responses(
+        PathErrors,
+        (status = 200, body = Player),
+        (status = 404, body = ApiErrorBody),
+    )
 )]
 pub(super) async fn get_player(
     State(players): State<PlayerService>,

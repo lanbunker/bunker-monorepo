@@ -11,7 +11,7 @@ use crate::event::{
     CHECKIN_CODE_LEN, CheckinCode, EVENT_NAME_MAX_LEN, EventId, EventName, GAMES_MAX_LEN, Games,
     IMAGE_NAME_MAX_LEN, ImageName, LOCATION_MAX_LEN, Location,
 };
-use crate::glyph::GlyphBits;
+use crate::glyph::{GLYPH_MASK, GlyphBits};
 use crate::handle::{HANDLE_MAX_LEN, HANDLE_MIN_LEN, Handle};
 use crate::player::PlayerId;
 use crate::points::{ADJUSTMENT_MAX, Amount, NOTE_MAX_LEN, Note, PointEntryId};
@@ -79,7 +79,7 @@ impl PartialSchema for ImageName {
             .schema_type(Type::String)
             .min_length(Some(1))
             .max_length(Some(IMAGE_NAME_MAX_LEN))
-            .pattern(Some("^[A-Za-z0-9._-]+$"))
+            .pattern(Some("^[A-Za-z0-9][A-Za-z0-9._-]*$"))
             .description(Some("A file name under the event images of the site"))
             .build()
             .into()
@@ -159,7 +159,7 @@ impl PartialSchema for GlyphBits {
         ObjectBuilder::new()
             .schema_type(Type::Integer)
             .minimum(Some(0))
-            .maximum(Some(33_554_431))
+            .maximum(Some(GLYPH_MASK))
             .description(Some(
                 "Row-major 5x5 grid as one integer. Bit 0 is the top left cell.",
             ))

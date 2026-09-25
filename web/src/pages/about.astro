@@ -9,7 +9,7 @@ const title = entry?.data.title ?? "README.txt"
 ---
 
 <Layout title="ABOUT//LAN_BUNKER" active="about">
-  <Prompt command={`cat ${title}`} />
+  <Prompt heading="h1" command={`cat ${title}`} />
 
   <Panel>
     <pre class="m-0 font-mono text-xs leading-[1.9] whitespace-pre-wrap wrap-break-word text-ink">{entry?.body?.trim()}</pre>

@@ -12,23 +12,13 @@ mod support;
 
 use axum::http::StatusCode;
 use bunker_models::{
-    CHECKIN_CYCLES, CheckinGate, CheckinReceipt, CheckinWindow, Checkins, CyclesLog, Event,
-    EventDetail, EventStatus, Paginated, Player, PointKind, Rank,
+    CHECKIN_CYCLES, CheckinGate, CheckinReceipt, CheckinWindow, Checkins, Event, EventDetail,
+    EventStatus, Paginated, PointKind, Rank,
 };
 use serde_json::json;
-use support::{TestApi, assert_error, read_json};
+use support::{HOUR, TestApi, assert_error, read_json};
 use time::format_description::well_known::Rfc3339;
 use time::{Duration, OffsetDateTime};
-
-const HOUR: i64 = 3600;
-
-async fn player(api: &TestApi, handle: &str) -> Player {
-    read_json(api.get(&format!("/api/players/{handle}")).await).await
-}
-
-async fn log(api: &TestApi, handle: &str) -> CyclesLog {
-    read_json(api.get(&format!("/api/players/{handle}/cycles")).await).await
-}
 
 #[tokio::test]
 async fn a_new_event_is_a_draft_that_only_admins_see() {
@@ -139,11 +129,11 @@ async fn a_player_checks_in_one_time_and_the_door_pays() {
     assert_eq!(receipt.cycles, CHECKIN_CYCLES);
     assert_eq!(receipt.event.checkin_count, 1);
 
-    let standing = player(&api, "dave").await.standing;
+    let standing = api.player("dave").await.standing;
     assert_eq!(standing.cycles, CHECKIN_CYCLES);
     assert_eq!(standing.rank, Rank::Guest, "one night wakes a zombie up");
 
-    let history = log(&api, "dave").await;
+    let history = api.cycles_log("dave").await;
     assert_eq!(history.entries.total, 1);
     let line = &history.entries.items[0];
     assert_eq!(line.kind, PointKind::Checkin);
@@ -156,14 +146,13 @@ async fn a_player_checks_in_one_time_and_the_door_pays() {
     assert!(line.tournament_id.is_none());
     assert_eq!(history.totals[0].kind, PointKind::Checkin);
 
-    // A second scan pays nothing and answers the first receipt.
     let again = api.post_as(&door, &json!({}), &dave).await;
     assert_eq!(again.status(), StatusCode::OK);
     let repeat: CheckinReceipt = read_json(again).await;
     assert_eq!(repeat.checked_in_at, receipt.checked_in_at);
     assert_eq!(repeat.cycles, 0, "a repeat pays nothing");
     assert_eq!(repeat.event.checkin_count, 1);
-    assert_eq!(player(&api, "dave").await.standing.cycles, CHECKIN_CYCLES);
+    assert_eq!(api.player("dave").await.standing.cycles, CHECKIN_CYCLES);
 
     let mine: Checkins = read_json(api.get_as("/api/me/checkins", &dave).await).await;
     assert_eq!(mine.events, vec![created.id]);
@@ -224,7 +213,7 @@ async fn the_door_refuses_a_scan_outside_the_window() {
     let anonymous = api.post("/api/checkin/zzzzzzzzzzzz", &json!({})).await;
     assert_error(anonymous, StatusCode::UNAUTHORIZED, "Unauthorized").await;
 
-    assert_eq!(player(&api, "dave").await.standing.cycles, 0);
+    assert_eq!(api.player("dave").await.standing.cycles, 0);
 }
 
 #[tokio::test]
@@ -317,21 +306,20 @@ async fn deleting_an_event_takes_its_checkins_and_their_cycles() {
     let detail = api.publish_event(&admin, created.id).await;
     let door = format!("/api/checkin/{}", detail.checkin_code);
     api.post_as(&door, &json!({}), &dave).await;
-    assert_eq!(player(&api, "dave").await.standing.cycles, CHECKIN_CYCLES);
+    assert_eq!(api.player("dave").await.standing.cycles, CHECKIN_CYCLES);
 
     let deleted = api
         .delete_as(&format!("/api/admin/events/{}", created.id), &admin)
         .await;
     assert_eq!(deleted.status(), StatusCode::NO_CONTENT);
 
-    assert_eq!(player(&api, "dave").await.standing.cycles, 0);
-    assert_eq!(log(&api, "dave").await.entries.total, 0);
+    assert_eq!(api.player("dave").await.standing.cycles, 0);
+    assert_eq!(api.cycles_log("dave").await.entries.total, 0);
     let mine: Checkins = read_json(api.get_as("/api/me/checkins", &dave).await).await;
     assert!(mine.events.is_empty());
     let gone = api.get(&door).await;
     assert_error(gone, StatusCode::NOT_FOUND, "ItemNotFound").await;
 
-    // Idempotent, like every delete.
     let again = api
         .delete_as(&format!("/api/admin/events/{}", created.id), &admin)
         .await;
@@ -343,7 +331,7 @@ async fn an_admin_checks_a_player_in_by_hand_for_any_night() {
     let api = TestApi::with_database().await;
     let admin = api.signup_admin("root").await;
     let user = api.signup("dave").await.token;
-    let dave = player(&api, "dave").await;
+    let dave = api.player("dave").await;
     // A night from long before the door existed, still a draft.
     let old = api.create_event(&admin, -400 * 24 * HOUR, 6 * HOUR).await;
     let path = format!("/api/admin/events/{}/checkins", old.id);
@@ -360,19 +348,18 @@ async fn an_admin_checks_a_player_in_by_hand_for_any_night() {
     let receipt: CheckinReceipt = read_json(response).await;
     assert_eq!(receipt.cycles, CHECKIN_CYCLES);
     assert_eq!(receipt.event.checkin_count, 1);
-    assert_eq!(player(&api, "dave").await.standing.cycles, CHECKIN_CYCLES);
-    let line = &log(&api, "dave").await.entries.items[0];
+    assert_eq!(api.player("dave").await.standing.cycles, CHECKIN_CYCLES);
+    let line = &api.cycles_log("dave").await.entries.items[0];
     assert_eq!(line.kind, PointKind::Checkin);
     assert_eq!(line.event_id, Some(old.id));
 
-    // The same rule as the door: one time per player per event.
     let again = api
         .post_as(&path, &json!({ "playerId": dave.id }), &admin)
         .await;
     assert_eq!(again.status(), StatusCode::OK);
     let repeat: CheckinReceipt = read_json(again).await;
     assert_eq!(repeat.cycles, 0);
-    assert_eq!(player(&api, "dave").await.standing.cycles, CHECKIN_CYCLES);
+    assert_eq!(api.player("dave").await.standing.cycles, CHECKIN_CYCLES);
 
     let detail: EventDetail = read_json(
         api.get_as(&format!("/api/admin/events/{}", old.id), &admin)

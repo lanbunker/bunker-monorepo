@@ -64,8 +64,8 @@ const failure = firstError(
 )
 // A refused adjustment keeps what was typed in its row.
 const typed = Astro.locals.submitted
-// Only a known key renders. The query string is anyone's to write, and `who`
-// is a handle the API validated before the redirect carried it.
+// Only a known key renders. `who` is also anyone's to write, and it renders as
+// text, so a forged one can only print a wrong name.
 const who = Astro.url.searchParams.get("who") ?? ""
 const notice = noticeFrom(Astro.url, {
   promoted: `${who} is now admin`,
@@ -124,7 +124,7 @@ if (roster && page > roster.totalPages && roster.totalPages > 0) {
 
   <div class="mt-4 border border-warn/40">
     {!roster ? (
-      <p class="p-4 text-xs text-alert">the api is unreachable.</p>
+      <Alert message="the api is unreachable." class="p-4" />
     ) : (
       <Table label="players">
         <thead>

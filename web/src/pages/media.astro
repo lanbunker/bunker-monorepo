@@ -31,7 +31,7 @@ const gallery = await Promise.all(
 ---
 
 <Layout title="MEDIA//LAN_BUNKER" active="media">
-  <Prompt command="ls ./media/*.webp" comment={`${gallery.length} files`} />
+  <Prompt heading="h1" command="ls ./media/*.webp" comment={`${gallery.length} files`} />
 
   {gallery.length === 0 ? (
     <p class="text-xs text-dim">no media available.</p>
@@ -61,7 +61,7 @@ const gallery = await Promise.all(
   <div class="mt-6 text-2xs tracking-wider text-mute">── EOF ──</div>
 
   <style is:global>
-    /* PhotoSwipe above scanlines (z-50) */
+    /* The scanlines sit at z-50, so the lightbox goes above them. */
     .pswp {
       z-index: 60 !important;
     }
@@ -70,16 +70,14 @@ const gallery = await Promise.all(
       background: rgba(0, 0, 0, 0.95) !important;
     }
 
-    /* Hide all default icons */
     .pswp__icn {
       display: none !important;
     }
 
-    /* Shared button style */
     .pswp__button {
       background: none !important;
       box-shadow: none !important;
-      border: 1px solid var(--color-border) !important;
+      border: 0.0625rem solid var(--color-border) !important;
       border-radius: 0 !important;
       opacity: 1 !important;
       width: auto !important;
@@ -94,51 +92,44 @@ const gallery = await Promise.all(
       color: var(--color-accent) !important;
     }
 
-    /* Arrows */
     .pswp__button--arrow--prev::after {
       content: "[<]";
-      font-size: 14px;
+      font-size: 0.875rem;
       letter-spacing: 0.1em;
     }
 
     .pswp__button--arrow--next::after {
       content: "[>]";
-      font-size: 14px;
+      font-size: 0.875rem;
       letter-spacing: 0.1em;
     }
 
-    /* Close */
     .pswp__button--close::after {
       content: "[X]";
-      font-size: 14px;
+      font-size: 0.875rem;
       letter-spacing: 0.1em;
     }
 
-    /* Hide zoom button */
     .pswp__button--zoom {
       display: none !important;
     }
 
-    /* Counter */
     .pswp__counter {
       font-family: var(--font-mono) !important;
       color: var(--color-dim) !important;
-      font-size: 12px !important;
+      font-size: 0.75rem !important;
       letter-spacing: 0.1em !important;
       opacity: 1 !important;
     }
 
-    /* Preloader */
     .pswp__preloader {
       display: none !important;
     }
 
-    /* Image border */
     .pswp__img {
-      border: 1px solid var(--color-border) !important;
+      border: 0.0625rem solid var(--color-border) !important;
     }
 
-    /* Top bar */
     .pswp__top-bar {
       background: none !important;
     }

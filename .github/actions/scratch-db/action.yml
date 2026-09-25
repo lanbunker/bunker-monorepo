@@ -1,0 +1,12 @@
+name: Migrate a scratch database
+description: Builds .dev/bunker.db from the migrations for the sqlx macros.
+
+# The sqlx macros check each query against a real schema at compile time. The
+# runner has sqlite3, so the migrations build that schema in milliseconds.
+runs:
+    using: composite
+    steps:
+        - shell: bash
+          run: |
+              mkdir -p .dev
+              for file in crates/bunker-api/migrations/*.sql; do sqlite3 .dev/bunker.db < "$file"; done

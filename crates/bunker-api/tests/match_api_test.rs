@@ -10,11 +10,9 @@
 mod support;
 
 use axum::http::StatusCode;
-use bunker_models::{Bracket, EntrantId, Match, MatchLog, Player, TournamentDetail, TournamentId};
+use bunker_models::{Bracket, EntrantId, MatchLog, Player, TournamentId};
 use serde_json::json;
-use support::{TestApi, assert_error, read_json};
-
-const HOUR: i64 = 3600;
+use support::{HOUR, TestApi, assert_error, read_json};
 
 async fn log_of(api: &TestApi, handle: &str) -> MatchLog {
     page_of(api, handle, "").await
@@ -76,15 +74,6 @@ async fn cup(
     (created.id, read_json(generated).await)
 }
 
-async fn detail(api: &TestApi, admin: &str, tournament: TournamentId) -> TournamentDetail {
-    let response = api
-        .get_as(&format!("/api/admin/tournaments/{tournament}"), admin)
-        .await;
-    assert_eq!(response.status(), StatusCode::OK);
-
-    read_json(response).await
-}
-
 /// The entrant a handle plays as in this tournament.
 async fn entrant_of(
     api: &TestApi,
@@ -92,7 +81,7 @@ async fn entrant_of(
     tournament: TournamentId,
     handle: &str,
 ) -> EntrantId {
-    detail(api, admin, tournament)
+    api.detail(admin, tournament)
         .await
         .entrants
         .iter()
@@ -103,28 +92,6 @@ async fn entrant_of(
         })
         .unwrap_or_else(|| panic!("{handle} does not play in {tournament}"))
         .id
-}
-
-async fn report(
-    api: &TestApi,
-    admin: &str,
-    tournament: TournamentId,
-    m: &Match,
-    winner: EntrantId,
-) -> Bracket {
-    let response = api
-        .put_as(
-            &format!(
-                "/api/admin/tournaments/{tournament}/matches/{}/result",
-                m.id
-            ),
-            &json!({ "winner": winner }),
-            admin,
-        )
-        .await;
-    assert_eq!(response.status(), StatusCode::OK, "report failed");
-
-    read_json(response).await
 }
 
 /// One live tournament on `date` where `winner` beats `loser`, and nothing
@@ -139,7 +106,7 @@ async fn duel(
     let (tournament, bracket) = cup(api, admin, date, &[winner, loser]).await;
     let m = bracket.flat().next().cloned().unwrap();
     let side = entrant_of(api, admin, tournament, winner.handle.as_ref()).await;
-    report(api, admin, tournament, &m, side).await;
+    api.report(admin, tournament, &m, side).await;
 
     tournament
 }
@@ -216,9 +183,6 @@ async fn one_loss_names_nobody_and_a_second_names_the_nemesis() {
     assert!(theirs.nemesis.is_none(), "one loss names nobody");
 }
 
-/// The headline rule. Without this the primary sort could be reversed or
-/// dropped and every other nemesis test would still pass, because each of them
-/// gives every candidate the same number of losses.
 #[tokio::test]
 async fn the_opponent_with_the_most_wins_is_the_nemesis() {
     let api = TestApi::with_database().await;
@@ -391,7 +355,7 @@ async fn a_cleared_result_leaves_the_log() {
     let (tournament, bracket) = cup(&api, &admin, "2026-01-01", &[&mallory, &dave]).await;
     let m = bracket.flat().next().cloned().unwrap();
     let side = entrant_of(&api, &admin, tournament, "mallory").await;
-    report(&api, &admin, tournament, &m, side).await;
+    api.report(&admin, tournament, &m, side).await;
     assert_eq!(log_of(&api, "dave").await.record.losses, 1);
 
     let cleared = api
@@ -440,7 +404,7 @@ async fn a_bye_is_not_a_match() {
         .find(|m| m.is_ready())
         .cloned()
         .expect("one real match in round one");
-    let detail = detail(&api, &admin, tournament).await;
+    let detail = api.detail(&admin, tournament).await;
     let handle_of = |entrant: EntrantId| {
         detail
             .entrants
@@ -457,16 +421,11 @@ async fn a_bye_is_not_a_match() {
     assert_eq!((waiting_log.record.wins, waiting_log.record.losses), (0, 0));
     assert!(waiting_log.matches.items.is_empty(), "a bye is not a win");
 
-    let after = report(
-        &api,
-        &admin,
-        tournament,
-        &opening,
-        opening.entrant_a.unwrap(),
-    )
-    .await;
+    let after = api
+        .report(&admin, tournament, &opening, opening.entrant_a.unwrap())
+        .await;
     let last = after.rounds.last().unwrap().first().cloned().unwrap();
-    report(&api, &admin, tournament, &last, waiting).await;
+    api.report(&admin, tournament, &last, waiting).await;
 
     let log = log_of(&api, &seeded).await;
     assert_eq!((log.record.wins, log.record.losses), (1, 0));
@@ -474,9 +433,7 @@ async fn a_bye_is_not_a_match() {
     assert_eq!(log.matches.items[0].round, 2);
 }
 
-/// Every match of the round test sits in one tournament on one day, so only the
-/// round key is exercised there. This one crosses tournaments, which is the
-/// order a profile actually shows.
+/// Crosses tournaments and days: the order a profile shows.
 #[tokio::test]
 async fn the_log_puts_the_newest_tournament_first() {
     let api = TestApi::with_database().await;
@@ -580,10 +537,10 @@ async fn the_log_names_the_round_and_pages() {
             .cloned()
             .unwrap();
         let side = next.entrant_a.unwrap();
-        current = report(&api, &admin, tournament, &next, side).await;
+        current = api.report(&admin, tournament, &next, side).await;
     }
     let champion = current.champion().unwrap();
-    let detail = detail(&api, &admin, tournament).await;
+    let detail = api.detail(&admin, tournament).await;
     let handle = detail
         .entrants
         .iter()

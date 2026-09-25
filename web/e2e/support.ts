@@ -1,4 +1,5 @@
 import { execFileSync } from "node:child_process"
+import { join } from "node:path"
 
 import { expect } from "@playwright/test"
 import type {
@@ -135,20 +136,27 @@ export const adminNamed = async (context: BrowserContext, name: string) => {
     return { name, token }
 }
 
+/** The database the e2e API runs on. `playwright.config.ts` names the same file. */
+const E2E_DB = join(import.meta.dirname, "..", "..", ".dev", "e2e.db")
+
+/** The rule of a handle. The name goes into SQL, so nothing else may pass. */
+const HANDLE = /^[A-Za-z0-9_.-]{3,20}$/
+
 /**
  * Promotes with SQL, the way `make admin` does on a real box. The timeout lets
  * the command wait for the write lock of the API instead of failing at once.
  */
 export const promote = (name: string) => {
+    if (!HANDLE.test(name)) throw new Error(`not a handle: ${name}`)
     execFileSync("sqlite3", [
         "-cmd",
         ".timeout 5000",
-        "../.dev/e2e.db",
+        E2E_DB,
         `update players set role = 'admin' where handle = '${name}' collate nocase`,
     ])
 }
 
-/** The API keeps sessions in a cookie set by the site, so a signup logs in. */
+/** A signup through the form logs in, so the page lands on the profile. */
 export const signup = async (page: Page, name: string) => {
     await page.goto("/signup")
     await page.getByLabel("handle:").fill(name)
@@ -289,7 +297,7 @@ const addEntrants = async (
 /**
  * Signs the players up and adds them as entrants, all at the same time. A tie
  * on level is drawn at random, so the order of the adds decides nothing.
- * `levels` gives each name its level by index, and a missing one is unrated.
+ * `levels` is as for `addEntrants`.
  */
 export const enrol = async (
     request: APIRequestContext,
@@ -358,6 +366,30 @@ export const apiDuel = async (
 /** The id of a player, read back by handle. */
 export const playerId = async (request: APIRequestContext, name: string) =>
     (await jsonOf(await request.get(`${API}/api/players/${name}`), idSchema)).id
+
+const resetSchema = z.object({ temporaryPassword: z.string() })
+
+/**
+ * A player an admin reset, logged in with the temporary password, so the site
+ * holds them on `/password`. The admin is made on the side and never logs in.
+ */
+export const forcedPlayer = async (context: BrowserContext, prefix = "frc") => {
+    const name = handle(prefix)
+    await apiSignup(context.request, name)
+    const admin = handle("adm")
+    const adminToken = await apiSignup(context.request, admin)
+    promote(admin)
+    const id = await playerId(context.request, name)
+    const reset = await jsonOf(
+        await context.request.post(`${API}/api/admin/players/${id}/password-reset`, {
+            headers: bearer(adminToken),
+        }),
+        resetSchema,
+    )
+    const token = await apiLogin(context.request, name, reset.temporaryPassword)
+    await setSession(context, token)
+    return { name, token }
+}
 
 export const adjustCycles = async (
     request: APIRequestContext,

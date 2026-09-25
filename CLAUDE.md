@@ -190,7 +190,10 @@ not compile until you classify it.
    compiler asks for both.
 5. **Router.** Write a handler that takes `ValidJson`, `ValidQuery`, `ValidPath` or
    `Authenticated`. Never use the axum `Query` or `Path`, because `clippy.toml`
-   rejects them. Ask for the service through `State<…>`.
+   rejects them. Ask for the service through `State<…>`. An admin route goes in
+   an admin router, where `server.rs` puts `require_admin` on every route. Take
+   `AdminOnly` only to name the actor. Only `/api/me` and `/api/me/password` take
+   `PendingPassword`, which lets a temporary password through.
 6. **Document.** Put `#[utoipa::path]` on the handler and list it in
    `routers/openapi.rs`. A new wire type derives `ToSchema`, or gets an impl in
    `bunker-models/src/schema.rs` when it is a `nutype` newtype.
@@ -226,6 +229,12 @@ A new `not null` column needs a default if the table holds rows. A drop or a
 rename of a column destroys data. Ask the user first. There is no down
 migration: a mistake is corrected by a new forward migration.
 
+A rebuild of a parent table, one that another table references with
+`on delete cascade`, must run outside a transaction. Inside one, the
+`drop table` of the parent fires the cascades and deletes the children. Start
+the file with `-- no-transaction`, then write
+`pragma foreign_keys = off; begin; ...; pragma foreign_key_check; commit; pragma foreign_keys = on;`.
+
 ## Tests
 
 - `TestApi::without_database()` for a request that the boundary rejects. Its pool
@@ -233,10 +242,11 @@ migration: a mistake is corrected by a new forward migration.
   behaviour. It creates and migrates one SQLite file per test.
 - Tests share nothing, so they need no unique names and no locks. Use plain
   handles such as `dave`.
-- **A test that skips must never report success.** Mark it `#[ignore]` with a
-  reason, so the summary counts it. Never return early from the body of a test.
+- **A test that skips must never report success.** Never return early from the
+  body of a test. CI fails on an ignored test, so `#[ignore]` with a reason is
+  only for local work, and never lands.
 - Write a test that can fail. An assertion that still passes after you delete the
   feature is worse than no test.
-- The glyph algorithm is shared with `web/src/lib/glyph.ts`. The vectors in
-  `crates/bunker-models/tests/glyph_test.rs` come from that file. A change to one
-  side must update both and the vectors.
+- The vectors in `crates/bunker-models/tests/glyph_test.rs` pin the glyph
+  algorithm. Every stored glyph came from it, so a change to the algorithm is a
+  change to the look of every new player. Ask the user first.

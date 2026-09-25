@@ -25,7 +25,7 @@
 }
 
 @theme {
-    /* Palette: phosphor green on near-black, amber for pending, red for expired. */
+    /* Palette: phosphor green on near-black. Amber warns, red alerts. */
     --color-bg: #050505;
     --color-panel: #0a0a0a;
     --color-ink: #e4e4e4;
@@ -127,12 +127,10 @@ html {
 
 /* Preflight resets the cursor on buttons. A clickable control shows a hand. */
 button:not(:disabled),
-[role="button"]:not([aria-disabled="true"]),
 summary {
     cursor: pointer;
 }
 
-/* Focus ring in brand color for keyboard users. */
 :focus-visible {
     outline: 1px solid var(--color-accent);
     outline-offset: 0.125rem;

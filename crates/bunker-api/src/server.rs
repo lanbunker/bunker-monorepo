@@ -2,6 +2,7 @@
 //! serves. Each item that knows the full application is here, with the one table
 //! that makes a status from an error code.
 
+use std::future::IntoFuture as _;
 use std::time::Duration;
 
 use anyhow::Context as _;
@@ -9,13 +10,13 @@ use axum::http::StatusCode;
 use axum::{Router, middleware};
 use tokio::net::TcpListener;
 use tokio::signal::unix::{SignalKind, signal};
+use tokio::sync::oneshot;
 use tower_http::catch_panic::CatchPanicLayer;
-use tower_http::cors::CorsLayer;
 
 use crate::config::{AppConfig, Env, JwtSecret, resolve_app_config};
 use crate::internal::http::{
-    ApiError, enforce_timeout, method_not_allowed, propagate_request_id, render_errors,
-    route_not_found, set_request_id, trace_requests,
+    ApiError, drop_invalid_request_id, enforce_timeout, method_not_allowed, propagate_request_id,
+    render_errors, require_admin, route_not_found, set_request_id, trace_requests,
 };
 use crate::internal::init_tracing;
 use crate::routers::{
@@ -34,6 +35,11 @@ use crate::storage::{
 /// Without this limit, a stopped request holds a connection and a task for ever.
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
 
+/// How long a stop waits for the requests in flight. systemd sends SIGKILL
+/// after its own timeout, and a close of the pool before that checkpoints the
+/// WAL.
+const DRAIN_DEADLINE: Duration = Duration::from_secs(10);
+
 /// How long a token stays valid. A LAN community logs in from a phone at an
 /// event and should not type a password every night.
 const TOKEN_TTL: Duration = Duration::from_secs(30 * 24 * 60 * 60);
@@ -51,8 +57,6 @@ impl std::fmt::Debug for Secrets {
     }
 }
 
-/// Connects storage to services to routes, by hand. There is no container and no
-/// reflection.
 pub fn build_router(pool: DbPool, config: AppConfig, secrets: &Secrets) -> Router {
     let players = PlayerStorage::new(pool.clone());
     let tokens = TokenIssuer::new(secrets.jwt_secret.as_ref().as_bytes(), TOKEN_TTL);
@@ -68,15 +72,21 @@ pub fn build_router(pool: DbPool, config: AppConfig, secrets: &Secrets) -> Route
     };
 
     let verbose_errors = config.verbose_errors;
+    let admin = Router::new()
+        .merge(admin_router())
+        .merge(admin_tournament_router())
+        .merge(admin_event_router())
+        .route_layer(middleware::from_fn_with_state(
+            state.auth.clone(),
+            require_admin,
+        ));
 
     Router::new()
         .merge(auth_router())
         .merge(player_router())
-        .merge(admin_router())
         .merge(tournament_router())
-        .merge(admin_tournament_router())
         .merge(event_router())
-        .merge(admin_event_router())
+        .merge(admin)
         .merge(health_router())
         .merge(openapi_router())
         .fallback(route_not_found)
@@ -94,10 +104,7 @@ pub fn build_router(pool: DbPool, config: AppConfig, secrets: &Secrets) -> Route
         .layer(trace_requests())
         // Outside the trace layer, so the id exists when the span opens.
         .layer(set_request_id())
-        // The browser never calls this API directly: the Astro site proxies each
-        // call server side, and the API holds no cookie. Tighten this before any
-        // browser client talks here.
-        .layer(CorsLayer::permissive())
+        .layer(middleware::from_fn(drop_invalid_request_id))
         .with_state(state)
 }
 
@@ -115,7 +122,7 @@ impl From<ErrorCode> for StatusCode {
             | ErrorCode::InvalidState => Self::CONFLICT,
             ErrorCode::NotAnEntrant => Self::UNPROCESSABLE_ENTITY,
             ErrorCode::InvalidCredentials | ErrorCode::Unauthorized => Self::UNAUTHORIZED,
-            ErrorCode::Forbidden => Self::FORBIDDEN,
+            ErrorCode::Forbidden | ErrorCode::PasswordChangeRequired => Self::FORBIDDEN,
             ErrorCode::WrongPassword => Self::BAD_REQUEST,
             ErrorCode::InvalidRequest => Self::BAD_REQUEST,
             ErrorCode::UnprocessableRequest => Self::UNPROCESSABLE_ENTITY,
@@ -126,13 +133,13 @@ impl From<ErrorCode> for StatusCode {
     }
 }
 
-/// Without this, a panic closes the connection with no response. That is the one
-/// way a request can escape the error body.
+/// Without this, a panic closes the connection with no response.
 fn catch_panic(panic: Box<dyn std::any::Any + Send + 'static>) -> axum::response::Response {
     use axum::response::IntoResponse as _;
 
     // A panic here comes from something that the `panic` and `unwrap_used` lints
-    // cannot stop, such as an `expect` in a dependency or an arithmetic overflow.
+    // cannot stop, such as an `expect` in a dependency or an arithmetic
+    // overflow, which `overflow-checks` makes a panic in release too.
     let detail = panic
         .downcast_ref::<&str>()
         .map(|message| (*message).to_owned())
@@ -149,15 +156,15 @@ pub async fn run() -> anyhow::Result<()> {
     let env = Env::from_env().context("invalid environment configuration")?;
     let config = resolve_app_config(env.app_env);
 
-    init_tracing(config);
+    init_tracing(config, env.rust_log.as_deref()).context("invalid RUST_LOG")?;
 
     let pool = connect(&env.database).context("could not open the database")?;
 
-    if config.migrate_on_startup {
-        run_pending_migrations(&pool)
-            .await
-            .context("could not apply migrations")?;
-    }
+    // One process owns the SQLite file, so the migrations run here and a deploy
+    // needs no separate step.
+    run_pending_migrations(&pool)
+        .await
+        .context("could not apply migrations")?;
 
     let address = format!("{}:{}", env.bind_address, env.port);
     let listener = TcpListener::bind(&address)
@@ -170,10 +177,30 @@ pub async fn run() -> anyhow::Result<()> {
         jwt_secret: env.jwt_secret,
     };
 
-    axum::serve(listener, build_router(pool, config, &secrets))
-        .with_graceful_shutdown(shutdown_signal())
-        .await
-        .context("the HTTP server failed")
+    let (draining, drain_started) = oneshot::channel();
+    let server = axum::serve(listener, build_router(pool.clone(), config, &secrets))
+        .with_graceful_shutdown(async move {
+            shutdown_signal().await;
+            let _sent = draining.send(());
+        });
+    let deadline = async move {
+        if drain_started.await.is_ok() {
+            tokio::time::sleep(DRAIN_DEADLINE).await;
+        } else {
+            std::future::pending::<()>().await;
+        }
+    };
+
+    let served = tokio::select! {
+        result = server.into_future() => result.context("the HTTP server failed"),
+        () = deadline => {
+            tracing::warn!(seconds = DRAIN_DEADLINE.as_secs(), "requests still ran at the deadline");
+            Ok(())
+        }
+    };
+    pool.close().await;
+
+    served
 }
 
 /// Returns on SIGTERM or SIGINT, so the server can complete the requests it

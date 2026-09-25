@@ -3,7 +3,7 @@ use bunker_models::{
 };
 use time::OffsetDateTime;
 
-use crate::storage::{NewAdjustment, PlayerStorage, PointStorage};
+use crate::storage::{NewAdjustment, PlayerStorage, PointStorage, StorageError};
 
 use super::error::ServiceError;
 
@@ -32,11 +32,11 @@ impl PointsService {
         if admin == player {
             return Err(ServiceError::SelfAction);
         }
-        if self.players.get_by_id(player).await?.is_none() {
+        if !self.players.exists(player).await? {
             return Err(ServiceError::PlayerIdNotFound(player));
         }
 
-        Ok(self
+        let written = self
             .storage
             .add_adjustment(&NewAdjustment {
                 id: PointEntryId::generate(),
@@ -46,7 +46,15 @@ impl PointsService {
                 created_by: admin,
                 created_at: OffsetDateTime::now_utc(),
             })
-            .await?)
+            .await;
+        match written {
+            Ok(entry) => Ok(entry),
+            // The player was deleted after the check above.
+            Err(StorageError::ForeignKeyViolation(_)) => {
+                Err(ServiceError::PlayerIdNotFound(player))
+            }
+            Err(error) => Err(error.into()),
+        }
     }
 
     /// The history of a player, newest first, with the totals by kind. The

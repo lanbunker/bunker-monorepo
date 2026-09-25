@@ -19,7 +19,7 @@ use bunker_api::services::{ErrorCode, ServiceError};
 use bunker_api::storage::StorageError;
 use bunker_models::{Handle, HandleError};
 use serde_json::{Value, json};
-use support::{cause_chain, read_json};
+use support::{HOUR, TestApi, cause_chain, read_json};
 
 /// The generic message is part of the contract. This test writes it out, and does
 /// not import it, so a change to the constant fails the test.
@@ -60,8 +60,8 @@ async fn a_bare_rendering_carries_no_cause() {
     assert!(body.get("cause").is_none(), "leaked a cause: {body}");
 }
 
-/// The message for a failure of the client is clear text. "player `x` not found"
-/// holds no internal detail, and a hidden message would make the API useless.
+/// The message for a failure of the client is a fixed sentence. The internal
+/// text quotes the handle, and it goes to the cause chain and the log.
 #[tokio::test]
 async fn a_client_failure_is_described_plainly() {
     let handle = Handle::try_new("nobody").unwrap();
@@ -70,7 +70,7 @@ async fn a_client_failure_is_described_plainly() {
     let body: Value = read_json(error.into_response()).await;
 
     assert_eq!(body["code"], json!("ItemNotFound"));
-    assert_eq!(body["message"], json!("player `nobody` not found"));
+    assert_eq!(body["message"], json!("The player was not found"));
 }
 
 /// A token failure carries one fixed message. The library error says which check
@@ -121,4 +121,55 @@ fn malformed_row() -> StorageError {
 
 fn unreachable() -> std::io::Error {
     std::io::Error::other("unable to open database file")
+}
+
+/// A not found names what is missing in a sentence, and never the id or the
+/// handle the client sent: the client has those already, and the log has the
+/// internal text.
+#[tokio::test]
+async fn every_not_found_is_a_sentence_without_the_key() {
+    let api = TestApi::with_database().await;
+    let admin = api.signup_admin("root").await;
+    let missing = uuid::Uuid::new_v4().to_string();
+    let live = api.create_tournament(&admin, HOUR).await;
+    api.add_entrant(&admin, live.id, "dave").await;
+    api.add_entrant(&admin, live.id, "erin").await;
+    api.set_status(&admin, live.id, "live").await;
+    api.generate_bracket(&admin, live.id).await;
+
+    let answers = [
+        api.get("/api/players/nobody").await,
+        api.get("/api/players/nobody/cycles").await,
+        api.get(&format!("/api/tournaments/{missing}")).await,
+        api.get("/api/checkin/abcdefghij12").await,
+        api.get_as(&format!("/api/admin/events/{missing}"), &admin)
+            .await,
+        api.patch_as(
+            &format!("/api/admin/players/{missing}"),
+            &json!({ "role": "admin" }),
+            &admin,
+        )
+        .await,
+        api.put_as(
+            &format!(
+                "/api/admin/tournaments/{}/matches/{missing}/result",
+                live.id
+            ),
+            &json!({ "winner": missing }),
+            &admin,
+        )
+        .await,
+    ];
+    for response in answers {
+        let status = response.status();
+        let body: Value = read_json(response).await;
+        let message = body["message"].as_str().unwrap();
+        assert_eq!(status, axum::http::StatusCode::NOT_FOUND, "{body}");
+        assert_eq!(body["code"], json!("ItemNotFound"));
+        assert!(message.starts_with(char::is_uppercase), "{message:?}");
+        assert!(
+            !message.contains(&missing) && !message.contains("nobody"),
+            "{message:?}"
+        );
+    }
 }

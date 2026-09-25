@@ -1,5 +1,5 @@
-//! The cabinet daemon. It will read scores from the emulator on a RetroPie box
-//! and post them to the API. For now it only proves that the crate builds and
+//! The cabinet daemon, which is to read scores from the emulator on a RetroPie
+//! box and post them to the API. This stub proves that the crate builds and
 //! that the shared models are reachable.
 
 use bunker_models::generate_glyph;

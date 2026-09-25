@@ -67,11 +67,11 @@ for i in "${!amounts[@]}"; do
         -d "{\"amount\":${amounts[$i]},\"note\":\"seed: past seasons\"}"
     granted=$((granted + 1))
 done
-echo "cycles: $granted players granted, from ${amounts[0]} down to ${amounts[-1]}"
+echo "cycles: $granted players granted, from ${amounts[0]} down to ${amounts[${#amounts[@]}-1]}"
 
-# The nights the site once listed from files, then one night with its doors
-# open now, for the check-in page. Rome time, 21:00 to 03:30. A night that
-# exists by name is not created twice.
+# Past nights for the archive, then one night with its doors open now, for the
+# check-in page. Rome time, 21:00 to 03:30. A night that exists by name is not
+# created twice.
 night() {
     name=$1 games=$2 image=$3 starts_at=$4 ends_at=$5
     existing=$(curl -fsS "$API_URL/api/events" \

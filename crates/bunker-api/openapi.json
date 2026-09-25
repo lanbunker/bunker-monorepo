@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "LAN BUNKER API",
-    "description": "The LAN BUNKER backend: players, glyphs and auth over SQLite",
+    "description": "The LAN BUNKER backend over SQLite: players and auth, tournaments and brackets, events and check-ins, and the cycles ledger",
     "license": {
       "name": "MIT",
       "identifier": "MIT"
@@ -53,7 +53,7 @@
             }
           },
           "400": {
-            "description": "",
+            "description": "A query parameter is malformed",
             "content": {
               "application/json": {
                 "schema": {
@@ -63,7 +63,7 @@
             }
           },
           "401": {
-            "description": "",
+            "description": "No valid bearer token",
             "content": {
               "application/json": {
                 "schema": {
@@ -73,7 +73,7 @@
             }
           },
           "403": {
-            "description": "",
+            "description": "Not an admin, or `PasswordChangeRequired`: a new password first",
             "content": {
               "application/json": {
                 "schema": {
@@ -116,7 +116,7 @@
             }
           },
           "400": {
-            "description": "",
+            "description": "The body is not valid JSON, or a parameter is malformed",
             "content": {
               "application/json": {
                 "schema": {
@@ -126,7 +126,7 @@
             }
           },
           "401": {
-            "description": "",
+            "description": "No valid bearer token",
             "content": {
               "application/json": {
                 "schema": {
@@ -136,7 +136,27 @@
             }
           },
           "403": {
-            "description": "",
+            "description": "Not an admin, or `PasswordChangeRequired`: a new password first",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "The body is too large",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "The body is not `application/json`",
             "content": {
               "application/json": {
                 "schema": {
@@ -191,7 +211,7 @@
             }
           },
           "400": {
-            "description": "",
+            "description": "A path parameter is malformed",
             "content": {
               "application/json": {
                 "schema": {
@@ -201,7 +221,7 @@
             }
           },
           "401": {
-            "description": "",
+            "description": "No valid bearer token",
             "content": {
               "application/json": {
                 "schema": {
@@ -211,7 +231,7 @@
             }
           },
           "403": {
-            "description": "",
+            "description": "Not an admin, or `PasswordChangeRequired`: a new password first",
             "content": {
               "application/json": {
                 "schema": {
@@ -274,7 +294,7 @@
             }
           },
           "400": {
-            "description": "",
+            "description": "The body is not valid JSON, or a parameter is malformed",
             "content": {
               "application/json": {
                 "schema": {
@@ -284,7 +304,7 @@
             }
           },
           "401": {
-            "description": "",
+            "description": "No valid bearer token",
             "content": {
               "application/json": {
                 "schema": {
@@ -294,7 +314,7 @@
             }
           },
           "403": {
-            "description": "",
+            "description": "Not an admin, or `PasswordChangeRequired`: a new password first",
             "content": {
               "application/json": {
                 "schema": {
@@ -305,6 +325,26 @@
           },
           "404": {
             "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "The body is too large",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "The body is not `application/json`",
             "content": {
               "application/json": {
                 "schema": {
@@ -350,7 +390,7 @@
             "description": "Gone, with its check-ins and their cycles"
           },
           "400": {
-            "description": "",
+            "description": "A path parameter is malformed",
             "content": {
               "application/json": {
                 "schema": {
@@ -360,7 +400,7 @@
             }
           },
           "401": {
-            "description": "",
+            "description": "No valid bearer token",
             "content": {
               "application/json": {
                 "schema": {
@@ -370,7 +410,7 @@
             }
           },
           "403": {
-            "description": "",
+            "description": "Not an admin, or `PasswordChangeRequired`: a new password first",
             "content": {
               "application/json": {
                 "schema": {
@@ -435,7 +475,7 @@
             }
           },
           "400": {
-            "description": "",
+            "description": "The body is not valid JSON, or a parameter is malformed",
             "content": {
               "application/json": {
                 "schema": {
@@ -445,7 +485,7 @@
             }
           },
           "401": {
-            "description": "",
+            "description": "No valid bearer token",
             "content": {
               "application/json": {
                 "schema": {
@@ -455,7 +495,7 @@
             }
           },
           "403": {
-            "description": "",
+            "description": "Not an admin, or `PasswordChangeRequired`: a new password first",
             "content": {
               "application/json": {
                 "schema": {
@@ -474,8 +514,28 @@
               }
             }
           },
+          "413": {
+            "description": "The body is too large",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "The body is not `application/json`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
           "422": {
-            "description": "",
+            "description": "A field is missing, unknown or out of range",
             "content": {
               "application/json": {
                 "schema": {
@@ -530,7 +590,7 @@
             }
           },
           "400": {
-            "description": "",
+            "description": "The body is not valid JSON, or a parameter is malformed",
             "content": {
               "application/json": {
                 "schema": {
@@ -540,7 +600,7 @@
             }
           },
           "401": {
-            "description": "",
+            "description": "No valid bearer token",
             "content": {
               "application/json": {
                 "schema": {
@@ -550,7 +610,7 @@
             }
           },
           "403": {
-            "description": "",
+            "description": "Not an admin, or `PasswordChangeRequired`: a new password first",
             "content": {
               "application/json": {
                 "schema": {
@@ -569,8 +629,28 @@
               }
             }
           },
+          "413": {
+            "description": "The body is too large",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "The body is not `application/json`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
           "422": {
-            "description": "",
+            "description": "A field is missing, unknown or out of range",
             "content": {
               "application/json": {
                 "schema": {
@@ -641,7 +721,7 @@
             }
           },
           "400": {
-            "description": "",
+            "description": "A query parameter is malformed",
             "content": {
               "application/json": {
                 "schema": {
@@ -651,7 +731,7 @@
             }
           },
           "401": {
-            "description": "",
+            "description": "No valid bearer token",
             "content": {
               "application/json": {
                 "schema": {
@@ -661,7 +741,7 @@
             }
           },
           "403": {
-            "description": "",
+            "description": "Not an admin, or `PasswordChangeRequired`: a new password first",
             "content": {
               "application/json": {
                 "schema": {
@@ -699,7 +779,7 @@
             "description": ""
           },
           "400": {
-            "description": "",
+            "description": "A path parameter is malformed",
             "content": {
               "application/json": {
                 "schema": {
@@ -709,7 +789,7 @@
             }
           },
           "401": {
-            "description": "",
+            "description": "No valid bearer token",
             "content": {
               "application/json": {
                 "schema": {
@@ -720,6 +800,16 @@
           },
           "403": {
             "description": "Not an admin, or the admin's own account",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The last admin cannot be deleted",
             "content": {
               "application/json": {
                 "schema": {
@@ -772,7 +862,7 @@
             }
           },
           "400": {
-            "description": "",
+            "description": "The body is not valid JSON, or a parameter is malformed",
             "content": {
               "application/json": {
                 "schema": {
@@ -782,7 +872,7 @@
             }
           },
           "401": {
-            "description": "",
+            "description": "No valid bearer token",
             "content": {
               "application/json": {
                 "schema": {
@@ -811,8 +901,38 @@
               }
             }
           },
+          "409": {
+            "description": "The last admin cannot be demoted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "The body is too large",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "The body is not `application/json`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
           "422": {
-            "description": "",
+            "description": "A field is missing, unknown or out of range",
             "content": {
               "application/json": {
                 "schema": {
@@ -867,7 +987,7 @@
             }
           },
           "400": {
-            "description": "",
+            "description": "The body is not valid JSON, or a parameter is malformed",
             "content": {
               "application/json": {
                 "schema": {
@@ -877,7 +997,7 @@
             }
           },
           "401": {
-            "description": "",
+            "description": "No valid bearer token",
             "content": {
               "application/json": {
                 "schema": {
@@ -898,6 +1018,26 @@
           },
           "404": {
             "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "The body is too large",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "The body is not `application/json`",
             "content": {
               "application/json": {
                 "schema": {
@@ -962,7 +1102,7 @@
             }
           },
           "400": {
-            "description": "",
+            "description": "The body is not valid JSON, or a parameter is malformed",
             "content": {
               "application/json": {
                 "schema": {
@@ -972,7 +1112,7 @@
             }
           },
           "401": {
-            "description": "",
+            "description": "No valid bearer token",
             "content": {
               "application/json": {
                 "schema": {
@@ -982,7 +1122,7 @@
             }
           },
           "403": {
-            "description": "",
+            "description": "Not an admin, or `PasswordChangeRequired`: a new password first",
             "content": {
               "application/json": {
                 "schema": {
@@ -1011,8 +1151,28 @@
               }
             }
           },
+          "413": {
+            "description": "The body is too large",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "The body is not `application/json`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
           "422": {
-            "description": "",
+            "description": "A field is missing, unknown or out of range",
             "content": {
               "application/json": {
                 "schema": {
@@ -1047,7 +1207,7 @@
         ],
         "responses": {
           "200": {
-            "description": "",
+            "description": "Shown one time. Sent with `Cache-Control: no-store`",
             "content": {
               "application/json": {
                 "schema": {
@@ -1057,7 +1217,7 @@
             }
           },
           "400": {
-            "description": "",
+            "description": "A path parameter is malformed",
             "content": {
               "application/json": {
                 "schema": {
@@ -1067,7 +1227,7 @@
             }
           },
           "401": {
-            "description": "",
+            "description": "No valid bearer token",
             "content": {
               "application/json": {
                 "schema": {
@@ -1077,7 +1237,7 @@
             }
           },
           "403": {
-            "description": "",
+            "description": "Not an admin, or `PasswordChangeRequired`: a new password first",
             "content": {
               "application/json": {
                 "schema": {
@@ -1147,7 +1307,7 @@
             }
           },
           "400": {
-            "description": "",
+            "description": "A query parameter is malformed",
             "content": {
               "application/json": {
                 "schema": {
@@ -1157,7 +1317,7 @@
             }
           },
           "401": {
-            "description": "",
+            "description": "No valid bearer token",
             "content": {
               "application/json": {
                 "schema": {
@@ -1167,7 +1327,7 @@
             }
           },
           "403": {
-            "description": "",
+            "description": "Not an admin, or `PasswordChangeRequired`: a new password first",
             "content": {
               "application/json": {
                 "schema": {
@@ -1210,7 +1370,7 @@
             }
           },
           "400": {
-            "description": "",
+            "description": "The body is not valid JSON, or a parameter is malformed",
             "content": {
               "application/json": {
                 "schema": {
@@ -1220,7 +1380,7 @@
             }
           },
           "401": {
-            "description": "",
+            "description": "No valid bearer token",
             "content": {
               "application/json": {
                 "schema": {
@@ -1230,7 +1390,27 @@
             }
           },
           "403": {
-            "description": "",
+            "description": "Not an admin, or `PasswordChangeRequired`: a new password first",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "The body is too large",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "The body is not `application/json`",
             "content": {
               "application/json": {
                 "schema": {
@@ -1240,7 +1420,7 @@
             }
           },
           "422": {
-            "description": "",
+            "description": "A field is missing, unknown or out of range",
             "content": {
               "application/json": {
                 "schema": {
@@ -1285,7 +1465,7 @@
             }
           },
           "400": {
-            "description": "",
+            "description": "A path parameter is malformed",
             "content": {
               "application/json": {
                 "schema": {
@@ -1295,7 +1475,7 @@
             }
           },
           "401": {
-            "description": "",
+            "description": "No valid bearer token",
             "content": {
               "application/json": {
                 "schema": {
@@ -1305,7 +1485,7 @@
             }
           },
           "403": {
-            "description": "",
+            "description": "Not an admin, or `PasswordChangeRequired`: a new password first",
             "content": {
               "application/json": {
                 "schema": {
@@ -1351,7 +1531,7 @@
             "description": "Gone, with its entrants and matches"
           },
           "400": {
-            "description": "",
+            "description": "A path parameter is malformed",
             "content": {
               "application/json": {
                 "schema": {
@@ -1361,7 +1541,7 @@
             }
           },
           "401": {
-            "description": "",
+            "description": "No valid bearer token",
             "content": {
               "application/json": {
                 "schema": {
@@ -1371,7 +1551,7 @@
             }
           },
           "403": {
-            "description": "",
+            "description": "Not an admin, or `PasswordChangeRequired`: a new password first",
             "content": {
               "application/json": {
                 "schema": {
@@ -1424,7 +1604,7 @@
             }
           },
           "400": {
-            "description": "",
+            "description": "The body is not valid JSON, or a parameter is malformed",
             "content": {
               "application/json": {
                 "schema": {
@@ -1434,7 +1614,7 @@
             }
           },
           "401": {
-            "description": "",
+            "description": "No valid bearer token",
             "content": {
               "application/json": {
                 "schema": {
@@ -1444,7 +1624,7 @@
             }
           },
           "403": {
-            "description": "",
+            "description": "Not an admin, or `PasswordChangeRequired`: a new password first",
             "content": {
               "application/json": {
                 "schema": {
@@ -1463,8 +1643,38 @@
               }
             }
           },
+          "409": {
+            "description": "The tournament is concluded, or changed in the meantime",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "The body is too large",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "The body is not `application/json`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
           "422": {
-            "description": "",
+            "description": "A field is missing, unknown or out of range",
             "content": {
               "application/json": {
                 "schema": {
@@ -1509,7 +1719,7 @@
             }
           },
           "400": {
-            "description": "",
+            "description": "A path parameter is malformed",
             "content": {
               "application/json": {
                 "schema": {
@@ -1519,7 +1729,7 @@
             }
           },
           "401": {
-            "description": "",
+            "description": "No valid bearer token",
             "content": {
               "application/json": {
                 "schema": {
@@ -1529,7 +1739,7 @@
             }
           },
           "403": {
-            "description": "",
+            "description": "Not an admin, or `PasswordChangeRequired`: a new password first",
             "content": {
               "application/json": {
                 "schema": {
@@ -1585,7 +1795,7 @@
             "description": "Gone, or there was none"
           },
           "400": {
-            "description": "",
+            "description": "A path parameter is malformed",
             "content": {
               "application/json": {
                 "schema": {
@@ -1595,7 +1805,7 @@
             }
           },
           "401": {
-            "description": "",
+            "description": "No valid bearer token",
             "content": {
               "application/json": {
                 "schema": {
@@ -1605,7 +1815,7 @@
             }
           },
           "403": {
-            "description": "",
+            "description": "Not an admin, or `PasswordChangeRequired`: a new password first",
             "content": {
               "application/json": {
                 "schema": {
@@ -1690,7 +1900,7 @@
             }
           },
           "400": {
-            "description": "",
+            "description": "The body is not valid JSON, or a parameter is malformed",
             "content": {
               "application/json": {
                 "schema": {
@@ -1700,7 +1910,7 @@
             }
           },
           "401": {
-            "description": "",
+            "description": "No valid bearer token",
             "content": {
               "application/json": {
                 "schema": {
@@ -1710,7 +1920,7 @@
             }
           },
           "403": {
-            "description": "",
+            "description": "Not an admin, or `PasswordChangeRequired`: a new password first",
             "content": {
               "application/json": {
                 "schema": {
@@ -1730,7 +1940,27 @@
             }
           },
           "409": {
-            "description": "A bracket exists",
+            "description": "A bracket exists, the tournament is concluded, or the field is full",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "The body is too large",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "The body is not `application/json`",
             "content": {
               "application/json": {
                 "schema": {
@@ -1740,7 +1970,7 @@
             }
           },
           "422": {
-            "description": "",
+            "description": "A field is missing, unknown or out of range",
             "content": {
               "application/json": {
                 "schema": {
@@ -1786,7 +2016,7 @@
             "description": "Gone, or never in"
           },
           "400": {
-            "description": "",
+            "description": "A path parameter is malformed",
             "content": {
               "application/json": {
                 "schema": {
@@ -1796,7 +2026,7 @@
             }
           },
           "401": {
-            "description": "",
+            "description": "No valid bearer token",
             "content": {
               "application/json": {
                 "schema": {
@@ -1806,7 +2036,7 @@
             }
           },
           "403": {
-            "description": "",
+            "description": "Not an admin, or `PasswordChangeRequired`: a new password first",
             "content": {
               "application/json": {
                 "schema": {
@@ -1826,7 +2056,7 @@
             }
           },
           "409": {
-            "description": "A bracket exists, or this is the winner",
+            "description": "A bracket exists, or the tournament is concluded",
             "content": {
               "application/json": {
                 "schema": {
@@ -1889,7 +2119,7 @@
             }
           },
           "400": {
-            "description": "",
+            "description": "The body is not valid JSON, or a parameter is malformed",
             "content": {
               "application/json": {
                 "schema": {
@@ -1899,7 +2129,7 @@
             }
           },
           "401": {
-            "description": "",
+            "description": "No valid bearer token",
             "content": {
               "application/json": {
                 "schema": {
@@ -1909,7 +2139,7 @@
             }
           },
           "403": {
-            "description": "",
+            "description": "Not an admin, or `PasswordChangeRequired`: a new password first",
             "content": {
               "application/json": {
                 "schema": {
@@ -1929,7 +2159,27 @@
             }
           },
           "409": {
-            "description": "The match is not ready, or the next one is decided",
+            "description": "The match is not ready, the next one is decided, or the bracket changed in the meantime",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "The body is too large",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "The body is not `application/json`",
             "content": {
               "application/json": {
                 "schema": {
@@ -1990,7 +2240,7 @@
             }
           },
           "400": {
-            "description": "",
+            "description": "A path parameter is malformed",
             "content": {
               "application/json": {
                 "schema": {
@@ -2000,7 +2250,7 @@
             }
           },
           "401": {
-            "description": "",
+            "description": "No valid bearer token",
             "content": {
               "application/json": {
                 "schema": {
@@ -2010,7 +2260,7 @@
             }
           },
           "403": {
-            "description": "",
+            "description": "Not an admin, or `PasswordChangeRequired`: a new password first",
             "content": {
               "application/json": {
                 "schema": {
@@ -2030,7 +2280,7 @@
             }
           },
           "409": {
-            "description": "A bye, or the next match is decided",
+            "description": "A bye, the next match is decided, or the bracket changed in the meantime",
             "content": {
               "application/json": {
                 "schema": {
@@ -2085,7 +2335,7 @@
             }
           },
           "400": {
-            "description": "",
+            "description": "The body is not valid JSON, or a parameter is malformed",
             "content": {
               "application/json": {
                 "schema": {
@@ -2095,7 +2345,7 @@
             }
           },
           "401": {
-            "description": "",
+            "description": "No valid bearer token",
             "content": {
               "application/json": {
                 "schema": {
@@ -2105,7 +2355,7 @@
             }
           },
           "403": {
-            "description": "",
+            "description": "Not an admin, or `PasswordChangeRequired`: a new password first",
             "content": {
               "application/json": {
                 "schema": {
@@ -2126,6 +2376,26 @@
           },
           "409": {
             "description": "No bracket, not live, or results exist",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "The body is too large",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "The body is not `application/json`",
             "content": {
               "application/json": {
                 "schema": {
@@ -2180,7 +2450,7 @@
         },
         "responses": {
           "200": {
-            "description": "",
+            "description": "The tournament after the move. A repeat of a move answers the same, also when two arrive at once, and a conclusion pays one time",
             "content": {
               "application/json": {
                 "schema": {
@@ -2190,7 +2460,7 @@
             }
           },
           "400": {
-            "description": "",
+            "description": "The body is not valid JSON, or a parameter is malformed",
             "content": {
               "application/json": {
                 "schema": {
@@ -2200,7 +2470,7 @@
             }
           },
           "401": {
-            "description": "",
+            "description": "No valid bearer token",
             "content": {
               "application/json": {
                 "schema": {
@@ -2210,7 +2480,7 @@
             }
           },
           "403": {
-            "description": "",
+            "description": "Not an admin, or `PasswordChangeRequired`: a new password first",
             "content": {
               "application/json": {
                 "schema": {
@@ -2230,7 +2500,27 @@
             }
           },
           "409": {
-            "description": "The transition is not allowed in this state",
+            "description": "The transition is not allowed in this state, or another request moved the status first",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "The body is too large",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "The body is not `application/json`",
             "content": {
               "application/json": {
                 "schema": {
@@ -2275,11 +2565,21 @@
         },
         "responses": {
           "200": {
-            "description": "",
+            "description": "Sent with `Cache-Control: no-store`",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/TokenResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The body is not valid JSON, or a parameter is malformed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
                 }
               }
             }
@@ -2294,8 +2594,28 @@
               }
             }
           },
+          "413": {
+            "description": "The body is too large",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "The body is not `application/json`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
           "422": {
-            "description": "",
+            "description": "A field is missing, unknown or out of range",
             "content": {
               "application/json": {
                 "schema": {
@@ -2325,11 +2645,21 @@
         },
         "responses": {
           "201": {
-            "description": "",
+            "description": "Logged in. Sent with `Cache-Control: no-store`",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/TokenResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The body is not valid JSON, or a parameter is malformed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
                 }
               }
             }
@@ -2344,8 +2674,28 @@
               }
             }
           },
+          "413": {
+            "description": "The body is too large",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "The body is not `application/json`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
           "422": {
-            "description": "",
+            "description": "A field is missing, unknown or out of range",
             "content": {
               "application/json": {
                 "schema": {
@@ -2385,7 +2735,7 @@
             }
           },
           "400": {
-            "description": "",
+            "description": "A path parameter is malformed",
             "content": {
               "application/json": {
                 "schema": {
@@ -2443,7 +2793,7 @@
             }
           },
           "400": {
-            "description": "",
+            "description": "A path parameter is malformed",
             "content": {
               "application/json": {
                 "schema": {
@@ -2453,7 +2803,17 @@
             }
           },
           "401": {
-            "description": "",
+            "description": "No valid bearer token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`PasswordChangeRequired`: the caller must choose a new password first",
             "content": {
               "application/json": {
                 "schema": {
@@ -2553,7 +2913,7 @@
             }
           },
           "400": {
-            "description": "",
+            "description": "A query parameter is malformed",
             "content": {
               "application/json": {
                 "schema": {
@@ -2570,10 +2930,11 @@
         "tags": [
           "players"
         ],
+        "summary": "Takes a temporary password too, so the site can see that a change is due.",
         "operationId": "me",
         "responses": {
           "200": {
-            "description": "",
+            "description": "Sent with `Cache-Control: no-store`, like every `/api/me` answer",
             "content": {
               "application/json": {
                 "schema": {
@@ -2583,7 +2944,7 @@
             }
           },
           "401": {
-            "description": "",
+            "description": "No valid bearer token",
             "content": {
               "application/json": {
                 "schema": {
@@ -2618,7 +2979,17 @@
             }
           },
           "401": {
-            "description": "",
+            "description": "No valid bearer token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`PasswordChangeRequired`: the caller must choose a new password first",
             "content": {
               "application/json": {
                 "schema": {
@@ -2663,7 +3034,7 @@
             }
           },
           "400": {
-            "description": "",
+            "description": "The body is not valid JSON, or a parameter is malformed",
             "content": {
               "application/json": {
                 "schema": {
@@ -2673,7 +3044,17 @@
             }
           },
           "401": {
-            "description": "",
+            "description": "No valid bearer token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`PasswordChangeRequired`: the caller must choose a new password first",
             "content": {
               "application/json": {
                 "schema": {
@@ -2692,8 +3073,28 @@
               }
             }
           },
+          "413": {
+            "description": "The body is too large",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "The body is not `application/json`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
           "422": {
-            "description": "",
+            "description": "A field is missing, unknown or out of range",
             "content": {
               "application/json": {
                 "schema": {
@@ -2728,7 +3129,7 @@
         },
         "responses": {
           "200": {
-            "description": "A fresh token. Older tokens are refused from now on",
+            "description": "A fresh token. Older tokens are refused from now on. The one route besides `/api/me` that a temporary password opens",
             "content": {
               "application/json": {
                 "schema": {
@@ -2738,7 +3139,7 @@
             }
           },
           "400": {
-            "description": "",
+            "description": "The current password is wrong, or the body is not valid JSON",
             "content": {
               "application/json": {
                 "schema": {
@@ -2748,7 +3149,27 @@
             }
           },
           "401": {
-            "description": "",
+            "description": "No valid bearer token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "The body is too large",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "The body is not `application/json`",
             "content": {
               "application/json": {
                 "schema": {
@@ -2758,7 +3179,7 @@
             }
           },
           "422": {
-            "description": "",
+            "description": "A field is missing, unknown or out of range",
             "content": {
               "application/json": {
                 "schema": {
@@ -2793,7 +3214,17 @@
             }
           },
           "401": {
-            "description": "",
+            "description": "No valid bearer token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`PasswordChangeRequired`: the caller must choose a new password first",
             "content": {
               "application/json": {
                 "schema": {
@@ -2864,7 +3295,7 @@
             }
           },
           "400": {
-            "description": "",
+            "description": "A query parameter is malformed",
             "content": {
               "application/json": {
                 "schema": {
@@ -2899,6 +3330,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Player"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "A path parameter is malformed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
                 }
               }
             }
@@ -2967,7 +3408,7 @@
             }
           },
           "400": {
-            "description": "",
+            "description": "The handle or a query parameter is malformed",
             "content": {
               "application/json": {
                 "schema": {
@@ -3040,7 +3481,7 @@
             }
           },
           "400": {
-            "description": "",
+            "description": "The handle or a query parameter is malformed",
             "content": {
               "application/json": {
                 "schema": {
@@ -3105,7 +3546,7 @@
             }
           },
           "400": {
-            "description": "",
+            "description": "A query parameter is malformed",
             "content": {
               "application/json": {
                 "schema": {
@@ -3145,7 +3586,7 @@
             }
           },
           "400": {
-            "description": "",
+            "description": "A path parameter is malformed",
             "content": {
               "application/json": {
                 "schema": {
@@ -3205,7 +3646,7 @@
             }
           },
           "400": {
-            "description": "",
+            "description": "The body is not valid JSON, or a parameter is malformed",
             "content": {
               "application/json": {
                 "schema": {
@@ -3215,7 +3656,17 @@
             }
           },
           "401": {
-            "description": "",
+            "description": "No valid bearer token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`PasswordChangeRequired`: the caller must choose a new password first",
             "content": {
               "application/json": {
                 "schema": {
@@ -3235,7 +3686,27 @@
             }
           },
           "409": {
-            "description": "Registration is not open",
+            "description": "Registration is not open, or the field is full",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "The body is too large",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "The body is not `application/json`",
             "content": {
               "application/json": {
                 "schema": {
@@ -3281,7 +3752,7 @@
             "description": "Gone, or never in"
           },
           "400": {
-            "description": "",
+            "description": "A path parameter is malformed",
             "content": {
               "application/json": {
                 "schema": {
@@ -3291,7 +3762,17 @@
             }
           },
           "401": {
-            "description": "",
+            "description": "No valid bearer token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`PasswordChangeRequired`: the caller must choose a new password first",
             "content": {
               "application/json": {
                 "schema": {
@@ -3391,7 +3872,7 @@
         "properties": {
           "mustChangePassword": {
             "type": "boolean",
-            "description": "Set after an admin reset. The API only reports it: the site forces the\nchange before it shows any other page."
+            "description": "Set after an admin reset. Until the player picks a new password, every\nroute but `/api/me` and `/api/me/password` answers `PasswordChangeRequired`."
           },
           "player": {
             "$ref": "#/components/schemas/Player"
@@ -3626,7 +4107,7 @@
             "items": {
               "$ref": "#/components/schemas/AwardRule"
             },
-            "description": "In the order a player earns them: entry, wins, then placements."
+            "description": "In the order of `PointKind::ALL`, without the kinds that have no fixed\namount."
           },
           "ranks": {
             "type": "array",
@@ -3734,6 +4215,7 @@
           "InvalidCredentials",
           "Unauthorized",
           "Forbidden",
+          "PasswordChangeRequired",
           "WrongPassword",
           "RegistrationClosed",
           "CheckinClosed",
@@ -3778,7 +4260,7 @@
           "endsAt": {
             "type": "string",
             "format": "date-time",
-            "description": "The last game. Past it the check-in is over."
+            "description": "The last game."
           },
           "games": {
             "$ref": "#/components/schemas/Games"
@@ -3805,7 +4287,7 @@
           "startsAt": {
             "type": "string",
             "format": "date-time",
-            "description": "The doors open, and with them the check-in."
+            "description": "The doors open."
           },
           "status": {
             "$ref": "#/components/schemas/EventStatus"
@@ -3995,9 +4477,14 @@
         "type": "object",
         "required": [
           "status",
-          "version"
+          "version",
+          "commit"
         ],
         "properties": {
+          "commit": {
+            "type": "string",
+            "description": "The git commit the binary was built from, `dev` for a local build."
+          },
           "status": {
             "type": "string"
           },
@@ -4011,7 +4498,7 @@
         "description": "A file name under the event images of the site",
         "maxLength": 80,
         "minLength": 1,
-        "pattern": "^[A-Za-z0-9._-]+$"
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
       },
       "KindTotal": {
         "type": "object",
@@ -4269,7 +4756,7 @@
                 "endsAt": {
                   "type": "string",
                   "format": "date-time",
-                  "description": "The last game. Past it the check-in is over."
+                  "description": "The last game."
                 },
                 "games": {
                   "$ref": "#/components/schemas/Games"
@@ -4296,7 +4783,7 @@
                 "startsAt": {
                   "type": "string",
                   "format": "date-time",
-                  "description": "The doors open, and with them the check-in."
+                  "description": "The doors open."
                 },
                 "status": {
                   "$ref": "#/components/schemas/EventStatus"
@@ -5172,7 +5659,7 @@
       },
       "TokenResponse": {
         "type": "object",
-        "description": "The answer to a signup or a login. The token is a bearer JWT.",
+        "description": "The answer to a signup, a login or a password change. The token is a bearer\nJWT.",
         "required": [
           "token",
           "expiresAt"

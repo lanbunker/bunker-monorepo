@@ -4,6 +4,7 @@ import {
     FROM_SITE,
     PASSWORD,
     clearSession,
+    forcedPlayer,
     handle,
     login,
     logout,
@@ -204,6 +205,40 @@ test("an admin reset forces the player to set a new password before anything els
     await expect(page).toHaveURL(/\/players$/)
 })
 
+test("an action name opens no page and runs no action past the password gate", async ({
+    page,
+    context,
+}) => {
+    await forcedPlayer(context)
+    const held = async (path: string) => {
+        const response = await page.request.post(path, {
+            form: { code: "abcdefghijkl" },
+            headers: FROM_SITE,
+            maxRedirects: 0,
+        })
+        expect(response.status(), path).toBe(302)
+        expect(response.headers().location, path).toBe("/password")
+    }
+
+    // A form action renders the page it posts to, so an allowed name opens
+    // nothing outside the gate.
+    await page.goto("/profile?_action=logout")
+    await expect(page).toHaveURL(/\/password$/)
+    await held("/profile?_action=logout")
+    // An island call names its action in the path. A second name in the query
+    // does not replace it.
+    await held("/_actions/checkIn?_action=logout")
+    // The password page runs only its own two actions.
+    await held("/password?_action=checkIn")
+
+    // The logout stays open, so a player on a shared screen can leave.
+    await page.goto("/password")
+    await page.getByRole("button", { name: "LOGOUT" }).click()
+    await expect(page).toHaveURL(/\/login(\?|$)/)
+    await page.goto("/profile")
+    await expect(page).toHaveURL(/\/login(\?|$)/)
+})
+
 test("a player renames themself, keeps the glyph, and cannot take a used name", async ({
     page,
     context,
@@ -224,7 +259,7 @@ test("a player renames themself, keeps the glyph, and cannot take a used name", 
 
     await page.getByLabel("new handle:").fill(renamed)
     await page.getByRole("button", { name: "RENAME" }).click()
-    await expect(page).toHaveURL(/\/profile\?changed=handle$/)
+    await expect(page).toHaveURL(/\/profile\?done=handle$/)
     await expect(page.getByRole("status")).toContainText("handle changed")
     await expect(
         page.getByRole("heading", { level: 1, name: renamed, exact: true }),
@@ -245,7 +280,16 @@ test("a next link that leaves the site is dropped, on login and on signup", asyn
     await newPlayer(context, "nxt")
     // A logged-in player is sent straight to `next`. These shapes read as
     // another origin to a browser, so every one must fall back to the profile.
-    for (const next of ["//evil.example", "/%5Cevil.example", "/x%5Cevil.example"]) {
+    // A control character in a `Location` header fails the response, so it
+    // falls back the same way.
+    for (const next of [
+        "//evil.example",
+        "/%5Cevil.example",
+        "/x%5Cevil.example",
+        "/%00",
+        "/x%0D%0Aset-cookie:x=1",
+        "/%7F",
+    ]) {
         await page.goto(`/login?next=${next}`)
         await expect(page).toHaveURL(/\/profile(\?|$)/)
         await page.goto(`/signup?next=${next}`)
@@ -262,16 +306,27 @@ test("the profile needs a login, and the session cookie is closed to scripts", a
 }) => {
     await page.goto("/profile")
     await expect(page).toHaveURL(/\/login(\?|$)/)
+    // A refused `next` never reaches a page as a failure either.
+    expect((await page.goto("/login?next=/%00"))?.status()).toBe(200)
 
     await signup(page, handle("csr"))
     const cookie = (await context.cookies()).find(c => c.name === "bunker_session")
     expect(cookie?.httpOnly).toBe(true)
     expect(cookie?.sameSite).toBe("Lax")
 
-    // A user posting an admin action is refused, whatever the form holds.
+    // A page with a player in it never sits in a shared cache, and no page can
+    // be framed or sniffed.
+    const profile = await page.request.get("/profile")
+    expect(profile.headers()["cache-control"]).toBe("private, no-store")
+    expect(profile.headers()["x-content-type-options"]).toBe("nosniff")
+    expect(profile.headers()["x-frame-options"]).toBe("DENY")
+    expect(profile.headers()["content-security-policy"]).toBe("frame-ancestors 'none'")
+
+    // A user posting an admin action is refused, whatever the form holds, and
+    // the backoffice page it posted to answers the same 404 as a dead link.
     const response = await page.request.post("/admin/players?_action=setRole", {
         form: { id: "00000000-0000-0000-0000-000000000001", role: "admin" },
         headers: FROM_SITE,
     })
-    expect(response.status()).toBeGreaterThanOrEqual(400)
+    expect(response.status()).toBe(404)
 })

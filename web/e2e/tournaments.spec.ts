@@ -129,7 +129,9 @@ test("the apply page needs a login, and a draft is hidden from a player", async 
     await clearSession(context)
 
     await page.goto(`/tournaments/${id}/apply`)
-    await expect(page).toHaveURL(/\/login(\?|$)/)
+    await expect(page).toHaveURL(
+        `/login?next=${encodeURIComponent(`/tournaments/${id}/apply`)}`,
+    )
 
     // A draft is not there for a player. The page says so with a 404.
     await newPlayer(context, "nob")

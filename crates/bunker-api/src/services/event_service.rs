@@ -6,17 +6,12 @@ use bunker_models::{
 use rand::seq::IndexedRandom as _;
 use time::OffsetDateTime;
 
-use crate::storage::{CheckedIn, EventStorage, NewEventRow, PlayerStorage, StoredEvent};
+use crate::storage::{
+    CheckedIn, EventStorage, NewEventRow, PlayerStorage, StorageError, StoredEvent,
+};
 
-use super::error::ServiceError;
-
-/// What a scan at the door did. The router answers `201` for the first and
-/// `200` for a repeat, with the same receipt.
-#[derive(Debug, Clone)]
-pub enum CheckinOutcome {
-    First(CheckinReceipt),
-    Repeat(CheckinReceipt),
-}
+use super::error::{ClosedDoor, ServiceError};
+use super::outcome::{Outcome, Visibility};
 
 /// The rules of an event: what an admin may change, who sees a draft, and when
 /// the code at the door pays.
@@ -33,9 +28,6 @@ impl EventService {
 
     /// A new event is a draft with a fresh check-in code.
     pub async fn create(&self, fields: EventFields) -> Result<Event, ServiceError> {
-        fields
-            .check_window()
-            .map_err(|_| ServiceError::InvalidEventWindow)?;
         let id = EventId::generate();
         self.storage
             .create(&NewEventRow {
@@ -53,9 +45,12 @@ impl EventService {
     pub async fn list(
         &self,
         query: PageQuery,
-        include_drafts: bool,
+        visibility: Visibility,
     ) -> Result<Paginated<Event>, ServiceError> {
-        Ok(self.storage.list(query, include_drafts).await?)
+        Ok(self
+            .storage
+            .list(query, visibility == Visibility::WithDrafts)
+            .await?)
     }
 
     /// Everything the backoffice shows, the code for the QR included.
@@ -72,9 +67,6 @@ impl EventService {
 
     /// Replaces every field. The code and the status stay.
     pub async fn update(&self, id: EventId, fields: EventFields) -> Result<Event, ServiceError> {
-        fields
-            .check_window()
-            .map_err(|_| ServiceError::InvalidEventWindow)?;
         if !self.storage.update(id, &fields).await? {
             return Err(ServiceError::EventNotFound(id));
         }
@@ -118,14 +110,13 @@ impl EventService {
         &self,
         code: &CheckinCode,
         player: PlayerId,
-    ) -> Result<CheckinOutcome, ServiceError> {
+    ) -> Result<Outcome<CheckinReceipt>, ServiceError> {
         let event = self.published_by_code(code).await?;
-        let window = event.checkin_window(OffsetDateTime::now_utc());
-        if window != CheckinWindow::Open {
-            return Err(ServiceError::CheckinClosed(window));
+        match event.checkin_window(OffsetDateTime::now_utc()) {
+            CheckinWindow::Open => self.record(event.id, player).await,
+            CheckinWindow::Early => Err(ServiceError::CheckinClosed(ClosedDoor::Early)),
+            CheckinWindow::Over => Err(ServiceError::CheckinClosed(ClosedDoor::Over)),
         }
-
-        self.record(event.id, player).await
     }
 
     /// An admin checks a player in, whatever the window and the status: a
@@ -135,9 +126,9 @@ impl EventService {
         &self,
         id: EventId,
         player: PlayerId,
-    ) -> Result<CheckinOutcome, ServiceError> {
+    ) -> Result<Outcome<CheckinReceipt>, ServiceError> {
         self.load(id).await?;
-        if self.players.get_by_id(player).await?.is_none() {
+        if !self.players.exists(player).await? {
             return Err(ServiceError::PlayerIdNotFound(player));
         }
 
@@ -153,10 +144,25 @@ impl EventService {
     /// The check-in and its cycles, then the receipt. The count changed, so the
     /// receipt carries the event as it is after the write, and it says what
     /// this call paid: a repeat pays nothing.
-    async fn record(&self, id: EventId, player: PlayerId) -> Result<CheckinOutcome, ServiceError> {
+    async fn record(
+        &self,
+        id: EventId,
+        player: PlayerId,
+    ) -> Result<Outcome<CheckinReceipt>, ServiceError> {
         let now = OffsetDateTime::now_utc();
         let award = checkin_award(id, player);
-        let outcome = self.storage.check_in(id, player, now, &award).await?;
+        let outcome = match self.storage.check_in(id, player, now, &award).await {
+            Ok(outcome) => outcome,
+            // The event or the player went between the read and the write.
+            Err(StorageError::ForeignKeyViolation(_)) => {
+                return Err(if self.players.exists(player).await? {
+                    ServiceError::EventNotFound(id)
+                } else {
+                    ServiceError::PlayerIdNotFound(player)
+                });
+            }
+            Err(error) => return Err(error.into()),
+        };
         let event = self.load(id).await?.event;
         let receipt = |checked_in_at, cycles| CheckinReceipt {
             event,
@@ -165,8 +171,8 @@ impl EventService {
         };
 
         Ok(match outcome {
-            CheckedIn::New(at) => CheckinOutcome::First(receipt(at, CHECKIN_CYCLES)),
-            CheckedIn::Already(first) => CheckinOutcome::Repeat(receipt(first, 0)),
+            CheckedIn::New(at) => Outcome::Created(receipt(at, CHECKIN_CYCLES)),
+            CheckedIn::Already(first) => Outcome::Existing(receipt(first, 0)),
         })
     }
 

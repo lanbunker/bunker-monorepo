@@ -50,7 +50,7 @@ if (data && page > data.totalPages && data.totalPages > 0) {
 
   <div class="mt-4 border border-warn/40">
     {!data ? (
-      <p class="p-4 text-xs text-alert">the api is unreachable.</p>
+      <Alert message="the api is unreachable." class="p-4" />
     ) : data.total === 0 ? (
       <p class="p-4 text-xs text-admin-dim">
         no tournaments yet. create the first one below.

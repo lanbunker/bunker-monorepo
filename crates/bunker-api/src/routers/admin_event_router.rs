@@ -8,12 +8,12 @@ use bunker_models::{
 };
 use serde::Deserialize;
 
-use crate::internal::http::{AdminOnly, ApiError, ApiErrorBody, ValidJson, ValidPath, ValidQuery};
-use crate::services::{CheckinOutcome, EventService};
+use crate::internal::http::{ApiError, ApiErrorBody, ValidJson, ValidPath, ValidQuery};
+use crate::services::{EventService, Visibility};
 
-use super::AppState;
+use super::responses::{AdminErrors, BodyErrors, PathErrors};
+use super::{AppState, created_or_existing};
 
-/// Every route here asks for [`AdminOnly`] first.
 pub fn admin_event_router() -> Router<AppState> {
     Router::new()
         .route("/api/admin/events", get(list_all_events).post(create_event))
@@ -37,18 +37,16 @@ pub(super) struct EventPath {
     security(("bearer" = [])),
     params(PageQuery),
     responses(
+        AdminErrors,
         (status = 200, body = Paginated<Event>, description = "Every event, drafts included, the latest night first"),
-        (status = 400, body = ApiErrorBody),
-        (status = 401, body = ApiErrorBody),
-        (status = 403, body = ApiErrorBody),
+        (status = 400, body = ApiErrorBody, description = "A query parameter is malformed"),
     )
 )]
 pub(super) async fn list_all_events(
     State(events): State<EventService>,
-    AdminOnly(_admin): AdminOnly,
     ValidQuery(query): ValidQuery<PageQuery>,
 ) -> Result<Json<Paginated<Event>>, ApiError> {
-    Ok(Json(events.list(query, true).await?))
+    Ok(Json(events.list(query, Visibility::WithDrafts).await?))
 }
 
 #[utoipa::path(
@@ -58,16 +56,14 @@ pub(super) async fn list_all_events(
     security(("bearer" = [])),
     request_body = EventFields,
     responses(
+        AdminErrors,
+        BodyErrors,
         (status = 201, body = Event, description = "A new draft with its own check-in code"),
-        (status = 400, body = ApiErrorBody),
-        (status = 401, body = ApiErrorBody),
-        (status = 403, body = ApiErrorBody),
         (status = 422, body = ApiErrorBody, description = "A field out of range, or the end before the start"),
     )
 )]
 pub(super) async fn create_event(
     State(events): State<EventService>,
-    AdminOnly(_admin): AdminOnly,
     ValidJson(fields): ValidJson<EventFields>,
 ) -> Result<(StatusCode, Json<Event>), ApiError> {
     Ok((StatusCode::CREATED, Json(events.create(fields).await?)))
@@ -80,16 +76,14 @@ pub(super) async fn create_event(
     security(("bearer" = [])),
     params(EventPath),
     responses(
+        AdminErrors,
+        PathErrors,
         (status = 200, body = EventDetail, description = "The event, its check-in code and who came"),
-        (status = 400, body = ApiErrorBody),
-        (status = 401, body = ApiErrorBody),
-        (status = 403, body = ApiErrorBody),
         (status = 404, body = ApiErrorBody),
     )
 )]
 pub(super) async fn get_event(
     State(events): State<EventService>,
-    AdminOnly(_admin): AdminOnly,
     ValidPath(path): ValidPath<EventPath>,
 ) -> Result<Json<EventDetail>, ApiError> {
     Ok(Json(events.detail(path.id).await?))
@@ -103,17 +97,15 @@ pub(super) async fn get_event(
     params(EventPath),
     request_body = EventFields,
     responses(
+        AdminErrors,
+        BodyErrors,
         (status = 200, body = Event, description = "Every field replaced. The status and the code stay"),
-        (status = 400, body = ApiErrorBody),
-        (status = 401, body = ApiErrorBody),
-        (status = 403, body = ApiErrorBody),
         (status = 404, body = ApiErrorBody),
         (status = 422, body = ApiErrorBody, description = "A field out of range, or the end before the start"),
     )
 )]
 pub(super) async fn update_event(
     State(events): State<EventService>,
-    AdminOnly(_admin): AdminOnly,
     ValidPath(path): ValidPath<EventPath>,
     ValidJson(fields): ValidJson<EventFields>,
 ) -> Result<Json<Event>, ApiError> {
@@ -128,17 +120,14 @@ pub(super) async fn update_event(
     params(EventPath),
     request_body = EventStatusChange,
     responses(
+        AdminErrors,
+        BodyErrors,
         (status = 200, body = Event, description = "Published or back to draft. A draft closes its door"),
-        (status = 400, body = ApiErrorBody),
-        (status = 401, body = ApiErrorBody),
-        (status = 403, body = ApiErrorBody),
         (status = 404, body = ApiErrorBody),
-        (status = 422, body = ApiErrorBody),
     )
 )]
 pub(super) async fn change_event_status(
     State(events): State<EventService>,
-    AdminOnly(_admin): AdminOnly,
     ValidPath(path): ValidPath<EventPath>,
     ValidJson(change): ValidJson<EventStatusChange>,
 ) -> Result<Json<Event>, ApiError> {
@@ -153,25 +142,21 @@ pub(super) async fn change_event_status(
     params(EventPath),
     request_body = CheckinAdd,
     responses(
+        AdminErrors,
+        BodyErrors,
         (status = 201, body = CheckinReceipt, description = "Checked in by hand, cycles paid. Any status, any time"),
         (status = 200, body = CheckinReceipt, description = "Already in. The time of the first check-in, and zero cycles"),
-        (status = 400, body = ApiErrorBody),
-        (status = 401, body = ApiErrorBody),
-        (status = 403, body = ApiErrorBody),
         (status = 404, body = ApiErrorBody, description = "Unknown event or player"),
-        (status = 422, body = ApiErrorBody),
     )
 )]
 pub(super) async fn add_checkin(
     State(events): State<EventService>,
-    AdminOnly(_admin): AdminOnly,
     ValidPath(path): ValidPath<EventPath>,
     ValidJson(add): ValidJson<CheckinAdd>,
 ) -> Result<(StatusCode, Json<CheckinReceipt>), ApiError> {
-    Ok(match events.add_checkin(path.id, add.player_id).await? {
-        CheckinOutcome::First(receipt) => (StatusCode::CREATED, Json(receipt)),
-        CheckinOutcome::Repeat(receipt) => (StatusCode::OK, Json(receipt)),
-    })
+    Ok(created_or_existing(
+        events.add_checkin(path.id, add.player_id).await?,
+    ))
 }
 
 #[utoipa::path(
@@ -181,15 +166,13 @@ pub(super) async fn add_checkin(
     security(("bearer" = [])),
     params(EventPath),
     responses(
+        AdminErrors,
+        PathErrors,
         (status = 204, description = "Gone, with its check-ins and their cycles"),
-        (status = 400, body = ApiErrorBody),
-        (status = 401, body = ApiErrorBody),
-        (status = 403, body = ApiErrorBody),
     )
 )]
 pub(super) async fn delete_event(
     State(events): State<EventService>,
-    AdminOnly(_admin): AdminOnly,
     ValidPath(path): ValidPath<EventPath>,
 ) -> Result<StatusCode, ApiError> {
     events.delete(path.id).await?;

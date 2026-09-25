@@ -101,8 +101,21 @@ fn a_standing_carries_the_floor_and_the_next_rank() {
 #[test]
 fn an_adjustment_is_a_nonzero_bounded_amount_with_a_note() {
     assert!(Amount::try_new(0).is_err());
-    assert!(Amount::try_new(10_001).is_err());
-    assert!(Amount::try_new(-10_001).is_err());
+    assert!(Amount::try_new(ADJUSTMENT_MAX + 1).is_err());
+    assert!(Amount::try_new(-ADJUSTMENT_MAX - 1).is_err());
+    assert!(
+        Amount::try_new(i64::MIN).is_err(),
+        "no overflow on the most negative value"
+    );
+    assert!(Amount::try_new(i64::MAX).is_err());
+    assert_eq!(
+        Amount::try_new(ADJUSTMENT_MAX).unwrap().into_inner(),
+        ADJUSTMENT_MAX
+    );
+    assert_eq!(
+        Amount::try_new(-ADJUSTMENT_MAX).unwrap().into_inner(),
+        -ADJUSTMENT_MAX
+    );
     assert_eq!(Amount::try_new(-250).unwrap().into_inner(), -250);
     assert!(Note::try_new("   ").is_err());
     assert!(Note::try_new("x".repeat(201)).is_err());
@@ -245,6 +258,61 @@ fn a_bye_is_not_a_win_and_a_deleted_player_gets_nothing() {
     // Two entries, the final's win, the champion and one semifinalist. The
     // deleted account played and won, and pays out to nobody.
     assert_eq!(awards.len(), 5);
+}
+
+#[test]
+fn with_a_bracket_the_final_decides_and_the_winner_argument_is_ignored() {
+    let entrants: Vec<Entrant> = (0..2)
+        .map(|i| entrant(Some(player(&format!("player{i}")))))
+        .collect();
+    let ids: Vec<EntrantId> = entrants.iter().map(|e| e.id).collect();
+    let mut bracket = Bracket::generate(&ids).unwrap();
+    let final_id = bracket.rounds[0][0].id;
+    bracket.report(final_id, ids[0]).unwrap();
+
+    let divergent = tournament_awards(cup(), &entrants, Some(&bracket), Some(ids[1]));
+
+    assert_eq!(
+        divergent,
+        tournament_awards(cup(), &entrants, Some(&bracket), Some(ids[0])),
+        "the winner argument changes nothing"
+    );
+    let champions: Vec<PlayerId> = divergent
+        .iter()
+        .filter(|a| a.kind == PointKind::Champion)
+        .map(|a| a.player)
+        .collect();
+    assert_eq!(champions, [entrants[0].player.as_ref().unwrap().id]);
+}
+
+#[test]
+fn a_final_without_a_result_pays_no_champion_and_no_finalist() {
+    let entrants: Vec<Entrant> = (0..4)
+        .map(|i| entrant(Some(player(&format!("player{i}")))))
+        .collect();
+    let ids: Vec<EntrantId> = entrants.iter().map(|e| e.id).collect();
+    let mut bracket = Bracket::generate(&ids).unwrap();
+    let top = bracket.rounds[0][0].id;
+    let bottom = bracket.rounds[0][1].id;
+    bracket.report(top, ids[0]).unwrap();
+    bracket.report(bottom, ids[2]).unwrap();
+
+    let awards = tournament_awards(cup(), &entrants, Some(&bracket), Some(ids[0]));
+
+    assert!(
+        awards
+            .iter()
+            .all(|a| !matches!(a.kind, PointKind::Champion | PointKind::Finalist)),
+        "no placement comes from an undecided final: {awards:?}"
+    );
+    assert_eq!(
+        awards
+            .iter()
+            .filter(|a| a.kind == PointKind::Semifinalist)
+            .count(),
+        2,
+        "the semifinals were played"
+    );
 }
 
 #[test]

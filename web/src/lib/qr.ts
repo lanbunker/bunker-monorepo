@@ -5,10 +5,21 @@ const QUIET = 4
 /** Pixels per module in the SVG. The viewer scales the image, so this only sets the ratio of the caption to the code. */
 const CELL = 10
 
-/** XML accepts tab, line feed and carriage return, and no other control character. */
+/**
+ * The `Char` production of XML 1.0: tab, line feed, carriage return, and every
+ * code point from U+0020 but the surrogates, U+FFFE and U+FFFF. A string splits
+ * into code points, so a lone surrogate arrives here on its own.
+ */
 const isXmlText = (char: string): boolean => {
     const code = char.codePointAt(0) ?? 0
-    return code >= 0x20 || code === 0x09 || code === 0x0a || code === 0x0d
+    return (
+        code === 0x09 ||
+        code === 0x0a ||
+        code === 0x0d ||
+        (code >= 0x20 && code <= 0xd7ff) ||
+        (code >= 0xe000 && code <= 0xfffd) ||
+        code >= 0x10000
+    )
 }
 
 /** Text safe inside the SVG: markup escaped, and the control characters XML refuses removed. */
@@ -63,7 +74,10 @@ export const checkinPoster = (url: string, title: string): string => {
     ].join("")
 }
 
-/** A file name for the poster: the event name in lowercase, letters and digits only. */
+/**
+ * A file name for the poster: the event name in lowercase, with each other run
+ * of characters as one hyphen.
+ */
 export const posterFileName = (title: string, extension: "svg" | "png"): string => {
     const slug = title
         .toLowerCase()

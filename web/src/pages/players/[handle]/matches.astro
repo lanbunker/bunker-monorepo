@@ -35,7 +35,11 @@ const rate = log ? winRate(log.record) : undefined
 ---
 
 <Layout title={`${player?.handle ?? handle} matches//LAN_BUNKER`} active="players">
-  <Prompt command={`cat /players/${handle}/matches`} comment="every match played" />
+  <Prompt
+    heading="h1"
+    command={`cat /players/${handle}/matches`}
+    comment="every match played"
+  />
 
   {player && log && matches ? (
     <Panel>

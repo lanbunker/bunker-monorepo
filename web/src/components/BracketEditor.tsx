@@ -41,8 +41,6 @@ export const BracketEditor = (props: BracketEditorProps) => {
     const [entrants, setEntrants] = useState(props.entrants)
     const [error, setError] = useState<string | undefined>()
     const [busy, setBusy] = useState(false)
-    // The controls work only after hydration. Until then they stay disabled, so
-    // a click on the server-rendered markup cannot get lost.
     const idle = useHydrated() && !busy
     const id = props.tournamentId
     const hasResults = bracket?.rounds.flat().some(isPlayed) ?? false
@@ -51,16 +49,23 @@ export const BracketEditor = (props: BracketEditorProps) => {
     const run = async (call: () => Promise<ActionResult>) => {
         setBusy(true)
         setError(undefined)
-        const result = await call()
-        setBusy(false)
-        if (result.error) {
-            // The same reader the pages use: a refused input must never reach
-            // the panel as the JSON list Astro puts in the message.
-            setError(errorMessage(result.error))
+        try {
+            const result = await call()
+            if (result.error) {
+                // The same reader the pages use: a refused input must never reach
+                // the panel as the JSON list Astro puts in the message.
+                setError(errorMessage(result.error))
+                return false
+            }
+            if (result.data) setBracket("deleted" in result.data ? null : result.data)
+            return true
+        } catch {
+            // A dropped connection rejects the call instead of answering an error.
+            setError("The site did not answer. Check the connection and try again.")
             return false
+        } finally {
+            setBusy(false)
         }
-        if (result.data) setBracket("deleted" in result.data ? null : result.data)
-        return true
     }
 
     // Whether a bracket exists decides what the rest of the page shows: the
@@ -97,7 +102,6 @@ export const BracketEditor = (props: BracketEditorProps) => {
             )
         },
         onSwap: (from, to) => {
-            // The two dragged entrants trade seeds. Everyone else keeps theirs.
             const order = entrants
                 .toSorted((a, b) => (a.seed ?? 0) - (b.seed ?? 0))
                 .map(e => e.id)

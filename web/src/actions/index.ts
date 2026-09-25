@@ -1,16 +1,18 @@
 import type { ActionAPIContext } from "astro:actions"
 import { defineAction } from "astro:actions"
-import { z } from "zod"
 
 import { requireAdmin, requireToken, unwrap } from "../lib/action"
 import { SESSION_COOKIE, call, callEmpty } from "../lib/api"
+import type { ApiResult, TokenResponse } from "../lib/api"
 import {
     adjustmentInput,
+    byId,
     credentials,
-    handle,
+    handleInput,
     passwordChangeInput,
+    playerHandleInput,
+    roleInput,
     signupInput,
-    uuid,
 } from "../lib/schemas"
 import { eventActions } from "./events"
 import { tournamentActions } from "./tournaments"
@@ -29,6 +31,20 @@ const storeSession = (context: ActionAPIContext, token: string, expiresAt: strin
     })
 }
 
+/**
+ * Keeps the session a signup or a login answered. Both forms go back to where
+ * the player came from, so both answer the same value.
+ */
+const openSession = (
+    context: ActionAPIContext,
+    input: { handle: string; next?: string | undefined },
+    result: ApiResult<TokenResponse>,
+) => {
+    const session = unwrap(result)
+    storeSession(context, session.token, session.expiresAt)
+    return { handle: input.handle, next: input.next }
+}
+
 export const server = {
     ...eventActions,
     ...tournamentActions,
@@ -36,33 +52,31 @@ export const server = {
     signup: defineAction({
         accept: "form",
         input: signupInput,
-        handler: async (input, context) => {
-            const session = unwrap(
+        handler: async (input, context) =>
+            openSession(
+                context,
+                input,
                 await call(client =>
                     client.POST("/api/auth/signup", {
                         body: { handle: input.handle, password: input.password },
                     }),
                 ),
-            )
-            storeSession(context, session.token, session.expiresAt)
-            return { handle: input.handle, next: input.next }
-        },
+            ),
     }),
 
     login: defineAction({
         accept: "form",
         input: credentials,
-        handler: async (input, context) => {
-            const session = unwrap(
+        handler: async (input, context) =>
+            openSession(
+                context,
+                input,
                 await call(client =>
                     client.POST("/api/auth/login", {
                         body: { handle: input.handle, password: input.password },
                     }),
                 ),
-            )
-            storeSession(context, session.token, session.expiresAt)
-            return { handle: input.handle, next: input.next }
-        },
+            ),
     }),
 
     logout: defineAction({
@@ -98,7 +112,7 @@ export const server = {
 
     changeHandle: defineAction({
         accept: "form",
-        input: z.object({ handle }),
+        input: handleInput,
         handler: async (input, context) => {
             const player = unwrap(
                 await call(
@@ -113,7 +127,7 @@ export const server = {
 
     renamePlayer: defineAction({
         accept: "form",
-        input: z.object({ id: uuid, handle }),
+        input: playerHandleInput,
         handler: async (input, context) => {
             const player = unwrap(
                 await call(
@@ -131,7 +145,7 @@ export const server = {
 
     resetPassword: defineAction({
         accept: "form",
-        input: z.object({ id: uuid }),
+        input: byId,
         handler: async (input, context) => {
             const reset = unwrap(
                 await call(
@@ -148,7 +162,7 @@ export const server = {
 
     setRole: defineAction({
         accept: "form",
-        input: z.object({ id: uuid, role: z.enum(["user", "admin"]) }),
+        input: roleInput,
         handler: async (input, context) => {
             const player = unwrap(
                 await call(
@@ -178,13 +192,14 @@ export const server = {
                     requireAdmin(context.locals),
                 ),
             )
+            // The entry names no player, so the handle is the one the form carried.
             return { handle: input.handle, amount: entry.amount }
         },
     }),
 
     deletePlayer: defineAction({
         accept: "form",
-        input: z.object({ id: uuid }),
+        input: byId,
         handler: async (input, context) => {
             unwrap(
                 await callEmpty(

@@ -1,7 +1,6 @@
 use axum::extract::State;
 use axum::http::StatusCode;
-use axum::response::IntoResponse;
-use axum::routing::{get, post, put};
+use axum::routing::{delete, get, post, put};
 use axum::{Json, Router};
 use bunker_models::{
     Bracket, Entrant, EntrantAdd, EntrantId, MatchId, MatchResult, NewTournament, PageQuery,
@@ -10,13 +9,12 @@ use bunker_models::{
 };
 use serde::Deserialize;
 
-use crate::internal::http::{AdminOnly, ApiError, ApiErrorBody, ValidJson, ValidPath, ValidQuery};
-use crate::services::TournamentService;
-use crate::storage::Enrolled;
+use crate::internal::http::{ApiError, ApiErrorBody, ValidJson, ValidPath, ValidQuery};
+use crate::services::{TournamentService, Visibility};
 
-use super::AppState;
+use super::responses::{AdminErrors, BodyErrors, PathErrors};
+use super::{AppState, TournamentPath, created_or_existing};
 
-/// Every route here asks for [`AdminOnly`] first.
 pub fn admin_tournament_router() -> Router<AppState> {
     Router::new()
         .route(
@@ -33,7 +31,7 @@ pub fn admin_tournament_router() -> Router<AppState> {
         .route("/api/admin/tournaments/{id}/entrants", post(add_entrant))
         .route(
             "/api/admin/tournaments/{id}/entrants/{entrantId}",
-            axum::routing::delete(remove_entrant),
+            delete(remove_entrant),
         )
         .route(
             "/api/admin/tournaments/{id}/bracket",
@@ -44,11 +42,6 @@ pub fn admin_tournament_router() -> Router<AppState> {
             "/api/admin/tournaments/{id}/matches/{matchId}/result",
             put(report_result).delete(clear_result),
         )
-}
-
-#[derive(Debug, Deserialize, utoipa::IntoParams)]
-pub(super) struct TournamentPath {
-    id: TournamentId,
 }
 
 #[derive(Debug, Deserialize, utoipa::IntoParams)]
@@ -72,18 +65,16 @@ pub(super) struct MatchPath {
     security(("bearer" = [])),
     params(PageQuery),
     responses(
+        AdminErrors,
         (status = 200, body = Paginated<Tournament>, description = "Every tournament, drafts included"),
-        (status = 400, body = ApiErrorBody),
-        (status = 401, body = ApiErrorBody),
-        (status = 403, body = ApiErrorBody),
+        (status = 400, body = ApiErrorBody, description = "A query parameter is malformed"),
     )
 )]
 pub(super) async fn list_tournaments(
     State(tournaments): State<TournamentService>,
-    AdminOnly(_admin): AdminOnly,
     ValidQuery(query): ValidQuery<PageQuery>,
 ) -> Result<Json<Paginated<Tournament>>, ApiError> {
-    Ok(Json(tournaments.list(query, true).await?))
+    Ok(Json(tournaments.list(query, Visibility::WithDrafts).await?))
 }
 
 #[utoipa::path(
@@ -93,16 +84,13 @@ pub(super) async fn list_tournaments(
     security(("bearer" = [])),
     request_body = NewTournament,
     responses(
+        AdminErrors,
+        BodyErrors,
         (status = 201, body = Tournament, description = "A new draft"),
-        (status = 400, body = ApiErrorBody),
-        (status = 401, body = ApiErrorBody),
-        (status = 403, body = ApiErrorBody),
-        (status = 422, body = ApiErrorBody),
     )
 )]
 pub(super) async fn create_tournament(
     State(tournaments): State<TournamentService>,
-    AdminOnly(_admin): AdminOnly,
     ValidJson(new): ValidJson<NewTournament>,
 ) -> Result<(StatusCode, Json<Tournament>), ApiError> {
     Ok((StatusCode::CREATED, Json(tournaments.create(new).await?)))
@@ -115,19 +103,19 @@ pub(super) async fn create_tournament(
     security(("bearer" = [])),
     params(TournamentPath),
     responses(
+        AdminErrors,
+        PathErrors,
         (status = 200, body = TournamentDetail),
-        (status = 400, body = ApiErrorBody),
-        (status = 401, body = ApiErrorBody),
-        (status = 403, body = ApiErrorBody),
         (status = 404, body = ApiErrorBody),
     )
 )]
 pub(super) async fn get_tournament(
     State(tournaments): State<TournamentService>,
-    AdminOnly(_admin): AdminOnly,
     ValidPath(path): ValidPath<TournamentPath>,
 ) -> Result<Json<TournamentDetail>, ApiError> {
-    Ok(Json(tournaments.detail(path.id, true).await?))
+    Ok(Json(
+        tournaments.detail(path.id, Visibility::WithDrafts).await?,
+    ))
 }
 
 #[utoipa::path(
@@ -138,17 +126,15 @@ pub(super) async fn get_tournament(
     params(TournamentPath),
     request_body = TournamentUpdate,
     responses(
+        AdminErrors,
+        BodyErrors,
         (status = 200, body = Tournament),
-        (status = 400, body = ApiErrorBody),
-        (status = 401, body = ApiErrorBody),
-        (status = 403, body = ApiErrorBody),
         (status = 404, body = ApiErrorBody),
-        (status = 422, body = ApiErrorBody),
+        (status = 409, body = ApiErrorBody, description = "The tournament is concluded, or changed in the meantime"),
     )
 )]
 pub(super) async fn update_tournament(
     State(tournaments): State<TournamentService>,
-    AdminOnly(_admin): AdminOnly,
     ValidPath(path): ValidPath<TournamentPath>,
     ValidJson(update): ValidJson<TournamentUpdate>,
 ) -> Result<Json<Tournament>, ApiError> {
@@ -162,15 +148,13 @@ pub(super) async fn update_tournament(
     security(("bearer" = [])),
     params(TournamentPath),
     responses(
+        AdminErrors,
+        PathErrors,
         (status = 204, description = "Gone, with its entrants and matches"),
-        (status = 400, body = ApiErrorBody),
-        (status = 401, body = ApiErrorBody),
-        (status = 403, body = ApiErrorBody),
     )
 )]
 pub(super) async fn delete_tournament(
     State(tournaments): State<TournamentService>,
-    AdminOnly(_admin): AdminOnly,
     ValidPath(path): ValidPath<TournamentPath>,
 ) -> Result<StatusCode, ApiError> {
     tournaments.delete(path.id).await?;
@@ -186,18 +170,16 @@ pub(super) async fn delete_tournament(
     params(TournamentPath),
     request_body = StatusChange,
     responses(
-        (status = 200, body = Tournament),
-        (status = 400, body = ApiErrorBody),
-        (status = 401, body = ApiErrorBody),
-        (status = 403, body = ApiErrorBody),
+        AdminErrors,
+        BodyErrors,
+        (status = 200, body = Tournament, description = "The tournament after the move. A repeat of a move answers the same, also when two arrive at once, and a conclusion pays one time"),
         (status = 404, body = ApiErrorBody),
-        (status = 409, body = ApiErrorBody, description = "The transition is not allowed in this state"),
+        (status = 409, body = ApiErrorBody, description = "The transition is not allowed in this state, or another request moved the status first"),
         (status = 422, body = ApiErrorBody, description = "The winner is not an entrant"),
     )
 )]
 pub(super) async fn change_status(
     State(tournaments): State<TournamentService>,
-    AdminOnly(_admin): AdminOnly,
     ValidPath(path): ValidPath<TournamentPath>,
     ValidJson(change): ValidJson<StatusChange>,
 ) -> Result<Json<Tournament>, ApiError> {
@@ -212,31 +194,24 @@ pub(super) async fn change_status(
     params(TournamentPath),
     request_body = EntrantAdd,
     responses(
+        AdminErrors,
+        BodyErrors,
         (status = 201, body = Entrant),
         (status = 200, body = Entrant, description = "The player was already in"),
-        (status = 400, body = ApiErrorBody),
-        (status = 401, body = ApiErrorBody),
-        (status = 403, body = ApiErrorBody),
         (status = 404, body = ApiErrorBody, description = "Unknown tournament or player"),
-        (status = 409, body = ApiErrorBody, description = "A bracket exists"),
-        (status = 422, body = ApiErrorBody),
+        (status = 409, body = ApiErrorBody, description = "A bracket exists, the tournament is concluded, or the field is full"),
     )
 )]
 pub(super) async fn add_entrant(
     State(tournaments): State<TournamentService>,
-    AdminOnly(_admin): AdminOnly,
     ValidPath(path): ValidPath<TournamentPath>,
     ValidJson(add): ValidJson<EntrantAdd>,
-) -> Result<axum::response::Response, ApiError> {
-    let (entrant, enrolled) = tournaments
-        .add_entrant(path.id, add.player_id, add.skill)
-        .await?;
-    let status = match enrolled {
-        Enrolled::New => StatusCode::CREATED,
-        Enrolled::Already => StatusCode::OK,
-    };
-
-    Ok((status, Json(entrant)).into_response())
+) -> Result<(StatusCode, Json<Entrant>), ApiError> {
+    Ok(created_or_existing(
+        tournaments
+            .add_entrant(path.id, add.player_id, add.skill)
+            .await?,
+    ))
 }
 
 #[utoipa::path(
@@ -246,17 +221,15 @@ pub(super) async fn add_entrant(
     security(("bearer" = [])),
     params(EntrantPath),
     responses(
+        AdminErrors,
+        PathErrors,
         (status = 204, description = "Gone, or never in"),
-        (status = 400, body = ApiErrorBody),
-        (status = 401, body = ApiErrorBody),
-        (status = 403, body = ApiErrorBody),
         (status = 404, body = ApiErrorBody),
-        (status = 409, body = ApiErrorBody, description = "A bracket exists, or this is the winner"),
+        (status = 409, body = ApiErrorBody, description = "A bracket exists, or the tournament is concluded"),
     )
 )]
 pub(super) async fn remove_entrant(
     State(tournaments): State<TournamentService>,
-    AdminOnly(_admin): AdminOnly,
     ValidPath(path): ValidPath<EntrantPath>,
 ) -> Result<StatusCode, ApiError> {
     tournaments.remove_entrant(path.id, path.entrant_id).await?;
@@ -271,17 +244,15 @@ pub(super) async fn remove_entrant(
     security(("bearer" = [])),
     params(TournamentPath),
     responses(
+        AdminErrors,
+        PathErrors,
         (status = 200, body = Bracket, description = "A bracket seeded by level. Replaces one without results"),
-        (status = 400, body = ApiErrorBody),
-        (status = 401, body = ApiErrorBody),
-        (status = 403, body = ApiErrorBody),
         (status = 404, body = ApiErrorBody),
         (status = 409, body = ApiErrorBody, description = "Not live, too few entrants, or results exist"),
     )
 )]
 pub(super) async fn generate_bracket(
     State(tournaments): State<TournamentService>,
-    AdminOnly(_admin): AdminOnly,
     ValidPath(path): ValidPath<TournamentPath>,
 ) -> Result<Json<Bracket>, ApiError> {
     Ok(Json(tournaments.generate_bracket(path.id).await?))
@@ -295,10 +266,9 @@ pub(super) async fn generate_bracket(
     params(TournamentPath),
     request_body = SeedOrder,
     responses(
+        AdminErrors,
+        BodyErrors,
         (status = 200, body = Bracket, description = "The bracket rebuilt in this order"),
-        (status = 400, body = ApiErrorBody),
-        (status = 401, body = ApiErrorBody),
-        (status = 403, body = ApiErrorBody),
         (status = 404, body = ApiErrorBody),
         (status = 409, body = ApiErrorBody, description = "No bracket, not live, or results exist"),
         (status = 422, body = ApiErrorBody, description = "The order does not list each entrant one time"),
@@ -306,7 +276,6 @@ pub(super) async fn generate_bracket(
 )]
 pub(super) async fn reorder_seeds(
     State(tournaments): State<TournamentService>,
-    AdminOnly(_admin): AdminOnly,
     ValidPath(path): ValidPath<TournamentPath>,
     ValidJson(order): ValidJson<SeedOrder>,
 ) -> Result<Json<Bracket>, ApiError> {
@@ -320,17 +289,15 @@ pub(super) async fn reorder_seeds(
     security(("bearer" = [])),
     params(TournamentPath),
     responses(
+        AdminErrors,
+        PathErrors,
         (status = 204, description = "Gone, or there was none"),
-        (status = 400, body = ApiErrorBody),
-        (status = 401, body = ApiErrorBody),
-        (status = 403, body = ApiErrorBody),
         (status = 404, body = ApiErrorBody),
         (status = 409, body = ApiErrorBody, description = "Results exist, or the tournament is concluded"),
     )
 )]
 pub(super) async fn delete_bracket(
     State(tournaments): State<TournamentService>,
-    AdminOnly(_admin): AdminOnly,
     ValidPath(path): ValidPath<TournamentPath>,
 ) -> Result<StatusCode, ApiError> {
     tournaments.delete_bracket(path.id).await?;
@@ -346,18 +313,16 @@ pub(super) async fn delete_bracket(
     params(MatchPath),
     request_body = MatchResult,
     responses(
+        AdminErrors,
+        BodyErrors,
         (status = 200, body = Bracket, description = "The whole bracket after the result"),
-        (status = 400, body = ApiErrorBody),
-        (status = 401, body = ApiErrorBody),
-        (status = 403, body = ApiErrorBody),
         (status = 404, body = ApiErrorBody),
-        (status = 409, body = ApiErrorBody, description = "The match is not ready, or the next one is decided"),
+        (status = 409, body = ApiErrorBody, description = "The match is not ready, the next one is decided, or the bracket changed in the meantime"),
         (status = 422, body = ApiErrorBody, description = "The winner is not a side of this match"),
     )
 )]
 pub(super) async fn report_result(
     State(tournaments): State<TournamentService>,
-    AdminOnly(_admin): AdminOnly,
     ValidPath(path): ValidPath<MatchPath>,
     ValidJson(result): ValidJson<MatchResult>,
 ) -> Result<Json<Bracket>, ApiError> {
@@ -375,17 +340,15 @@ pub(super) async fn report_result(
     security(("bearer" = [])),
     params(MatchPath),
     responses(
+        AdminErrors,
+        PathErrors,
         (status = 200, body = Bracket, description = "The whole bracket after the result is gone"),
-        (status = 400, body = ApiErrorBody),
-        (status = 401, body = ApiErrorBody),
-        (status = 403, body = ApiErrorBody),
         (status = 404, body = ApiErrorBody),
-        (status = 409, body = ApiErrorBody, description = "A bye, or the next match is decided"),
+        (status = 409, body = ApiErrorBody, description = "A bye, the next match is decided, or the bracket changed in the meantime"),
     )
 )]
 pub(super) async fn clear_result(
     State(tournaments): State<TournamentService>,
-    AdminOnly(_admin): AdminOnly,
     ValidPath(path): ValidPath<MatchPath>,
 ) -> Result<Json<Bracket>, ApiError> {
     Ok(Json(

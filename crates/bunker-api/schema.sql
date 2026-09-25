@@ -127,7 +127,18 @@ CREATE TABLE "point_entries" (
     unique (kind, player_id, source_ref)
 ) strict;
 
+CREATE INDEX point_entries_created_by on point_entries (created_by)
+    where created_by is not null;
+
+CREATE INDEX point_entries_event on point_entries (event_id)
+    where event_id is not null;
+
 CREATE INDEX point_entries_player on point_entries (player_id, created_at desc);
+
+CREATE INDEX point_entries_player_amount on point_entries (player_id, amount);
+
+CREATE INDEX point_entries_tournament on point_entries (tournament_id)
+    where tournament_id is not null;
 
 CREATE TABLE tournament_entrants (
     id            text primary key check (length(id) = 36),
@@ -161,4 +172,7 @@ CREATE TABLE tournaments (
     created_at             integer not null check (created_at > 0),
     check (status = 'concluded' or winner_entrant_id is null)
 ) strict;
+
+CREATE INDEX tournaments_winner on tournaments (winner_entrant_id)
+    where winner_entrant_id is not null;
 

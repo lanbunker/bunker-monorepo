@@ -21,3 +21,6 @@ export const LOG_ROW =
 /** A text field on the public site. */
 export const SITE_FIELD =
     "w-full border-b border-border bg-transparent py-1 text-ink outline-none focus:border-accent"
+
+/** The tones of a `Badge`. A card helper picks one, the component colors it. */
+export type BadgeTone = "accent" | "warn" | "muted" | "alert"

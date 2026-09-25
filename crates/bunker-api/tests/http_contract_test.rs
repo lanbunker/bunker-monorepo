@@ -11,10 +11,18 @@
 mod support;
 
 use axum::body::Body;
-use axum::http::{Request, StatusCode, header};
+use axum::http::{Method, Request, StatusCode, header};
 use bunker_api::config::AppEnv;
+use bunker_api::routers::ApiDoc;
+use http_body_util::BodyExt as _;
 use serde_json::{Value, json};
 use support::{PASSWORD, TestApi, assert_error, read_json};
+use utoipa::OpenApi as _;
+
+/// The two routes a player with a temporary password can reach: they are how
+/// the player finishes the change.
+const PENDING_PASSWORD_ROUTES: [(&str, &str); 2] =
+    [("GET", "/api/me"), ("POST", "/api/me/password")];
 
 #[tokio::test]
 async fn an_unmounted_route_answers_route_not_found() {
@@ -144,29 +152,6 @@ async fn a_body_without_a_json_content_type_is_unsupported_media_type() {
 }
 
 #[tokio::test]
-async fn a_rename_without_a_token_is_unauthorized() {
-    let response = TestApi::without_database()
-        .await
-        .put("/api/me/handle", &json!({ "handle": "david" }))
-        .await;
-
-    assert_error(response, StatusCode::UNAUTHORIZED, "Unauthorized").await;
-}
-
-#[tokio::test]
-async fn an_admin_rename_without_a_token_is_unauthorized() {
-    let response = TestApi::without_database()
-        .await
-        .put(
-            &format!("/api/admin/players/{}/handle", uuid::Uuid::new_v4()),
-            &json!({ "handle": "david" }),
-        )
-        .await;
-
-    assert_error(response, StatusCode::UNAUTHORIZED, "Unauthorized").await;
-}
-
-#[tokio::test]
 async fn a_path_that_is_not_a_handle_is_rejected() {
     let response = TestApi::without_database()
         .await
@@ -236,13 +221,6 @@ async fn a_misspelled_query_key_is_rejected_rather_than_ignored() {
         .await;
 
     assert_error(response, StatusCode::BAD_REQUEST, "InvalidRequest").await;
-}
-
-#[tokio::test]
-async fn a_protected_route_without_a_token_is_unauthorized() {
-    let response = TestApi::without_database().await.get("/api/me").await;
-
-    assert_error(response, StatusCode::UNAUTHORIZED, "Unauthorized").await;
 }
 
 #[tokio::test]
@@ -316,14 +294,47 @@ async fn a_caller_supplied_request_id_is_kept() {
     );
 }
 
+/// The log refuses such an id, so the response must not echo it either: the id
+/// a caller reads back is the one the log lines carry.
 #[tokio::test]
-async fn liveness_needs_no_database_and_reports_the_version() {
+async fn a_caller_request_id_the_log_refuses_is_replaced() {
+    let api = TestApi::without_database().await;
+    let refused = "has spaces and is far too long to be a request id in any log line at all";
+
+    let response = api
+        .send(
+            Request::get("/nope")
+                .header("x-request-id", refused)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await;
+
+    let echoed = response
+        .headers()
+        .get("x-request-id")
+        .unwrap()
+        .to_str()
+        .unwrap();
+    assert_ne!(echoed, refused);
+    assert!(
+        uuid::Uuid::parse_str(echoed).is_ok(),
+        "a fresh id replaces the refused one: {echoed}"
+    );
+}
+
+#[tokio::test]
+async fn liveness_needs_no_database_and_reports_the_version_and_the_commit() {
     let response = TestApi::without_database().await.get("/health/live").await;
 
     assert_eq!(response.status(), StatusCode::OK);
     let body: Value = read_json(response).await;
     assert_eq!(body["status"], json!("ok"));
     assert_eq!(body["version"], json!(env!("CARGO_PKG_VERSION")));
+    assert_eq!(
+        body["commit"],
+        json!(option_env!("BUNKER_GIT_SHA").unwrap_or("dev"))
+    );
 }
 
 /// A connection opens only at the first query. Without this route, a wrong
@@ -408,23 +419,6 @@ async fn a_status_filter_on_the_public_tournament_list_is_rejected() {
 }
 
 #[tokio::test]
-async fn admin_tournament_routes_without_a_token_are_unauthorized() {
-    let api = TestApi::without_database().await;
-    let id = uuid::Uuid::new_v4();
-
-    for path in [
-        format!("/api/admin/tournaments/{id}/status"),
-        format!("/api/admin/tournaments/{id}/entrants"),
-        format!("/api/admin/tournaments/{id}/bracket"),
-    ] {
-        let response = api.post(&path, &json!({})).await;
-        assert_error(response, StatusCode::UNAUTHORIZED, "Unauthorized").await;
-    }
-    let response = api.get("/api/admin/tournaments").await;
-    assert_error(response, StatusCode::UNAUTHORIZED, "Unauthorized").await;
-}
-
-#[tokio::test]
 async fn a_malformed_checkin_code_is_rejected_before_the_handler() {
     let api = TestApi::without_database().await;
 
@@ -433,11 +427,100 @@ async fn a_malformed_checkin_code_is_rejected_before_the_handler() {
     assert_error(response, StatusCode::BAD_REQUEST, "InvalidRequest").await;
 }
 
+/// Walks the documented contract. Every path and method is mounted, every
+/// route with `security` refuses a request without a token, every admin route
+/// refuses a user, and every bearer route but the two of a password change
+/// refuses a temporary password.
 #[tokio::test]
-async fn a_checkin_without_a_token_is_unauthorized() {
-    let api = TestApi::without_database().await;
+async fn every_documented_route_is_mounted_and_guarded() {
+    let api = TestApi::with_database().await;
+    let admin = api.signup_admin("root").await;
+    let user = api.signup("dave").await.token;
+    let erin = api.signup_player("erin").await;
+    let (pending, _) = api.forced_session(&admin, erin.id, "erin").await;
+    let document = serde_json::to_value(ApiDoc::openapi()).unwrap();
+    let paths = document["paths"].as_object().unwrap();
+    assert!(paths.len() > 30, "the walk found {} paths", paths.len());
 
-    let response = api.post("/api/checkin/abcdefghij12", &json!({})).await;
+    for (template, item) in paths {
+        let path = concrete(template);
+        for (method, operation) in item.as_object().unwrap() {
+            let Ok(method) = Method::from_bytes(method.to_uppercase().as_bytes()) else {
+                continue;
+            };
+            let route = format!("{method} {template}");
 
-    assert_error(response, StatusCode::UNAUTHORIZED, "Unauthorized").await;
+            let (status, body) = call(&api, &method, &path, None).await;
+            assert!(
+                !matches!(
+                    body["code"].as_str(),
+                    Some("RouteNotFound" | "MethodNotAllowed")
+                ),
+                "{route} is documented but not mounted: {status} {body}"
+            );
+
+            if operation.get("security").is_some() {
+                assert_eq!(
+                    status,
+                    StatusCode::UNAUTHORIZED,
+                    "{route} without a token: {body}"
+                );
+                assert_eq!(body["code"], "Unauthorized", "{route}");
+
+                let reachable =
+                    PENDING_PASSWORD_ROUTES.contains(&(method.as_str(), template.as_str()));
+                if !reachable {
+                    let (status, body) = call(&api, &method, &path, Some(&pending)).await;
+                    assert_eq!(
+                        status,
+                        StatusCode::FORBIDDEN,
+                        "{route} with a temporary password: {body}"
+                    );
+                    assert_eq!(body["code"], "PasswordChangeRequired", "{route}");
+                }
+            }
+
+            if template.starts_with("/api/admin") {
+                let (status, body) = call(&api, &method, &path, Some(&user)).await;
+                assert_eq!(status, StatusCode::FORBIDDEN, "{route} as a user: {body}");
+                assert_eq!(body["code"], "Forbidden", "{route}");
+            }
+        }
+    }
+}
+
+/// A template with each parameter filled with a value of the right shape.
+fn concrete(template: &str) -> String {
+    let id = uuid::Uuid::new_v4().to_string();
+    template
+        .replace("{id}", &id)
+        .replace("{entrantId}", &id)
+        .replace("{matchId}", &id)
+        .replace("{handle}", "dave")
+        .replace("{code}", "abcdefghij12")
+}
+
+/// Sends an empty JSON object and reads the answer as JSON, or as `null` for a
+/// body that is not JSON.
+async fn call(
+    api: &TestApi,
+    method: &Method,
+    path: &str,
+    token: Option<&str>,
+) -> (StatusCode, Value) {
+    let mut request = Request::builder()
+        .method(method.clone())
+        .uri(path)
+        .header(header::CONTENT_TYPE, "application/json");
+    if let Some(token) = token {
+        request = request.header(header::AUTHORIZATION, format!("Bearer {token}"));
+    }
+    let response = api.send(request.body(Body::from("{}")).unwrap()).await;
+    let status = response.status();
+    let bytes = response.into_body().collect().await.unwrap().to_bytes();
+
+    (
+        status,
+        serde_json::from_slice(&bytes).unwrap_or(Value::Null),
+    )
 }

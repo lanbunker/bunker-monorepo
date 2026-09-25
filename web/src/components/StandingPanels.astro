@@ -1,4 +1,5 @@
 ---
+import Alert from "./ui/Alert.astro"
 import type { KindTotal, Standing } from "../lib/api"
 import {
   RANKS,
@@ -99,7 +100,7 @@ const BAR_WIDTH = 24
           </Kv>
         ))
       ) : (
-        <p class="m-0 text-xs text-alert">the ledger is unreachable.</p>
+        <Alert message="the ledger is unreachable." />
       )}
       <Kv label="arcade">
         <span class="text-mute">coming soon</span>

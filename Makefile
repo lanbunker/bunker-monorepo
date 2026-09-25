@@ -1,10 +1,11 @@
-.PHONY: help install-cli db db-reset migration migrate schema admin openapi api-types dev run test lint fmt checklist web-dev web-build web-fmt web-check web-e2e web-e2e-headed
+.PHONY: help install-cli db db-reset migration migrate schema admin seed openapi api-types dev run test lint fmt checklist web-dev web-build web-fmt web-check web-e2e web-e2e-headed
 
-# `.env` is the one place the URL lives. The sqlx macros compile each query
-# against this database, so `test` and `lint` make sure it exists first.
+# The sqlx macros compile each query against this database, so `test` and
+# `lint` depend on it.
 -include .env
 DATABASE_URL ?= sqlite://.dev/bunker.db?mode=rwc
 export DATABASE_URL
+PORT ?= 3000
 
 API_DIR := crates/bunker-api
 MIGRATIONS := $(API_DIR)/migrations
@@ -47,9 +48,14 @@ schema: ## Write crates/bunker-api/schema.sql from the local database
 		"select sql || ';' || char(10) from sqlite_master where sql is not null and name not like 'sqlite_%' and name != '_sqlx_migrations' order by name" \
 		>> $(SCHEMA)
 
+# The environment carries the handle into the recipe, so no shell parses it
+# before the check. The check follows `Handle` in bunker-models.
+admin: export BUNKER_HANDLE = $(value handle)
 admin: $(DB_FILE) ## Promote a player to admin: make admin handle=dave
-	@test -n "$(handle)" || (echo "usage: make admin handle=dave" && exit 1)
-	sqlite3 -cmd ".parameter set :handle '$(handle)'" $(DB_FILE) "update players set role = 'admin' where handle = :handle collate nocase; select changes() || ' player(s) promoted';"
+	@case "$$BUNKER_HANDLE" in ''|*[!A-Za-z0-9_.-]*) false ;; esac \
+		&& [ $${#BUNKER_HANDLE} -ge 3 ] && [ $${#BUNKER_HANDLE} -le 20 ] \
+		|| (echo "usage: make admin handle=dave (3 to 20 of A-Z a-z 0-9 _ . -)" && exit 1)
+	sqlite3 -cmd ".parameter set :handle '$$BUNKER_HANDLE'" $(DB_FILE) "update players set role = 'admin' where handle = :handle collate nocase; select changes() || ' player(s) promoted';"
 
 OPENAPI := $(API_DIR)/openapi.json
 

@@ -30,24 +30,27 @@ export type EventDetail = components["schemas"]["EventDetail"]
 export type EventStatus = components["schemas"]["EventStatus"]
 export type CheckinGate = components["schemas"]["CheckinGate"]
 export type CheckinWindow = components["schemas"]["CheckinWindow"]
+export type TokenResponse = components["schemas"]["TokenResponse"]
 
-/** The cookie that holds the bearer token. HttpOnly, so scripts never see it. */
+/** The cookie that holds the bearer token. */
 export const SESSION_COOKIE = "bunker_session"
 
-/** Shown when the API answered nothing a client can act on. */
-export const UNREACHABLE = "The API is unreachable."
-
-export type ApiClient = ReturnType<typeof createClient<paths>>
+const UNREACHABLE = "The API is unreachable."
 
 /**
- * A typed client. Every path, body and response comes from `openapi.json`.
- * Call it through `call` or `callEmpty`, never on its own: those two turn a
- * dead network into a value instead of an exception.
+ * A box that takes the connection and never answers would hold the Worker until
+ * Cloudflare kills it. The abort turns the wait into an `unreachable` failure.
  */
-export const apiClient = (token?: string): ApiClient =>
+const TIMEOUT_MS = 8_000
+
+type ApiClient = ReturnType<typeof createClient<paths>>
+
+/** A typed client. Every path, body and response comes from `openapi.json`. */
+const apiClient = (token?: string): ApiClient =>
     createClient<paths>({
         baseUrl: API_URL,
         headers: token ? { authorization: `Bearer ${token}` } : undefined,
+        fetch: request => fetch(request, { signal: AbortSignal.timeout(TIMEOUT_MS) }),
     })
 
 /** Why a call carries no data. */
@@ -78,6 +81,7 @@ const ERROR_CODES = {
     InvalidCredentials: true,
     Unauthorized: true,
     Forbidden: true,
+    PasswordChangeRequired: true,
     WrongPassword: true,
     RegistrationClosed: true,
     CheckinClosed: true,
@@ -91,7 +95,7 @@ const ERROR_CODES = {
     MethodNotAllowed: true,
 } satisfies Record<ErrorCode, true>
 
-/** A rejected call answers the thrown value, which carries no response. */
+/** A call that threw is caught as the thrown value, which has no response. */
 const isOutcome = <T>(value: unknown): value is Outcome<T> =>
     typeof value === "object" &&
     value !== null &&
@@ -167,6 +171,13 @@ export const callEmpty = async (
     return { ok: true, data: undefined }
 }
 
+/**
+ * The empty answer of a site route that relays a failed call. A refusal keeps
+ * its status, and an outage is a 502, because the site is the gateway.
+ */
+export const relayFailure = (failure: ApiFailure): Response =>
+    new Response(null, { status: failure.kind === "refused" ? failure.status : 502 })
+
 /** The data of a successful call, or `undefined`. For a page that renders both. */
 export const dataOf = <T>(result: ApiResult<T>): T | undefined =>
     result.ok ? result.data : undefined
@@ -177,13 +188,33 @@ export const failureOf = <T>(result: ApiResult<T>): ApiFailure | undefined =>
 export const codeOf = (failure: ApiFailure): ErrorCode | undefined =>
     failure.kind === "refused" ? failure.body?.code : undefined
 
-/** The message the API wrote for the client, or a fallback when it is down. */
-export const messageOf = (failure: ApiFailure, fallback = UNREACHABLE): string =>
-    failure.kind === "refused" ? (failure.body?.message ?? fallback) : fallback
+/**
+ * A refusal with no body of the API came from something in front of it, such as
+ * a Cloudflare error page, so only the status says what went wrong.
+ */
+const statusMessage = (status: number): string =>
+    status === 413
+        ? "The request is too large."
+        : status === 429
+          ? "Too many requests. Wait a moment and try again."
+          : status >= 500
+            ? "The API is not answering. Try again in a moment."
+            : "The API refused the request."
 
 /**
- * True when the resource does not exist. A page turns this into a 404 and keeps
- * a real outage on the page, so a down API never looks like a dead link.
+ * The message the API wrote for the client. A refusal with no body gets a
+ * sentence for its status, and an outage gets the fallback.
+ */
+export const messageOf = (failure: ApiFailure, fallback = UNREACHABLE): string =>
+    failure.kind === "refused"
+        ? (failure.body?.message ?? statusMessage(failure.status))
+        : fallback
+
+/**
+ * True when the resource does not exist: a 404, or a 400 for an identifier the
+ * API cannot parse, which names no resource either. A page turns this into a
+ * 404 and keeps every other failure on the page, so a down API never looks like
+ * a dead link.
  */
 export const isMissing = (failure: ApiFailure): boolean =>
-    failure.kind === "refused" && failure.status >= 400 && failure.status < 500
+    failure.kind === "refused" && (failure.status === 404 || failure.status === 400)

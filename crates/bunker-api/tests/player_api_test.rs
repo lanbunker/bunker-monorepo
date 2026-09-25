@@ -47,10 +47,11 @@ async fn an_unknown_handle_is_not_found() {
     assert_error(response, StatusCode::NOT_FOUND, "ItemNotFound").await;
 }
 
-/// Three signups in a row, so a text sort of the timestamps with a trimmed
-/// fraction would show. The order must be chronological, not lexical.
+/// Nobody has cycles, so every player shares the first place and the tie goes
+/// to the newest signup. Three signups in a row, so a text sort of the
+/// timestamps with a trimmed fraction would show.
 #[tokio::test]
-async fn the_roster_lists_every_player_newest_first() {
+async fn the_leaderboard_breaks_a_shared_place_with_the_newest_signup() {
     let api = TestApi::with_database().await;
     let mut expected = Vec::new();
     for handle in ["dave", "ziopera", "ciccio"] {

@@ -15,7 +15,10 @@ pub use error::StorageError;
 pub use event_storage::{CheckedIn, EventStorage, NewEventRow, StoredEvent};
 pub use match_storage::MatchStorage;
 pub use player_storage::{
-    Created, Credentials, ListOrder, NewPlayer, PlayerStorage, Renamed, StoredAccount,
+    Created, Credentials, ListOrder, NewPlayer, PlayerStorage, Removal, Renamed, RoleChanged,
+    StoredAccess,
 };
 pub use point_storage::{NewAdjustment, PointStorage};
-pub use tournament_storage::{Enrolled, NewEntrant, NewTournamentRow, TournamentStorage};
+pub use tournament_storage::{
+    BracketWrite, Enrolled, EntrantGuard, NewEntrant, NewTournamentRow, TournamentStorage,
+};

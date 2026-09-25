@@ -162,7 +162,6 @@ export const BracketView = (props: BracketViewProps) => {
     const box = (m: Match) => {
         const decided = m.winner !== null && m.winner !== undefined
         const ready = Boolean(m.entrantA && m.entrantB)
-        // In round 1 an empty side is a bye. Later an empty side waits for a result.
         const placeholder = m.round === 1 ? "bye" : "tbd"
         const interactive = Boolean(editing) && ready && !(editing?.isFrozen(m) ?? false)
         const draggable = Boolean(editing?.canSwap) && m.round === 1

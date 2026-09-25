@@ -10,8 +10,6 @@ edition = "2024"
 license = "MIT"
 repository = "https://github.com/paologaleotti/lanbunker-website"
 
-# Every external dependency lives here with one version. A crate pulls only what
-# it needs through `dep.workspace = true`.
 [workspace.dependencies]
 bunker-models = { path = "crates/bunker-models" }
 
@@ -20,12 +18,14 @@ argon2 = "0.6"
 axum = { version = "0.8", default-features = false, features = [
     "http1",
     "json",
+    "matched-path",
     "query",
     "tokio",
 ] }
 dotenvy = "0.15"
 jsonwebtoken = { version = "11", default-features = false, features = ["rust_crypto"] }
 nutype = { version = "0.7", features = ["serde"] }
+rand = "0.9"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sqlx = { version = "0.9", default-features = false, features = [
@@ -35,13 +35,12 @@ sqlx = { version = "0.9", default-features = false, features = [
     "migrate",
 ] }
 thiserror = "2"
-rand = "0.9"
 time = { version = "0.3", features = ["serde", "serde-human-readable", "formatting", "parsing", "macros"] }
-tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "signal", "time"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "signal", "sync", "time"] }
 tower-http = { version = "0.7", default-features = false, features = [
     "catch-panic",
-    "cors",
     "request-id",
+    "set-header",
     "trace",
 ] }
 tracing = "0.1"
@@ -96,6 +95,7 @@ opt-level = 3
 
 [profile.release]
 opt-level = 3
+overflow-checks = true
 lto = "fat"
 codegen-units = 1
 strip = true

@@ -68,7 +68,10 @@ const winner = t.winner?.player
             <Button href={`/tournaments/${t.id}/apply`}>APPLY</Button>
           )
         ) : (
-          <Button href="/login" variant="ghost">
+          <Button
+            href={`/login?next=${encodeURIComponent(`/tournaments/${t.id}/apply`)}`}
+            variant="ghost"
+          >
             LOGIN TO APPLY
           </Button>
         )}

@@ -15,9 +15,11 @@ export const GlyphMark = (props: GlyphMarkProps) => {
     const cells = bitsToCells(props.glyph.bits)
     // The frame keeps 12% padding on each side, so the mark itself takes 76% of the box.
     const markSize = props.framed ? `calc(${size} * 0.76)` : size
-    const classes = ["inline-flex shrink-0 items-center justify-center align-[-0.15em]"]
-    if (props.framed) classes.push("border")
-    if (props.className) classes.push(props.className)
+    const classes = [
+        "inline-flex shrink-0 items-center justify-center align-[-0.15em]",
+        props.framed ? "border" : undefined,
+        props.className || undefined,
+    ].filter(name => name !== undefined)
 
     return (
         <span

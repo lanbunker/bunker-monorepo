@@ -8,6 +8,8 @@ import {
     apiLogin,
     bearer,
     clearSession,
+    cyclesOf,
+    cyclesRules,
     handle,
     jsonOf,
     login,
@@ -150,10 +152,11 @@ test("the check-in poster is an svg for admins only", async ({ page, context }) 
     )
 })
 
-test("a visitor at the door enlists, comes back, and checks in for 100 cycles", async ({
+test("a visitor at the door enlists, comes back, and checks in for the check-in cycles", async ({
     page,
     context,
 }) => {
+    const pays = cyclesOf(await cyclesRules(context.request), "checkin", 0)
     const admin = await newAdmin(context)
     const event = await publishedEvent(context.request, admin.token, -HOUR, 5 * HOUR)
     const code = event.code
@@ -162,6 +165,7 @@ test("a visitor at the door enlists, comes back, and checks in for 100 cycles", 
     // Nobody is logged in on this phone. The door offers the two ways in.
     await page.goto(`/checkin/${code}`)
     await expect(page.locator("[data-state=anonymous]")).toBeVisible()
+    await expect(page.locator("[data-state=anonymous]")).toContainText(`${pays} cycles`)
     await expect(page.getByRole("navigation", { name: "Sections" })).toHaveCount(0)
     await page.getByRole("link", { name: "ENLIST" }).click()
     await expect(page).toHaveURL(`/signup?next=%2Fcheckin%2F${code}`)
@@ -182,11 +186,11 @@ test("a visitor at the door enlists, comes back, and checks in for 100 cycles", 
     await expect(page).toHaveURL(`/checkin/${code}?done=checked`)
     await expect(page.getByRole("status")).toContainText("CHECKED IN")
     await expect(page.locator("[data-state=confirmed]")).toContainText(player)
-    await expect(page.locator("[data-state=confirmed]")).toContainText("+100 cycles")
+    await expect(page.locator("[data-state=confirmed]")).toContainText(`+${pays} cycles`)
 
     // The door paid, and the log names the night.
     await page.goto("/profile")
-    await expect(page.locator("[data-cycles]")).toHaveText("100")
+    await expect(page.locator("[data-cycles]")).toHaveText(String(pays))
     await expect(page.locator("[data-rank=guest]").first()).toBeVisible()
     // The guest floor sits below one check-in, so the bar is never empty here.
     await expect(page.locator("[data-progress]")).toHaveAttribute("data-progress", "4")
@@ -202,7 +206,7 @@ test("a visitor at the door enlists, comes back, and checks in for 100 cycles", 
     })
     expect(again.status()).toBe(200)
     expect((await jsonOf(again, receiptSchema)).cycles).toBe(0)
-    expect((await standingOf(context.request, player)).cycles).toBe(100)
+    expect((await standingOf(context.request, player)).cycles).toBe(pays)
 
     // A login carries the door along too.
     await clearSession(context)
@@ -235,6 +239,7 @@ test("an admin checks a player in by hand for a night that is over", async ({
         5 * HOUR,
     )
     const player = await newPlayer(context, "old")
+    const pays = cyclesOf(await cyclesRules(context.request), "checkin", 0)
     await setSession(context, admin.token)
 
     await page.goto(`/admin/events/${event.id}`)
@@ -244,7 +249,7 @@ test("an admin checks a player in by hand for a night that is over", async ({
     await expect(page.getByRole("table", { name: "check-ins" })).toContainText(
         player.name,
     )
-    expect((await standingOf(context.request, player.name)).cycles).toBe(100)
+    expect((await standingOf(context.request, player.name)).cycles).toBe(pays)
 
     // This night is over, so the public page files it under the archive.
     await page.goto("/events")

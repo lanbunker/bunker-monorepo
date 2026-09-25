@@ -1,4 +1,5 @@
 ---
+import Alert from "./ui/Alert.astro"
 import type { MatchLog as Log } from "../lib/api"
 import { matchesPath, recordLine, winRate } from "../lib/matches"
 import { RECENT_ENTRIES } from "../lib/paging"
@@ -35,7 +36,7 @@ const comment =
       empty={own ? "no matches yet. enter a tournament." : "no matches yet."}
     />
   ) : (
-    <p class="m-0 text-xs text-alert">the match log is unreachable.</p>
+    <Alert message="the match log is unreachable." />
   )}
   {log && log.matches.total > RECENT_ENTRIES && (
     <div class="mt-4">
