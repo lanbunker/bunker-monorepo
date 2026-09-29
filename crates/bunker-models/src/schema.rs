@@ -5,7 +5,7 @@ use utoipa::openapi::schema::{ObjectBuilder, Type};
 use utoipa::openapi::{KnownFormat, RefOr, Schema, SchemaFormat};
 use utoipa::{PartialSchema, ToSchema};
 
-use crate::arcade::{ROM_NAME_MAX_LEN, RomName};
+use crate::arcade::{GAME_TITLE_MAX_LEN, GameTitle, ROM_NAME_MAX_LEN, RomName, SCORE_MAX, Score};
 use crate::auth::{PASSWORD_MAX_LEN, PASSWORD_MIN_LEN, Password};
 use crate::bracket::MatchId;
 use crate::event::{
@@ -72,6 +72,7 @@ text_schema!(
     EventName => 1, EVENT_NAME_MAX_LEN;
     Location => 0, LOCATION_MAX_LEN;
     Games => 0, GAMES_MAX_LEN;
+    GameTitle => 1, GAME_TITLE_MAX_LEN;
 );
 
 impl PartialSchema for ImageName {
@@ -139,6 +140,18 @@ impl PartialSchema for RomName {
     }
 }
 impl ToSchema for RomName {}
+
+impl PartialSchema for Score {
+    fn schema() -> RefOr<Schema> {
+        ObjectBuilder::new()
+            .schema_type(Type::Integer)
+            .minimum(Some(0u64))
+            .maximum(Some(SCORE_MAX))
+            .build()
+            .into()
+    }
+}
+impl ToSchema for Score {}
 
 impl PartialSchema for Password {
     fn schema() -> RefOr<Schema> {

@@ -16,7 +16,8 @@ daemon will run on RetroPie arcade cabinets and post scores to the backend.
 web/                  Astro site on Cloudflare Workers. Its own rules: web/CLAUDE.md
 crates/bunker-models  Domain types shared by every Rust crate. No I/O.
 crates/bunker-api     axum + sqlx + SQLite backend. Layers below.
-crates/bunker-cabd    The cabinet daemon and screen. Design: crates/bunker-cabd/DESIGN.md
+crates/cabd-core      The cabinet software as a library. No SDL.
+crates/bunker-cabd    The cabinet binary: the SDL2 screen. Design: crates/bunker-cabd/DESIGN.md
 deploy/               What runs on the API box: bootstrap script, systemd units.
 ```
 
@@ -155,8 +156,9 @@ not compile until you classify it.
   `[workspace.dependencies]`, one version each. A crate pulls what it needs with
   `dep.workspace = true`.
 - **Keep the crate graph shallow and arrows down.** `bunker-models` depends on
-  nothing internal. `bunker-api` and `bunker-cabd` depend on it and not on each
-  other.
+  nothing internal. `bunker-api` and `cabd-core` depend on it and not on each
+  other. `bunker-cabd` depends on `cabd-core` and is the only crate that links
+  SDL.
 - **Write a thing one time.** The reason a maintainer needs is in the code, at
   the smallest scope that owns the decision. The reason a reader of the repo
   needs is in `README.md`.

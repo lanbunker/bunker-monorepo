@@ -9,7 +9,7 @@ use std::fs;
 use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 
-use bunker_models::{RomName, Score};
+use bunker_models::{GameTitle, RomName, Score};
 use cabd_core::cabinet::Game;
 use cabd_core::hiscore::Decoder;
 use cabd_core::launcher::{Launcher, LauncherError};
@@ -18,7 +18,7 @@ use cabd_core::view::Orientation;
 fn game() -> Game {
     Game {
         rom: RomName::try_new("galaga").unwrap(),
-        title: "Galaga".to_owned(),
+        title: GameTitle::try_new("Galaga").unwrap(),
         orientation: Orientation::Tate,
         decoder: Decoder::AsciiDecimal,
     }
@@ -33,15 +33,28 @@ fn script(dir: &Path, body: &str) -> String {
     path.to_string_lossy().into_owned()
 }
 
+/// A launcher with a template of four zeros for galaga, and the script as
+/// command. A real template has the size the game writes, so the scripts
+/// write four bytes when they mean a score.
+fn launcher_with_template(dir: &Path, body: &str) -> Launcher {
+    let templates = dir.join("templates");
+    fs::create_dir_all(&templates).unwrap();
+    fs::write(templates.join("galaga.hi"), "0000").unwrap();
+    let script = script(dir, body);
+    Launcher::try_new(
+        &format!("{script} {{rom}} {{hi}}"),
+        dir.join("roms"),
+        dir.join("hi"),
+        templates,
+    )
+    .unwrap()
+}
+
 #[test]
 fn copies_the_template_then_runs_then_decodes() {
     let dir = tempfile::tempdir().unwrap();
-    let templates = dir.path().join("templates");
-    let hiscores = dir.path().join("hi");
-    fs::create_dir_all(&templates).unwrap();
-    fs::write(templates.join("galaga.hi"), "0").unwrap();
     let witness = dir.path().join("witness");
-    let script = script(
+    let launcher = launcher_with_template(
         dir.path(),
         &format!(
             "cat \"$2\" > {}; echo \"$1\" >> {}; printf 4242 > \"$2\"",
@@ -49,21 +62,13 @@ fn copies_the_template_then_runs_then_decodes() {
             witness.display()
         ),
     );
-
-    let launcher = Launcher::new(
-        &format!("{script} {{rom}} {{hi}}"),
-        dir.path().join("roms"),
-        hiscores.clone(),
-        templates,
-    )
-    .unwrap();
     let outcome = launcher.run(&game()).unwrap();
 
-    assert_eq!(outcome.score, Some(Score(4242)));
+    assert_eq!(outcome.score, Some(Score::try_new(4242).unwrap()));
     assert_eq!(outcome.note, None);
     let seen = fs::read_to_string(witness).unwrap();
     assert!(
-        seen.starts_with('0'),
+        seen.starts_with("0000"),
         "the template was in place before the game ran: {seen}"
     );
     assert!(
@@ -71,20 +76,23 @@ fn copies_the_template_then_runs_then_decodes() {
         "the rom path was substituted: {seen}"
     );
     assert_eq!(
-        fs::read_to_string(hiscores.join("galaga.hi")).unwrap(),
+        fs::read_to_string(dir.path().join("hi/galaga.hi")).unwrap(),
         "4242"
     );
 }
 
 #[test]
-fn without_a_template_a_stale_file_is_removed_first() {
+fn without_a_template_the_run_gives_no_score_and_the_game_still_runs() {
     let dir = tempfile::tempdir().unwrap();
     let hiscores = dir.path().join("hi");
     fs::create_dir_all(&hiscores).unwrap();
     fs::write(hiscores.join("galaga.hi"), "999999").unwrap();
-    let script = script(dir.path(), "test ! -e \"$2\"");
-
-    let launcher = Launcher::new(
+    let ran = dir.path().join("ran");
+    let script = script(
+        dir.path(),
+        &format!("touch {}; printf 20000 > \"$2\"", ran.display()),
+    );
+    let launcher = Launcher::try_new(
         &format!("{script} {{rom}} {{hi}}"),
         dir.path().join("roms"),
         hiscores,
@@ -93,21 +101,21 @@ fn without_a_template_a_stale_file_is_removed_first() {
     .unwrap();
     let outcome = launcher.run(&game()).unwrap();
 
-    assert_eq!(outcome.score, None, "the stale score must not come back");
-    assert!(outcome.note.is_some());
+    assert!(ran.is_file(), "the game ran");
+    assert_eq!(
+        outcome.score, None,
+        "a default table must not read as a score"
+    );
+    assert_eq!(
+        outcome.note.as_deref(),
+        Some("No score template for this game")
+    );
 }
 
 #[test]
 fn a_game_that_writes_garbage_gives_a_note_not_an_error() {
     let dir = tempfile::tempdir().unwrap();
-    let script = script(dir.path(), "printf 'xx' > \"$2\"");
-    let launcher = Launcher::new(
-        &format!("{script} {{rom}} {{hi}}"),
-        dir.path().join("roms"),
-        dir.path().join("hi"),
-        dir.path().join("templates"),
-    )
-    .unwrap();
+    let launcher = launcher_with_template(dir.path(), "printf 'xxxx' > \"$2\"");
     let outcome = launcher.run(&game()).unwrap();
     assert_eq!(outcome.score, None);
     assert_eq!(
@@ -117,9 +125,54 @@ fn a_game_that_writes_garbage_gives_a_note_not_an_error() {
 }
 
 #[test]
+fn a_game_that_writes_no_file_gives_a_note() {
+    let dir = tempfile::tempdir().unwrap();
+    let launcher = launcher_with_template(dir.path(), "rm -f \"$2\"");
+    let outcome = launcher.run(&game()).unwrap();
+    assert_eq!(outcome.score, None);
+    assert_eq!(
+        outcome.note.as_deref(),
+        Some("The game wrote no score file")
+    );
+}
+
+#[test]
+fn a_launcher_that_exits_non_zero_still_gives_the_score_it_wrote() {
+    let dir = tempfile::tempdir().unwrap();
+    let launcher = launcher_with_template(dir.path(), "printf 0007 > \"$2\"; exit 3");
+    let outcome = launcher.run(&game()).unwrap();
+    assert_eq!(outcome.score, Some(Score::try_new(7).unwrap()));
+    assert_eq!(outcome.note, None);
+}
+
+#[test]
+fn a_game_that_leaves_the_template_untouched_gives_no_score() {
+    let dir = tempfile::tempdir().unwrap();
+    let launcher = launcher_with_template(dir.path(), "true");
+    let outcome = launcher.run(&game()).unwrap();
+    assert_eq!(outcome.score, None);
+    assert_eq!(outcome.note.as_deref(), Some("The game wrote no new score"));
+}
+
+#[test]
+fn a_file_of_another_size_than_the_template_gives_no_score() {
+    let dir = tempfile::tempdir().unwrap();
+    let launcher = launcher_with_template(dir.path(), "printf 42 > \"$2\"");
+    let outcome = launcher.run(&game()).unwrap();
+    assert_eq!(
+        outcome.score, None,
+        "a cut write must not decode as a smaller score"
+    );
+    assert_eq!(
+        outcome.note.as_deref(),
+        Some("The score file has an unexpected size")
+    );
+}
+
+#[test]
 fn a_missing_program_is_an_error() {
     let dir = tempfile::tempdir().unwrap();
-    let launcher = Launcher::new(
+    let launcher = Launcher::try_new(
         "/nonexistent/launcher {rom}",
         dir.path().join("roms"),
         dir.path().join("hi"),
@@ -133,56 +186,23 @@ fn a_missing_program_is_an_error() {
 }
 
 #[test]
-fn an_empty_command_is_refused() {
+fn an_empty_command_or_one_without_the_rom_placeholder_is_refused() {
     let dir = tempfile::tempdir().unwrap();
+    let paths = || {
+        (
+            dir.path().to_path_buf(),
+            dir.path().to_path_buf(),
+            dir.path().to_path_buf(),
+        )
+    };
+    let (a, b, c) = paths();
     assert!(matches!(
-        Launcher::new(
-            "   ",
-            dir.path().into(),
-            dir.path().into(),
-            dir.path().into()
-        ),
+        Launcher::try_new("   ", a, b, c),
         Err(LauncherError::EmptyCommand)
     ));
-}
-
-#[test]
-fn a_launcher_that_exits_non_zero_gives_no_score_even_with_a_template() {
-    let dir = tempfile::tempdir().unwrap();
-    let templates = dir.path().join("templates");
-    fs::create_dir_all(&templates).unwrap();
-    fs::write(templates.join("galaga.hi"), "0").unwrap();
-    let script = script(dir.path(), "exit 3");
-    let launcher = Launcher::new(
-        &format!("{script} {{rom}} {{hi}}"),
-        dir.path().join("roms"),
-        dir.path().join("hi"),
-        templates,
-    )
-    .unwrap();
-    let outcome = launcher.run(&game()).unwrap();
-    assert_eq!(
-        outcome.score, None,
-        "the template must not read as a score of zero"
-    );
-    assert_eq!(outcome.note.as_deref(), Some("The game did not run"));
-}
-
-#[test]
-fn a_game_that_leaves_the_template_untouched_gives_no_score() {
-    let dir = tempfile::tempdir().unwrap();
-    let templates = dir.path().join("templates");
-    fs::create_dir_all(&templates).unwrap();
-    fs::write(templates.join("galaga.hi"), "0").unwrap();
-    let script = script(dir.path(), "true");
-    let launcher = Launcher::new(
-        &format!("{script} {{rom}} {{hi}}"),
-        dir.path().join("roms"),
-        dir.path().join("hi"),
-        templates,
-    )
-    .unwrap();
-    let outcome = launcher.run(&game()).unwrap();
-    assert_eq!(outcome.score, None);
-    assert_eq!(outcome.note.as_deref(), Some("The game wrote no new score"));
+    let (a, b, c) = paths();
+    assert!(matches!(
+        Launcher::try_new("retroarch {hi}", a, b, c),
+        Err(LauncherError::NoRomPlaceholder)
+    ));
 }

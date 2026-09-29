@@ -7,7 +7,7 @@ use std::str::FromStr;
 
 use bunker_models::Score;
 use nutype::nutype;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 
 /// The short side of the logical canvas, in logical pixels. A 240-line CRT mode
 /// shows it at scale 1, and every other display at an integer scale.
@@ -110,7 +110,7 @@ pub enum Scenario {
 /// Landscape is a tube in its normal position. Tate is a tube turned by 90
 /// degrees, fed with the same landscape signal, so the content is rotated in
 /// software on both sides.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Orientation {
     Landscape,
@@ -139,6 +139,75 @@ impl fmt::Display for Orientation {
             Self::Landscape => f.write_str("landscape"),
             Self::Tate => f.write_str("tate"),
         }
+    }
+}
+
+/// Which way the tube was turned for TATE, seen from the front. The screen
+/// turns the canvas the opposite way, and RetroArch gets the matching
+/// rotation value from the same setting.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TateTurn {
+    /// The top of the tube went to the left. Counter-clockwise.
+    Left,
+    /// The top of the tube went to the right. Clockwise.
+    Right,
+}
+
+#[derive(Debug, thiserror::Error)]
+#[error("unknown tate turn `{0}`, use `left` or `right`")]
+pub struct TateTurnError(String);
+
+impl FromStr for TateTurn {
+    type Err = TateTurnError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.trim().to_ascii_lowercase().as_str() {
+            "left" => Ok(Self::Left),
+            "right" => Ok(Self::Right),
+            other => Err(TateTurnError(other.to_owned())),
+        }
+    }
+}
+
+impl fmt::Display for TateTurn {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Left => f.write_str("left"),
+            Self::Right => f.write_str("right"),
+        }
+    }
+}
+
+/// The shape of the display, written as `4:3`. A composite mode has a pixel
+/// grid such as 720 by 240 on a 4:3 tube, so the pixels are not square and the
+/// grid alone cannot give the shape.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct DisplayAspect {
+    pub width: u32,
+    pub height: u32,
+}
+
+#[derive(Debug, thiserror::Error)]
+#[error("a display aspect is WIDTH:HEIGHT, such as 4:3, not `{0}`")]
+pub struct DisplayAspectError(String);
+
+impl FromStr for DisplayAspect {
+    type Err = DisplayAspectError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let parse = || {
+            let (w, h) = s.trim().split_once(':')?;
+            let width = w.parse().ok().filter(|w| *w > 0)?;
+            let height = h.parse().ok().filter(|h| *h > 0)?;
+            Some(Self { width, height })
+        };
+        parse().ok_or_else(|| DisplayAspectError(s.to_owned()))
+    }
+}
+
+impl fmt::Display for DisplayAspect {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}:{}", self.width, self.height)
     }
 }
 
@@ -179,6 +248,10 @@ impl FromStr for WindowSize {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ScreenConfig {
     pub orientation: Orientation,
+    pub tate_turn: TateTurn,
+    /// The shape of the display when its pixels are not square. Nothing on a
+    /// flat screen, where the pixel grid gives the shape.
+    pub display_aspect: Option<DisplayAspect>,
     pub overscan_percent: OverscanPercent,
     /// A window instead of the full display. Development only.
     pub window: Option<WindowSize>,
@@ -189,7 +262,7 @@ pub struct ScreenConfig {
 
 /// A score with a separator every three digits, the way a leaderboard reads it.
 pub fn format_score(score: Score) -> String {
-    let digits = score.0.to_string();
+    let digits = score.into_inner().to_string();
     let mut out = String::with_capacity(digits.len() + digits.len() / 3);
     for (i, c) in digits.chars().enumerate() {
         if i > 0 && (digits.len() - i).is_multiple_of(3) {

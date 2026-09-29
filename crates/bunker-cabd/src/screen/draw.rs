@@ -14,7 +14,7 @@ use super::canvas::{Layout, to_i32};
 use super::text::{Align, Cache, Painter, Size};
 
 // The palette of `web/src/styles/global.css`, by the same names.
-const BG: Color = Color::RGB(0x05, 0x05, 0x05);
+pub(crate) const BG: Color = Color::RGB(0x05, 0x05, 0x05);
 const PANEL: Color = Color::RGB(0x0a, 0x0a, 0x0a);
 const INK: Color = Color::RGB(0xe4, 0xe4, 0xe4);
 const BRIGHT: Color = Color::RGB(0xff, 0xff, 0xff);
@@ -38,8 +38,7 @@ const BIG_GLYPH: i32 = 16;
 /// keep room for a handle and a seven-digit score on one row.
 const QR_PANEL_PERCENT: u32 = 45;
 
-type Pen<'a, 'd, T> = Painter<'a, 'd, T>;
-
+/// Draws one frame of `vm` on the canvas.
 pub(crate) fn draw_view<T: RenderTarget>(
     canvas: &mut Canvas<T>,
     cache: &mut Cache<'_, T::Context>,
@@ -64,7 +63,7 @@ pub(crate) fn draw_view<T: RenderTarget>(
                 session,
                 &vm.command,
                 blink_on,
-                "press any button",
+                "press a button",
             )?;
             draw_attract(&mut p, layout, body, qr_payload.as_deref(), leaderboard)?;
         }
@@ -90,7 +89,7 @@ pub(crate) fn draw_view<T: RenderTarget>(
                 session,
                 &vm.command,
                 blink_on,
-                "a again   b menu",
+                "a again   b games",
             )?;
             draw_postgame(&mut p, body, score_display, status.as_ref(), leaderboard)?;
         }
@@ -101,7 +100,7 @@ pub(crate) fn draw_view<T: RenderTarget>(
 /// The header, the prompt line and the footer that every screen shares.
 /// Returns the body rectangle between them.
 fn chrome<T: RenderTarget>(
-    p: &mut Pen<'_, '_, T>,
+    p: &mut Painter<'_, '_, T>,
     area: Rect,
     session: Option<&str>,
     command: &str,
@@ -109,21 +108,25 @@ fn chrome<T: RenderTarget>(
     hint: &str,
 ) -> Result<Rect, ScreenError> {
     let top = area.top();
-    p.text(
+    let (brand_w, _) = p.text(
         Size::Small,
         "LANBUNKER",
         (area.left(), top),
         ACCENT,
         Align::Left,
     )?;
+    let session_room = area.right() - (area.left() + to_i32(brand_w) + GLYPH);
     match session {
-        Some(handle) => p.text(
-            Size::Small,
-            handle,
-            (area.right(), top),
-            BRIGHT,
-            Align::Right,
-        )?,
+        Some(handle) => {
+            let handle = fit(handle, session_room);
+            p.text(
+                Size::Small,
+                &handle,
+                (area.right(), top),
+                BRIGHT,
+                Align::Right,
+            )?
+        }
         None => p.text(
             Size::Small,
             "guest",
@@ -156,7 +159,9 @@ fn chrome<T: RenderTarget>(
     let footer_y = area.bottom() - GLYPH;
     let (w, _) = p.text(Size::Small, ">", (area.left(), footer_y), MUTE, Align::Left)?;
     let hint_x = area.left() + to_i32(w) + GLYPH;
-    let (hw, _) = p.text(Size::Small, hint, (hint_x, footer_y), DIM, Align::Left)?;
+    // The cursor block takes one glyph after the hint.
+    let hint = fit(hint, area.right() - hint_x - 2 * GLYPH);
+    let (hw, _) = p.text(Size::Small, &hint, (hint_x, footer_y), DIM, Align::Left)?;
     if blink_on {
         p.fill(
             Rect::new(hint_x + to_i32(hw) + GLYPH, footer_y, 7, 8),
@@ -175,7 +180,7 @@ fn chrome<T: RenderTarget>(
 }
 
 fn draw_attract<T: RenderTarget>(
-    p: &mut Pen<'_, '_, T>,
+    p: &mut Painter<'_, '_, T>,
     layout: &Layout,
     body: Rect,
     qr_payload: Option<&str>,
@@ -251,7 +256,7 @@ fn draw_attract<T: RenderTarget>(
 }
 
 fn draw_select<T: RenderTarget>(
-    p: &mut Pen<'_, '_, T>,
+    p: &mut Painter<'_, '_, T>,
     body: Rect,
     games: &[GameCard],
     selected: usize,
@@ -265,30 +270,43 @@ fn draw_select<T: RenderTarget>(
         DIM,
         Align::Left,
     )?;
-    let mut y = list.top() + LINE + 2;
-    let title_x = list.left() + 2 * GLYPH;
-    for (i, game) in games.iter().enumerate() {
+    let rows = below_title(list);
+    let title_x = rows.left() + 2 * GLYPH;
+    if games.is_empty() {
+        p.text(
+            Size::Small,
+            "no games",
+            (title_x, rows.top()),
+            MUTE,
+            Align::Left,
+        )?;
+        return Ok(());
+    }
+    // A list longer than the panel scrolls so the selected row stays in view.
+    let max_rows = usize::try_from(rows.height() / to_u32(ROW))
+        .unwrap_or(0)
+        .max(1);
+    let first = selected.saturating_sub(max_rows - 1);
+    let mut y = rows.top();
+    for (i, game) in games.iter().enumerate().skip(first).take(max_rows) {
         let is_selected = i == selected;
         if is_selected {
             p.fill(
-                Rect::new(list.left() - 2, y - 2, list.width() + 4, to_u32(ROW)),
+                Rect::new(rows.left() - 2, y - 2, rows.width() + 4, to_u32(ROW)),
                 FAINT,
             )?;
-            p.text(Size::Small, ">", (list.left(), y), ACCENT, Align::Left)?;
+            p.text(Size::Small, ">", (rows.left(), y), ACCENT, Align::Left)?;
         }
         let color = if is_selected { ACCENT } else { INK };
-        let title = fit(&game.title, list.right() - title_x);
+        let title = fit(&game.title, rows.right() - title_x);
         p.text(Size::Small, &title, (title_x, y), color, Align::Left)?;
         y += ROW;
-    }
-    if games.is_empty() {
-        p.text(Size::Small, "no games", (title_x, y), MUTE, Align::Left)?;
     }
     Ok(())
 }
 
 fn draw_postgame<T: RenderTarget>(
-    p: &mut Pen<'_, '_, T>,
+    p: &mut Painter<'_, '_, T>,
     body: Rect,
     score_display: &str,
     status: Option<&Status>,
@@ -300,16 +318,26 @@ fn draw_postgame<T: RenderTarget>(
     let score = inner(score_panel, PANEL_PAD);
     let cx = score.center().x();
     let mut y = score.top();
-    p.text(
+    let (label_w, _) = p.text(
         Size::Small,
         "game over",
         (score.left(), y),
         DIM,
         Align::Left,
     )?;
-    p.text(Size::Small, "score", (score.right(), y), DIM, Align::Right)?;
+    // The right label needs its own room after the left one and a gap.
+    if to_i32(score.width()) - to_i32(label_w) >= 7 * GLYPH {
+        p.text(Size::Small, "score", (score.right(), y), DIM, Align::Right)?;
+    }
     y += LINE;
-    p.text(Size::Big, score_display, (cx, y), ACCENT, Align::Center)?;
+    // The big face is two glyph widths per character. A score that does not
+    // fit it takes the small face whole, rather than a cut number.
+    if glyphs(score.width()) / 2 >= score_display.chars().count() {
+        p.text(Size::Big, score_display, (cx, y), ACCENT, Align::Center)?;
+    } else {
+        let small = fit(score_display, to_i32(score.width()));
+        p.text(Size::Small, &small, (cx, y + 4), ACCENT, Align::Center)?;
+    }
     y += BIG_GLYPH + 4;
     if let Some(status) = status {
         let color = match status.tone {
@@ -322,12 +350,13 @@ fn draw_postgame<T: RenderTarget>(
     }
 
     let list_top = score_panel.bottom() + PAD;
-    let list_panel = Rect::new(
-        body.left(),
-        list_top,
-        body.width(),
-        to_u32(body.bottom() - list_top),
-    );
+    let list_h = body.bottom() - list_top;
+    // At a large overscan the list has no room, and nothing is drawn over
+    // the footer.
+    if list_h < LINE + ROW + 2 * PANEL_PAD {
+        return Ok(());
+    }
+    let list_panel = Rect::new(body.left(), list_top, body.width(), to_u32(list_h));
     panel(p, list_panel)?;
     let list = inner(list_panel, PANEL_PAD);
     p.text(
@@ -341,7 +370,7 @@ fn draw_postgame<T: RenderTarget>(
 }
 
 /// A bordered panel with the panel ground, as on the site.
-fn panel<T: RenderTarget>(p: &mut Pen<'_, '_, T>, rect: Rect) -> Result<(), ScreenError> {
+fn panel<T: RenderTarget>(p: &mut Painter<'_, '_, T>, rect: Rect) -> Result<(), ScreenError> {
     p.fill(rect, PANEL)?;
     p.outline(rect, BORDER)
 }
@@ -350,10 +379,14 @@ fn panel<T: RenderTarget>(p: &mut Pen<'_, '_, T>, rect: Rect) -> Result<(), Scre
 /// are not drawn, and a handle that does not fit the width is cut, so the
 /// columns never touch and nothing runs over the footer.
 fn draw_rows<T: RenderTarget>(
-    p: &mut Pen<'_, '_, T>,
+    p: &mut Painter<'_, '_, T>,
     at: Rect,
     rows: &[Row],
 ) -> Result<(), ScreenError> {
+    let max_rows = usize::try_from(at.height() / to_u32(ROW)).unwrap_or(0);
+    if max_rows == 0 {
+        return Ok(());
+    }
     if rows.is_empty() {
         p.text(
             Size::Small,
@@ -365,7 +398,6 @@ fn draw_rows<T: RenderTarget>(
         return Ok(());
     }
     let columns = glyphs(at.width());
-    let max_rows = usize::try_from(at.height() / to_u32(ROW)).unwrap_or(0);
     let mut y = at.top();
     for row in rows.iter().take(max_rows) {
         let color = if row.highlight { ACCENT } else { INK };

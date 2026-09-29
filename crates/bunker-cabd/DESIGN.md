@@ -54,7 +54,7 @@ section:
 | Cabinet OS | RetroPie 4.8 on a Raspberry Pi 3 | it owns RetroArch, the video mode and the controller configs |
 | Emulation | RetroArch, `lr-fbneo`, `hiscore.dat` on | one core for all six games |
 | Launch | `runcommand.sh` | it sets the video mode and restores the console |
-| Screen | SDL2 with `sdl2`, `sdl2_ttf`, `sdl2_image` | runs on the console without X11, the same pattern as EmulationStation |
+| Screen | SDL2 with `sdl2` and `sdl2_ttf` | runs on the console without X11, the same pattern as EmulationStation |
 | Daemon | Rust, std threads and channels, `rusqlite`, `ureq`, `tracing` | no async runtime, nothing to schedule |
 | Build | `cross` on macOS, deploy with rsync | the Pi 3 never compiles |
 
@@ -112,39 +112,47 @@ main thread (bunker-cabd)            conductor thread (cabd-core)
                                      └───────────────────────────────────┘
 ```
 
-`cabinet` owns these types:
+`cabinet` owns these types. The ones marked planned arrive with the API work.
 
-- `Event`: `Input(Input)`, `Tick`, `NonceIssued`, `CheckedIn(player)`,
-  `DisplayReleased`, `GameEnded(outcome)`, `Logout`, `Command(DevCommand)`.
-- `Effect`: `IssueNonce`, `PrepareAndLaunch(game)`, `QueueScore(run)`,
+- `Event`: `Input(Input)`, `Tick`, `DisplayReleased`, `GameEnded(outcome)`,
+  `Command(DevCommand)`, `Quit`. Planned: `NonceIssued`, `CheckedIn(player)`,
+  `Logout`.
+- `Effect`: `Launch(game)`, `Quit`. Planned: `IssueNonce`, `QueueScore(run)`,
   `Restart`, `Shutdown`.
 - `Frame`: `Show(ViewModel)` or `Suspended`.
-- `ViewModel`: `screen` plus display-ready fields, such as `score_display`,
-  `rank`, `is_pb`, `qr_payload`, `leaderboard: Vec<Row>`. Strings, not numbers
-  to format.
+- `ViewModel`: `screen`, `session`, `command`, and display-ready fields inside
+  the screen, such as `score_display`, `status`, `qr_payload` and
+  `leaderboard: Vec<Row>`. Strings, not numbers to format.
 
-The conductor loop is `recv_timeout` on the event channel, and the timeout is
-the tick. The conductor blocks while a game runs. Nothing else needs it then:
-the window is gone, and the outbox drainer is its own thread.
+The conductor loop is `recv_timeout` on the event channel with a fixed tick
+deadline, so a tick comes every 250 ms whatever else arrives. The conductor
+blocks while a game runs. Nothing else needs it then: the window is gone, and
+the outbox drainer, once it exists, is its own thread. The screen sends
+through the methods of the `Handle` and never builds an `Event` itself.
 
 ## Game launch
 
 1. The player selects a game. The screen sends `Input::Confirm`.
-2. `cabinet` returns `Frame::Suspended` and `Effect::PrepareAndLaunch(game)`.
-3. The screen sees `Suspended`, destroys the window and the renderer, closes the
-   joystick, and sends `Event::DisplayReleased`.
-4. The conductor waits for `DisplayReleased`, copies the template, then spawns
-   the launcher and waits for the exit code.
-5. The conductor reads the `.hi` file, decodes the score, and sends itself
-   `Event::GameEnded(outcome)`. A missing or corrupt file is an outcome too.
-6. `cabinet` ranks the score, returns `Frame::Show(postgame)` and
-   `Effect::QueueScore(run)`.
-7. The screen sees `Show`, creates the window again and draws.
+2. `cabinet` moves to `Releasing` and returns `Frame::Suspended`. Nothing
+   launches yet.
+3. The screen sees `Suspended`, destroys the window, the renderer, the video
+   and joystick subsystems, and calls `Handle::display_released`.
+4. `cabinet` moves to `InGame` and returns `Effect::Launch(game)`. The
+   conductor copies the template, spawns the launcher and waits for the exit.
+5. The conductor reads the `.hi` file, decodes the score, and applies
+   `Event::GameEnded(outcome)`. A missing, untouched, cut or corrupt file is an
+   outcome with a note, not an error.
+6. `cabinet` returns `Frame::Show(postgame)`. Input is ignored for 1.5
+   seconds, so a button held at game over does not skip the screen. Planned:
+   `Effect::QueueScore(run)` and the rank.
+7. The screen sees `Show`, opens the window again, discards the input that
+   queued up while the game ran, and draws.
 
-The launcher is a command line from the configuration. On the Pi it is
-`runcommand.sh 0 _SYS_ arcade {rom}`. On macOS it is a shell script in `dev/`.
-One script copies a fixture `.hi` and exits after a delay. Another script runs
-the real RetroArch. There is one launcher implementation and no trait.
+On the postgame screen `a` plays the same game again and `b` returns to the
+list. The launcher is a command line from the configuration. On the Pi it is
+`runcommand.sh 0 _SYS_ arcade {rom}`. On macOS it is `dev/launcher-fake.sh`,
+which waits two seconds and writes a random score. There is one launcher
+implementation and no trait.
 
 Two processes cannot own the display at the same time. Step 3 releases it.
 EmulationStation does the same in `FileData::launchGame`.
@@ -259,8 +267,9 @@ The patterns are pure draw functions in the screen, selected by a field of the
 view model. The overscan value that the tube shows goes into the configuration
 by hand. The binary does not write its own configuration.
 
-Pictures are textures from `sdl2_image`. An animation is a value that reads the
-clock each frame, so a 50 Hz and a 60 Hz display run it at the same speed.
+An animation is a value that reads the clock each frame, so a 50 Hz and a 60 Hz
+display run it at the same speed. Pictures need `sdl2_image`, which is not
+linked until a screen shows one.
 
 ## Display
 
@@ -295,15 +304,23 @@ The screen derives everything from the mode that SDL reports and from
   gets `video_rotation` from the same deploy argument.
 - **Overscan.** `CABD_OVERSCAN_PERCENT` shrinks the safe area. Read the value
   off the tube with the patterns page.
-- **Composite-safe drawing.** Large text, thick shapes, low-saturation colors,
-  no saturated red next to blue, no one-pixel horizontal lines outside the
-  patterns page.
+- **Composite-safe drawing.** Large text, thick shapes, no saturated red next
+  to blue. The brand green is saturated and is used for short text only. A
+  one-pixel rule is stable on a progressive 240p signal and flickers on an
+  interlaced one, so the profile decides the signal, not the drawing.
+- **Non-square pixels.** A composite mode has a grid such as 720 by 240 on a
+  4:3 tube. `CABD_DISPLAY_ASPECT=4:3` gives the shape, and the screen scales
+  the two axes apart: whole lines vertically, whatever the width needs
+  horizontally. On a flat screen the setting stays unset and the grid gives
+  the shape.
 
-Five of the six games are vertical. Ms. Pac-Man, Galaga, Dig Dug, Mr. Do! and
-DoDonPachi run in portrait, and most are 288 or 320 lines tall. Bubble Bobble
-is horizontal. Each entry in `games.toml` carries `orientation`. When it differs
-from the cabinet, the select screen shows a small badge. On a landscape tube a
-vertical game sits pillarboxed at 240 lines. On a TATE tube it fills the height.
+Five of the six games are vertical. Ms. Pac-Man, Galaga, Donkey Kong, Mr. Do!
+and DoDonPachi run in portrait, and most are 256 to 320 lines tall. Bubble
+Bobble is horizontal. Each entry in `games.toml` carries `orientation` for the
+RetroArch rotation keys of the deploy. The select screen shows titles only. On
+a landscape tube a vertical game sits pillarboxed at 240 lines. On a TATE tube
+it fills the height. `CABD_TATE_TURN` says which way the tube was turned,
+`left` or `right`, and the screen and RetroArch turn the same way.
 
 ## Crates
 
@@ -325,28 +342,27 @@ is a convention, and a reviewer checks it.
 ```
 crates/cabd-core/src/
   lib.rs
-  cabinet.rs cabinet/  pure: the state machine, Event, Effect
+  cabinet.rs           pure: the state machine, Event, Effect
   view.rs              pure: Frame, ViewModel, Input, ScreenConfig
-  hiscore.rs hiscore/  pure: decode(game, bytes), the per-game tables
+  hiscore.rs           pure: decode(game, bytes), one decoder per game
   config.rs            the environment and games.toml, read in one place
-  outbox.rs            rusqlite
-  api.rs               ureq
   launcher.rs          copy the template, spawn, wait, read the .hi file
-  conductor.rs         the loop, the threads, start()
-  devsock.rs           debug builds only: the control socket
+  conductor.rs         the loop, the Handle, start()
+  planned: outbox.rs (rusqlite), api.rs (ureq), devsock.rs (the control socket)
 crates/cabd-core/tests/
-  cabinet_test.rs hiscore_test.rs outbox_test.rs api_test.rs launcher_test.rs
-  fixtures/            golden .hi files with known scores
+  cabinet_test.rs config_test.rs conductor_test.rs hiscore_test.rs launcher_test.rs
+  planned: fixtures/ with golden .hi files, outbox_test.rs, api_test.rs
 crates/bunker-cabd/
   DESIGN.md
-  templates/           pristine .hi files, one per game
-  dev/                 launcher-fake.sh, launcher-retroarch.sh, never ships
-  src/main.rs          clap: run | screenshots | version
-  src/screen.rs screen/  window, canvas, input map, one draw function per screen
+  assets/              the Press Start 2P font and its OFL license
+  templates/           pristine .hi files, one per game. Empty until the decoders exist
+  dev/                 cabd.env, games.toml, templates/, launcher-fake.sh. Never ships
+  src/main.rs          clap: run | screenshots
+  src/screen.rs screen/  window, canvas, input map, text cache, one draw function per screen
 ```
 
-`cabinet`, `view` and `hiscore` import std, serde and `bunker-models`, and
-nothing else. They never touch a path, a socket or a clock. The clock is a
+`cabinet`, `view` and `hiscore` import std, serde, `nutype` and
+`bunker-models`, and nothing else. They never touch a path, a socket or a clock. The clock is a
 parameter. That is what makes the tests plain assertions. `outbox`, `api` and
 `launcher` each own a `thiserror` enum and return plain types, so a `rusqlite`
 or `ureq` type never leaves its module.
@@ -368,22 +384,29 @@ and `games.toml` in one place and hands each module the part it needs as plain
 data. `cabinet` and the screen never read the environment.
 
 One `Config` struct with `#[arg(long, env)]` and no default on a path. A missing
-path fails at startup with a message that names the variable.
+path fails at startup with a message that names the flag, and each flag has
+the `CABD_` variable of the same name.
+
+The macOS column is `crates/bunker-cabd/dev/cabd.env`, with paths relative to
+the repository root.
 
 | Variable | Pi | macOS |
 | --- | --- | --- |
-| `CABD_API_LOCAL_URL` | `http://192.168.1.10:3000` | `http://127.0.0.1:3000` |
-| `CABD_API_CLOUD_URL` | `https://api.lanbunker.eu` | the same |
-| `CABD_API_TOKEN` | the cabinet token | a dev token |
-| `CABD_GAMES` | `/home/pi/bunker/games.toml` | `dev/games.toml` |
-| `CABD_LAUNCHER` | `runcommand.sh 0 _SYS_ arcade {rom}` | `dev/launcher-fake.sh {rom}` |
+| `CABD_GAMES` | `/home/pi/bunker/games.toml` | `crates/bunker-cabd/dev/games.toml` |
+| `CABD_ROM_DIR` | `/home/pi/RetroPie/roms/arcade` | `.dev/roms` |
+| `CABD_LAUNCHER` | `runcommand.sh 0 _SYS_ arcade {rom}` | `crates/bunker-cabd/dev/launcher-fake.sh {rom} {hi}` |
 | `CABD_HISCORE_DIR` | `/home/pi/RetroPie/roms/arcade/fbneo` | `.dev/hiscore` |
-| `CABD_TEMPLATE_DIR` | `/home/pi/bunker/templates` | `templates` |
-| `CABD_OUTBOX` | `/home/pi/bunker/outbox.db` | `.dev/outbox.db` |
-| `CABD_IDLE_SECONDS` | `180` | `180` |
+| `CABD_TEMPLATE_DIR` | `/home/pi/bunker/templates` | `crates/bunker-cabd/dev/templates` |
+| `CABD_IDLE_SECONDS` | `180` | `60` |
 | `CABD_ORIENTATION` | `landscape` or `tate` | `landscape` |
-| `CABD_OVERSCAN_PERCENT` | read off the tube | `0` |
+| `CABD_TATE_TURN` | `left` or `right` | `left` |
+| `CABD_DISPLAY_ASPECT` | `4:3` on composite | unset |
+| `CABD_OVERSCAN_PERCENT` | read off the tube, up to 25 | `0` |
+| `CABD_WINDOW` | unset | `960x720` |
 | `RUST_LOG` | `info`, or `debug` while you test | `debug` |
+
+Planned with the API work: `CABD_API_LOCAL_URL`, `CABD_API_CLOUD_URL`,
+`CABD_API_TOKEN` and `CABD_OUTBOX`.
 
 The display mode is not a variable. The screen reads it from SDL. On macOS the
 window is 4:3 by default, and `--window 1280x720` previews a wide canvas.
@@ -391,10 +414,11 @@ window is 4:3 by default, and `--window 1280x720` previews a wide canvas.
 inside a landscape window. `make cabd-dev-tate` shows the same canvas upright
 in a portrait window, with the development-only `--upright` flag.
 
-`games.toml` lists each game: the ROM name, the title, the orientation, the
-decoder id and the picture.
+`games.toml` lists each game: the ROM name, the title, the orientation and the
+decoder id. A ROM named two times, an empty title or an unknown key refuses
+the whole file.
 
-`CABD_DEV_SOCKET` exists in debug builds only. It is a Unix socket that takes
+Planned: `CABD_DEV_SOCKET` exists in debug builds only. It is a Unix socket that takes
 one command per line, such as `scenario postgame` or `checkin dave`. Each
 command becomes `Event::Command` and goes through `cabinet` like every other
 event. From the laptop, `ssh pi 'echo "scenario postgame" | nc -U /run/cabd.sock'`
@@ -408,37 +432,36 @@ cabinet did and why. `tracing` writes one line per record to stderr. On the Pi
 the autostart loop appends stderr to `/home/pi/bunker/cabd.log`, and
 `make pi-log` follows it. `RUST_LOG` selects the level.
 
-What is logged, by level:
+What is logged, by level. The lines marked planned arrive with their feature.
 
 - **info**, always on at the party:
-  - Startup: version, build profile, every configuration value with the token
-    redacted, SDL version, video driver, display mode, canvas size and scale
-    factor, orientation, joystick name and button count.
-  - Every state transition: the event, the screen before, the screen after, the
-    effects. One line, with the session handle if a player is checked in.
-  - The launcher: the full command line, the pid, the exit code, the duration,
-    and the last lines of `/dev/shm/runcommand.log` when the exit code is not
-    zero.
-  - The hiscore file: path, size, modification time, the decoded score, or the
-    decode error with a hex dump of the first 64 bytes.
-  - The outbox: each enqueue with its row id, each drain attempt with the HTTP
-    status and the latency, each retry with the delay.
-  - The check-in long poll: each nonce issued, each answer that binds a player,
-    and each failure with the status and the latency. An empty answer is silent.
-  - The server selection: each change, and each health check with its result
-    and latency.
-  - The screen: window created or destroyed, with the mode, texture loads, and
-    a frame time summary every ten seconds: average and worst frame.
+  - Startup: version, build profile, every configuration value, every game,
+    the SDL version, the video driver, the output size, the canvas size and the
+    scale per axis, the orientation and the turn, whether vsync is on, the
+    joystick name and its button, axis and hat counts.
+  - Every state transition: the event, the state before, the state after, the
+    effects. One line. Planned: the session handle on every line of a session.
+  - The launcher: the full command line, the pid, the duration, and on a
+    failure the exit code and the signal. Planned: the last lines of
+    `/dev/shm/runcommand.log` on a failure.
+  - The hiscore file: the template copy with its size, then the path, the size
+    and the decoded score, or the reason there is none: no template, no file,
+    the template untouched, another size, or a decode error with a hex dump of
+    the first 64 bytes.
+  - The screen: the window with its sizes and renderer, each subsystem opened,
+    the joystick opened, removed or closed, the input events discarded on a
+    resume, and a frame time summary every ten seconds per window: average and
+    worst frame.
+  - Planned: the outbox, the check-in long poll and the server selection.
 - **debug**, on while you test on hardware:
-  - Every raw SDL event that the input map sees and what it became.
-  - Every poll, every tick, every frame that reaches the screen.
-  - Every effect as the executor starts and finishes it, with the duration.
-- **trace**: the byte content of each hiscore read and each API body.
+  - Every input event after the map, and what it became.
+  - Every frame the conductor sends, and each effect with its duration.
+  - Every event that changed nothing.
+- **trace**: every tick.
 
-Rules: a line names the thing it talks about with an id, such as the row id,
-the pid or the ROM name. An error is logged one time, where it is handled, with
-its chain of causes. The token, and nothing else, is redacted. A span wraps a
-game session from check-in to logout, so every line inside carries the handle.
+Rules: a line names the thing it talks about with an id, such as the pid or
+the ROM name. An error is logged one time, where it is handled, with its whole
+chain of causes. Planned: the token, and nothing else, is redacted.
 
 ## Dev workflow on macOS
 
@@ -446,32 +469,40 @@ game session from check-in to logout, so every line inside carries the handle.
   stands in for RetroArch. The whole flow runs without a Pi.
 - The real API runs with `make dev`. No fake API exists. The real one is fast
   and the tests use it too.
-- `cargo run -p bunker-cabd -- screenshots out/` renders every screen and every
-  pattern from a sample `ViewModel` into PNG files with the software renderer
-  and `SDL_VIDEODRIVER=dummy`. This is how a reviewer, or Claude Code, sees the
-  output.
-- The real RetroArch on macOS with `lr-fbneo` validates the capture pipeline
-  end to end. Play one game, note the score, commit the `.hi` as a fixture.
-- Debug builds map the function keys to the same `DevCommand` values as the
-  socket: jump to a screen, check in a fake player, expire the idle timer.
+- `make cabd-shots` renders every screen from a sample `ViewModel` into PNG
+  files under `.dev/shots/`, landscape and TATE, on a surface with the software
+  renderer and no window. The PNG is the canvas itself, not the turned output.
+  This is how a reviewer sees the output.
+- Planned: the real RetroArch on macOS with `lr-fbneo` validates the capture
+  pipeline end to end. Play one game, note the score, commit the `.hi` as a
+  fixture.
+- Debug builds map F1, F2 and F3 to the attract, select and postgame
+  scenarios, and `q` quits. A release build has none of these keys.
 
 ## Tests
 
 - **cabinet and hiscore**: pure tests. An event sequence in, the frames and the
-  effects out. The clock is a parameter, so the idle timeout is a plain
-  assertion. Each hiscore fixture decodes to the known score, and a corrupt
-  file gives an error, not a wrong score.
-- **outbox and api**: the test starts the real `bunker-api` in-process with
+  effects out. The clock is a parameter, so the idle timeout, the postgame
+  lockout and the game time are plain assertions. Each decoder refuses empty,
+  foreign and too large input, and each planned fixture decodes to its known
+  score.
+- **config**: the games list refuses a duplicate ROM, an empty title and an
+  unknown key, and each `CABD_` parser accepts its forms and refuses the rest.
+- **outbox and api**, planned: the test starts the real `bunker-api` in-process with
   `bunker_api::server::build_router` on a random port and a temporary SQLite
   file, the same way the API tests do. The cabinet queues a score, the drainer
   posts it, the test reads it back from the API. A second test stops the API
   and asserts that the row stays in the outbox. This test needs tokio as a
   dev-dependency, because the API is async. The code under test is not.
-- **launcher**: a shell script as the launcher writes a fixture and exits. The
-  test asserts the template copy, the wait and the decoded outcome.
-- **conductor**: a fake clock and a channel on each side. A frame comes out for
-  each event that changes the screen, and nothing else.
-- **screen**: no unit test for drawing. The `screenshots` command is the check.
+- **launcher**: a shell script as the launcher writes a file and exits. One
+  test per outcome: the decoded score, no template, no file, the template
+  untouched, another size, garbage, a failed exit with a score, a missing
+  program.
+- **conductor**: the real thread with a script as the launcher. A full run from
+  attract to postgame, a quit that closes the frames and joins clean, a dropped
+  handle that stops the thread, and a tick that sends no frame.
+- **screen**: unit tests for the layout math and the axis edge detection. No
+  test for drawing. The `screenshots` command is the check.
 
 A test that skips must be `#[ignore]` with a reason. `make checklist` runs
 everything.
@@ -561,6 +592,12 @@ Check each one on the real Pi before you build on it.
    tube, over the cable you will use. The patterns page is the tool.
 8. **Phone to API network path** in the venue. The most likely failure on the
    night.
+10. **The composite pixel grid.** The screen expects `CABD_DISPLAY_ASPECT=4:3`
+    to turn a 720 by 240 grid into a 320 by 240 canvas at 2.25 by 1. Read the
+    startup log for the output size and the scale, and check the text on the
+    tube is neither squashed nor stretched.
+11. **The mouse cursor.** SDL hides it on the window. Check that no arrow stays
+    over the game after the window is destroyed.
 9. **Pi 3 performance** with SDL2 at 60 fps and two worker threads. The frame
    time summary in the log is the measure.
 

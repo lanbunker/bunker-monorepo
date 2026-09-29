@@ -2,7 +2,7 @@
 
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
-use bunker_models::{ROM_NAME_MAX_LEN, RomName, Score};
+use bunker_models::{GAME_TITLE_MAX_LEN, GameTitle, ROM_NAME_MAX_LEN, RomName, SCORE_MAX, Score};
 
 #[test]
 fn a_rom_name_trims_and_accepts_lowercase_digits_and_underscore() {
@@ -33,9 +33,24 @@ fn a_rom_name_is_a_plain_string_on_the_wire() {
 }
 
 #[test]
-fn a_score_is_a_plain_number_on_the_wire_and_orders_by_value() {
-    assert_eq!(serde_json::to_string(&Score(998_000)).unwrap(), "998000");
-    let score: Score = serde_json::from_str("1234560").unwrap();
-    assert_eq!(score, Score(1_234_560));
-    assert!(Score(10) < Score(11));
+fn a_score_is_a_bounded_plain_number_on_the_wire_and_orders_by_value() {
+    let score = Score::try_new(998_000).unwrap();
+    assert_eq!(serde_json::to_string(&score).unwrap(), "998000");
+    let parsed: Score = serde_json::from_str("1234560").unwrap();
+    assert_eq!(parsed.into_inner(), 1_234_560);
+    assert!(Score::try_new(10).unwrap() < Score::try_new(11).unwrap());
+    assert!(Score::try_new(SCORE_MAX).is_ok());
+    assert!(Score::try_new(SCORE_MAX + 1).is_err());
+    assert!(serde_json::from_str::<Score>(&(SCORE_MAX + 1).to_string()).is_err());
+}
+
+#[test]
+fn a_game_title_trims_and_has_length_limits() {
+    assert_eq!(
+        GameTitle::try_new(" Bubble Bobble ").unwrap().as_ref(),
+        "Bubble Bobble"
+    );
+    assert!(GameTitle::try_new("   ").is_err());
+    assert!(GameTitle::try_new("a".repeat(GAME_TITLE_MAX_LEN)).is_ok());
+    assert!(GameTitle::try_new("a".repeat(GAME_TITLE_MAX_LEN + 1)).is_err());
 }

@@ -3,7 +3,7 @@
 //! so the same code runs `runcommand.sh` on the Pi and a shell script on a Mac.
 
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Command, ExitStatus};
 use std::time::Instant;
 
 use tracing::{info, warn};
@@ -15,6 +15,7 @@ const ROM_PLACEHOLDER: &str = "{rom}";
 const HISCORE_PLACEHOLDER: &str = "{hi}";
 const HEX_DUMP_LEN: usize = 64;
 
+/// The command that runs a game, and the folders around it.
 #[derive(Debug, Clone)]
 pub struct Launcher {
     command: Vec<String>,
@@ -27,21 +28,22 @@ pub struct Launcher {
 pub enum LauncherError {
     #[error("the launcher command is empty")]
     EmptyCommand,
+    #[error("the launcher command has no `{{rom}}` placeholder")]
+    NoRomPlaceholder,
     #[error("cannot create the hiscore folder {path}")]
     CreateDir {
         path: PathBuf,
         #[source]
         source: std::io::Error,
     },
-    #[error("cannot copy the template {template} over {live}")]
-    Template {
-        template: PathBuf,
-        live: PathBuf,
+    #[error("cannot read the template {path}")]
+    ReadTemplate {
+        path: PathBuf,
         #[source]
         source: std::io::Error,
     },
-    #[error("cannot remove the stale hiscore file {path}")]
-    RemoveStale {
+    #[error("cannot write the hiscore file {path}")]
+    WriteHiscore {
         path: PathBuf,
         #[source]
         source: std::io::Error,
@@ -57,7 +59,9 @@ pub enum LauncherError {
 }
 
 impl Launcher {
-    pub fn new(
+    /// `command` is split on whitespace. `{rom}` must appear in it and becomes
+    /// the ROM path. `{hi}` becomes the live hiscore file.
+    pub fn try_new(
         command: &str,
         rom_dir: PathBuf,
         hiscore_dir: PathBuf,
@@ -67,6 +71,9 @@ impl Launcher {
         if command.is_empty() {
             return Err(LauncherError::EmptyCommand);
         }
+        if !command.iter().any(|token| token.contains(ROM_PLACEHOLDER)) {
+            return Err(LauncherError::NoRomPlaceholder);
+        }
         Ok(Self {
             command,
             rom_dir,
@@ -75,16 +82,11 @@ impl Launcher {
         })
     }
 
-    /// The live hiscore file of a game.
-    pub fn hiscore_path(&self, game: &Game) -> PathBuf {
-        self.hiscore_dir.join(format!("{}.hi", game.rom))
-    }
-
     /// Blocks until the game exits. A missing or unreadable hiscore file is an
     /// `Outcome` with a note, so the player always gets a postgame screen. An
     /// error means the game never started.
     pub fn run(&self, game: &Game) -> Result<Outcome, LauncherError> {
-        let live = self.hiscore_path(game);
+        let live = self.hiscore_dir.join(format!("{}.hi", game.rom));
         let template = self.reset_hiscore(game, &live)?;
 
         let rom_path = self.rom_dir.join(format!("{}.zip", game.rom));
@@ -112,64 +114,57 @@ impl Launcher {
         let pid = child.id();
         let status = child.wait().map_err(LauncherError::Wait)?;
         let seconds = started.elapsed().as_secs_f64();
-        info!(rom = %game.rom, pid, code = ?status.code(), seconds, "game exited");
-        if !status.success() {
-            // A launcher that failed leaves the template on disk, and the
-            // template decodes as a score of zero. That is not a run.
-            warn!(rom = %game.rom, code = ?status.code(), "the launcher failed, no score is read");
+        if status.success() {
+            info!(rom = %game.rom, pid, seconds, "game exited");
+        } else {
+            // The core writes the file before RetroArch shuts down, so a bad
+            // exit code can still come with a real score. The file decides.
+            warn!(rom = %game.rom, pid, code = ?status.code(), signal = ?signal_of(status), seconds, "the launcher exited with a failure");
+        }
+
+        let Some(template) = template else {
             return Ok(Outcome {
                 rom: game.rom.clone(),
                 score: None,
-                note: Some("The game did not run".to_owned()),
+                note: Some("No score template for this game".to_owned()),
             });
-        }
-
-        Ok(read_outcome(game, &live, template.as_deref()))
+        };
+        Ok(read_outcome(game, &live, &template))
     }
 
     /// Puts the template in place and returns its bytes, so the read-back can
-    /// tell an untouched file from a real run.
+    /// tell an untouched file from a real run. Without a template there is no
+    /// reset, and the run cannot give a score: the game would write its own
+    /// default table, and the default top entry would read as the score.
     fn reset_hiscore(&self, game: &Game, live: &Path) -> Result<Option<Vec<u8>>, LauncherError> {
         std::fs::create_dir_all(&self.hiscore_dir).map_err(|source| LauncherError::CreateDir {
             path: self.hiscore_dir.clone(),
             source,
         })?;
         let template = self.template_dir.join(format!("{}.hi", game.rom));
-        if template.is_file() {
-            let bytes = std::fs::read(&template).map_err(|source| LauncherError::Template {
-                template: template.clone(),
-                live: live.to_owned(),
-                source,
-            })?;
-            std::fs::write(live, &bytes).map_err(|source| LauncherError::Template {
-                template: template.clone(),
-                live: live.to_owned(),
-                source,
-            })?;
-            info!(rom = %game.rom, template = %template.display(), live = %live.display(), bytes = bytes.len(), "hiscore reset from template");
-            return Ok(Some(bytes));
-        }
-        // Without a template, a stale file from an earlier run would read as
-        // the score of this run. No file is the safer start.
-        match std::fs::remove_file(live) {
-            Ok(()) => {
-                warn!(rom = %game.rom, live = %live.display(), "no template, stale hiscore file removed")
-            }
+        let bytes = match std::fs::read(&template) {
+            Ok(bytes) => bytes,
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-                warn!(rom = %game.rom, "no template and no live hiscore file, the game starts with its defaults")
+                warn!(rom = %game.rom, template = %template.display(), "no template, the run gives no score");
+                return Ok(None);
             }
             Err(source) => {
-                return Err(LauncherError::RemoveStale {
-                    path: live.to_owned(),
+                return Err(LauncherError::ReadTemplate {
+                    path: template,
                     source,
                 });
             }
-        }
-        Ok(None)
+        };
+        std::fs::write(live, &bytes).map_err(|source| LauncherError::WriteHiscore {
+            path: live.to_owned(),
+            source,
+        })?;
+        info!(rom = %game.rom, template = %template.display(), live = %live.display(), bytes = bytes.len(), "hiscore reset from template");
+        Ok(Some(bytes))
     }
 }
 
-fn read_outcome(game: &Game, live: &Path, template: Option<&[u8]>) -> Outcome {
+fn read_outcome(game: &Game, live: &Path, template: &[u8]) -> Outcome {
     let bytes = match std::fs::read(live) {
         Ok(bytes) => bytes,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
@@ -189,7 +184,7 @@ fn read_outcome(game: &Game, live: &Path, template: Option<&[u8]>) -> Outcome {
             };
         }
     };
-    if template.is_some_and(|template| template == bytes.as_slice()) {
+    if bytes == template {
         warn!(rom = %game.rom, live = %live.display(), "the hiscore file is still the template, the game wrote nothing");
         return Outcome {
             rom: game.rom.clone(),
@@ -197,9 +192,19 @@ fn read_outcome(game: &Game, live: &Path, template: Option<&[u8]>) -> Outcome {
             note: Some("The game wrote no new score".to_owned()),
         };
     }
+    if bytes.len() != template.len() {
+        // The core writes the same ranges every time, so another size is a
+        // cut write or a wrong template, never a score.
+        warn!(rom = %game.rom, live = %live.display(), bytes = bytes.len(), template = template.len(), "the hiscore file has another size than the template");
+        return Outcome {
+            rom: game.rom.clone(),
+            score: None,
+            note: Some("The score file has an unexpected size".to_owned()),
+        };
+    }
     match hiscore::decode(game.decoder, &bytes) {
         Ok(score) => {
-            info!(rom = %game.rom, bytes = bytes.len(), score = score.0, "hiscore decoded");
+            info!(rom = %game.rom, live = %live.display(), bytes = bytes.len(), score = %score, "hiscore decoded");
             Outcome {
                 rom: game.rom.clone(),
                 score: Some(score),
@@ -209,6 +214,7 @@ fn read_outcome(game: &Game, live: &Path, template: Option<&[u8]>) -> Outcome {
         Err(e) => {
             warn!(
                 rom = %game.rom,
+                live = %live.display(),
                 bytes = bytes.len(),
                 head = %hex_head(&bytes),
                 error = %e,
@@ -221,6 +227,17 @@ fn read_outcome(game: &Game, live: &Path, template: Option<&[u8]>) -> Outcome {
             }
         }
     }
+}
+
+#[cfg(unix)]
+fn signal_of(status: ExitStatus) -> Option<i32> {
+    use std::os::unix::process::ExitStatusExt;
+    status.signal()
+}
+
+#[cfg(not(unix))]
+fn signal_of(_status: ExitStatus) -> Option<i32> {
+    None
 }
 
 fn hex_head(bytes: &[u8]) -> String {

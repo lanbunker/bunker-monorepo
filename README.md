@@ -10,7 +10,8 @@ This monorepo contains all software for LAN BUNKER live multiplayer events.
 web/                   Astro site, server rendered on Cloudflare Workers
 crates/bunker-models   Domain types shared by every Rust crate
 crates/bunker-api      axum + sqlx + SQLite backend
-crates/bunker-cabd     Cabinet daemon and screen for the RetroPie box. Design: crates/bunker-cabd/DESIGN.md
+crates/cabd-core       The cabinet software as a library: state machine, launcher, conductor
+crates/bunker-cabd     The cabinet binary: the SDL2 screen around cabd-core. Design: crates/bunker-cabd/DESIGN.md
 deploy/                Container bootstrap, systemd units, one-time setup guide
 ```
 
@@ -25,7 +26,12 @@ the browser never talks to the API.
 ## Try it
 
 You need Rust, `sqlite3` and the sqlx CLI. The CLI is necessary only to create
-the database and run migrations.
+the database and run migrations. The cabinet binary links SDL2 and SDL2_ttf
+through `pkg-config`, and `make checklist` builds it, so a Mac also needs:
+
+```bash
+brew install sdl2 sdl2_ttf pkg-config
+```
 
 ```bash
 cp .env.template .env
@@ -370,3 +376,9 @@ and three variables, `API_HOST`, `SSH_HOST` and `SSH_KNOWN_HOSTS`.
 `deploy/README.md` holds the one-time setup of the container and the tunnel,
 the bootstrap script, and the day-to-day commands: logs, backups, making an
 admin, rotating the key.
+
+## Third party
+
+The cabinet binary embeds the Press Start 2P font, under the SIL Open Font
+License. The license is in `crates/bunker-cabd/assets/OFL.txt`, and a deploy
+of the binary must carry it.

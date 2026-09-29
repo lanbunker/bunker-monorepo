@@ -20,7 +20,10 @@ mod role;
 mod schema;
 mod tournament;
 
-pub use arcade::{ROM_NAME_MAX_LEN, RomName, RomNameError, Score};
+pub use arcade::{
+    GAME_TITLE_MAX_LEN, GameTitle, GameTitleError, ROM_NAME_MAX_LEN, RomName, RomNameError,
+    SCORE_MAX, Score, ScoreError,
+};
 pub use auth::{
     LoginRequest, PASSWORD_MAX_LEN, PASSWORD_MIN_LEN, Password, PasswordChange, PasswordError,
     SignupRequest, TemporaryPassword, TokenResponse,

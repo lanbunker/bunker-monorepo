@@ -12,4 +12,4 @@ pub mod hiscore;
 pub mod launcher;
 pub mod view;
 
-pub use conductor::{ConductorGone, Handle, StartError, start};
+pub use conductor::{ConductorGone, ConductorPanicked, Handle, StartError, error_chain, start};

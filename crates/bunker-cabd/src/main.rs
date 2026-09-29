@@ -7,7 +7,7 @@ mod screen;
 use std::path::PathBuf;
 
 use cabd_core::config::Config;
-use cabd_core::view::{Orientation, OverscanPercent, ScreenConfig};
+use cabd_core::view::{DisplayAspect, Orientation, OverscanPercent, ScreenConfig, TateTurn};
 use clap::{Parser, Subcommand};
 use tracing::info;
 use tracing_subscriber::EnvFilter;
@@ -30,14 +30,25 @@ enum Command {
         orientation: Orientation,
         #[arg(long, default_value = "0")]
         overscan_percent: OverscanPercent,
+        /// The shape of the display, such as `4:3`. Only the canvas shape
+        /// changes, because a PNG has square pixels.
+        #[arg(long)]
+        display_aspect: Option<DisplayAspect>,
     },
 }
 
 fn main() -> anyhow::Result<()> {
+    let filter = match EnvFilter::try_from_default_env() {
+        Ok(filter) => filter,
+        Err(e) => {
+            // The log is not set up yet, so this is the one place that prints
+            // to stderr by hand.
+            eprintln!("RUST_LOG is not valid ({e}), using `info`");
+            EnvFilter::new("info")
+        }
+    };
     tracing_subscriber::fmt()
-        .with_env_filter(
-            EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")),
-        )
+        .with_env_filter(filter)
         .with_target(false)
         .with_thread_names(true)
         .init();
@@ -51,17 +62,21 @@ fn main() -> anyhow::Result<()> {
         Command::Run(config) => {
             let screen_config = config.screen();
             let handle = cabd_core::start(config)?;
-            screen::run(screen_config, handle)?;
+            let handle = screen::run(screen_config, handle)?;
+            handle.join()?;
         }
         Command::Screenshots {
             out,
             orientation,
             overscan_percent,
+            display_aspect,
         } => {
             screen::screenshots(
                 &out,
                 ScreenConfig {
                     orientation,
+                    tate_turn: TateTurn::Left,
+                    display_aspect,
                     overscan_percent,
                     window: None,
                     upright: false,

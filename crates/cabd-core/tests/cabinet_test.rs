@@ -7,10 +7,12 @@
 
 use std::time::{Duration, Instant};
 
-use bunker_models::{RomName, Score};
+use bunker_models::{GameTitle, RomName, Score};
 use cabd_core::cabinet::{Cabinet, CabinetConfig, Effect, Event, Game, Outcome, Step};
 use cabd_core::hiscore::Decoder;
 use cabd_core::view::{DevCommand, Frame, Input, Orientation, Scenario, Screen, Tone};
+
+const IDLE: Duration = Duration::from_secs(60);
 
 fn rom(name: &str) -> RomName {
     RomName::try_new(name).unwrap()
@@ -19,7 +21,7 @@ fn rom(name: &str) -> RomName {
 fn game(name: &str, title: &str, orientation: Orientation) -> Game {
     Game {
         rom: rom(name),
-        title: title.to_owned(),
+        title: GameTitle::try_new(title).unwrap(),
         orientation,
         decoder: Decoder::AsciiDecimal,
     }
@@ -31,7 +33,7 @@ fn config() -> CabinetConfig {
             game("bublbobl", "Bubble Bobble", Orientation::Landscape),
             game("galaga", "Galaga", Orientation::Tate),
         ],
-        idle: Duration::from_secs(60),
+        idle: IDLE,
     }
 }
 
@@ -47,12 +49,26 @@ fn screen(step: &Step) -> &Screen {
     }
 }
 
-fn confirm_game(cabinet: &mut Cabinet, now: Instant, index: usize) -> Step {
+fn outcome(name: &str, score: Option<u64>, note: Option<&str>) -> Outcome {
+    Outcome {
+        rom: rom(name),
+        score: score.map(|s| Score::try_new(s).unwrap()),
+        note: note.map(str::to_owned),
+    }
+}
+
+/// Selects the game at `index` and releases the display, so the cabinet is in
+/// the game. Returns the time of the last press.
+fn play(cabinet: &mut Cabinet, now: Instant, index: usize) -> Instant {
     cabinet.apply(Event::Input(Input::Confirm), now);
     for _ in 0..index {
         cabinet.apply(Event::Input(Input::Down), now);
     }
-    cabinet.apply(Event::Input(Input::Confirm), now)
+    let step = cabinet.apply(Event::Input(Input::Confirm), now);
+    assert_eq!(step.frame, Some(Frame::Suspended));
+    cabinet.apply(Event::DisplayReleased, now);
+    assert_eq!(cabinet.state_name(), "in_game");
+    now
 }
 
 #[test]
@@ -60,9 +76,9 @@ fn starts_on_attract_and_any_button_opens_select() {
     let (mut cabinet, now) = new_cabinet();
     assert!(matches!(
         cabinet.frame(),
-        Frame::Show(vm) if matches!(vm.screen, Screen::Attract { .. })
+        Frame::Show(vm) if matches!(vm.screen, Screen::Attract { qr_payload: Some(_), .. })
     ));
-    let step = cabinet.apply(Event::Input(Input::Confirm), now);
+    let step = cabinet.apply(Event::Input(Input::Back), now);
     match screen(&step) {
         Screen::Select { games, selected } => {
             assert_eq!(*selected, 0);
@@ -74,19 +90,25 @@ fn starts_on_attract_and_any_button_opens_select() {
 }
 
 #[test]
-fn select_wraps_in_both_directions() {
+fn select_wraps_in_both_directions_and_back_returns_to_attract() {
     let (mut cabinet, now) = new_cabinet();
     cabinet.apply(Event::Input(Input::Confirm), now);
     let step = cabinet.apply(Event::Input(Input::Up), now);
     assert!(matches!(screen(&step), Screen::Select { selected: 1, .. }));
     let step = cabinet.apply(Event::Input(Input::Down), now);
     assert!(matches!(screen(&step), Screen::Select { selected: 0, .. }));
+    let step = cabinet.apply(Event::Input(Input::Left), now);
+    assert_eq!(step.frame, None, "left and right mean nothing in the list");
+    let step = cabinet.apply(Event::Input(Input::Back), now);
+    assert!(matches!(screen(&step), Screen::Attract { .. }));
 }
 
 #[test]
 fn confirm_suspends_then_display_released_launches() {
     let (mut cabinet, now) = new_cabinet();
-    let step = confirm_game(&mut cabinet, now, 1);
+    cabinet.apply(Event::Input(Input::Confirm), now);
+    cabinet.apply(Event::Input(Input::Down), now);
+    let step = cabinet.apply(Event::Input(Input::Confirm), now);
     assert_eq!(step.frame, Some(Frame::Suspended));
     assert!(
         step.effects.is_empty(),
@@ -100,28 +122,31 @@ fn confirm_suspends_then_display_released_launches() {
         vec![Effect::Launch(game("galaga", "Galaga", Orientation::Tate))]
     );
     assert_eq!(cabinet.state_name(), "in_game");
+
+    let step = cabinet.apply(Event::DisplayReleased, now);
+    assert!(step.effects.is_empty(), "a second release launches nothing");
+    let step = cabinet.apply(Event::Input(Input::Confirm), now);
+    assert_eq!(step.frame, None, "input during a game is ignored");
+    assert_eq!(cabinet.state_name(), "in_game");
 }
 
 #[test]
-fn display_released_outside_a_launch_does_nothing() {
+fn display_released_and_game_ended_outside_a_launch_do_nothing() {
     let (mut cabinet, now) = new_cabinet();
     let step = cabinet.apply(Event::DisplayReleased, now);
     assert_eq!(step.frame, None);
     assert!(step.effects.is_empty());
+    let step = cabinet.apply(Event::GameEnded(outcome("galaga", Some(1), None)), now);
+    assert_eq!(step.frame, None);
     assert_eq!(cabinet.state_name(), "attract");
 }
 
 #[test]
-fn game_ended_shows_postgame_with_a_formatted_score() {
+fn game_ended_shows_postgame_with_a_formatted_score_and_the_rom_as_command() {
     let (mut cabinet, now) = new_cabinet();
-    confirm_game(&mut cabinet, now, 0);
-    cabinet.apply(Event::DisplayReleased, now);
+    play(&mut cabinet, now, 0);
     let step = cabinet.apply(
-        Event::GameEnded(Outcome {
-            rom: rom("bublbobl"),
-            score: Some(Score(1_234_560)),
-            note: None,
-        }),
+        Event::GameEnded(outcome("bublbobl", Some(1_234_560), None)),
         now,
     );
     match step.frame.as_ref().expect("a frame") {
@@ -144,16 +169,15 @@ fn game_ended_shows_postgame_with_a_formatted_score() {
 }
 
 #[test]
-fn game_ended_without_a_score_shows_the_note() {
+fn game_ended_without_a_score_shows_the_note_as_a_dim_status() {
     let (mut cabinet, now) = new_cabinet();
-    confirm_game(&mut cabinet, now, 0);
-    cabinet.apply(Event::DisplayReleased, now);
+    play(&mut cabinet, now, 0);
     let step = cabinet.apply(
-        Event::GameEnded(Outcome {
-            rom: rom("bublbobl"),
-            score: None,
-            note: Some("The game wrote no score file".to_owned()),
-        }),
+        Event::GameEnded(outcome(
+            "bublbobl",
+            None,
+            Some("The game wrote no score file"),
+        )),
         now,
     );
     match screen(&step) {
@@ -172,35 +196,77 @@ fn game_ended_without_a_score_shows_the_note() {
 }
 
 #[test]
-fn postgame_confirm_returns_to_select_on_the_same_game() {
+fn input_right_after_game_over_is_ignored_for_a_moment() {
     let (mut cabinet, now) = new_cabinet();
-    confirm_game(&mut cabinet, now, 1);
-    cabinet.apply(Event::DisplayReleased, now);
-    cabinet.apply(
-        Event::GameEnded(Outcome {
-            rom: rom("galaga"),
-            score: Some(Score(10)),
-            note: None,
-        }),
-        now,
+    play(&mut cabinet, now, 1);
+    let ended = now + Duration::from_secs(300);
+    cabinet.apply(Event::GameEnded(outcome("galaga", Some(10), None)), ended);
+
+    let step = cabinet.apply(
+        Event::Input(Input::Confirm),
+        ended + Duration::from_millis(500),
     );
-    let step = cabinet.apply(Event::Input(Input::Confirm), now);
+    assert_eq!(
+        step.frame, None,
+        "a mashed button must not skip the postgame"
+    );
+    assert_eq!(cabinet.state_name(), "postgame");
+
+    let step = cabinet.apply(Event::Input(Input::Confirm), ended + Duration::from_secs(2));
+    assert_eq!(
+        step.frame,
+        Some(Frame::Suspended),
+        "confirm plays the same game again"
+    );
+    let step = cabinet.apply(Event::DisplayReleased, ended + Duration::from_secs(2));
+    assert_eq!(
+        step.effects,
+        vec![Effect::Launch(game("galaga", "Galaga", Orientation::Tate))]
+    );
+}
+
+#[test]
+fn postgame_back_returns_to_select_on_the_same_game() {
+    let (mut cabinet, now) = new_cabinet();
+    play(&mut cabinet, now, 1);
+    let ended = now + Duration::from_secs(300);
+    cabinet.apply(Event::GameEnded(outcome("galaga", Some(10), None)), ended);
+    let later = ended + Duration::from_secs(2);
+    let step = cabinet.apply(Event::Input(Input::Up), later);
+    assert_eq!(step.frame, None, "directions mean nothing on the postgame");
+    let step = cabinet.apply(Event::Input(Input::Back), later);
     assert!(matches!(screen(&step), Screen::Select { selected: 1, .. }));
 }
 
 #[test]
-fn idle_returns_select_and_postgame_to_attract_but_not_a_game() {
+fn select_goes_back_to_attract_after_the_idle_time_from_the_last_press() {
     let (mut cabinet, now) = new_cabinet();
-    cabinet.apply(Event::Input(Input::Confirm), now);
-    let step = cabinet.apply(Event::Tick, now + Duration::from_secs(59));
+    let pressed = now + Duration::from_secs(10);
+    cabinet.apply(Event::Input(Input::Confirm), pressed);
+    let step = cabinet.apply(Event::Tick, pressed + IDLE - Duration::from_secs(1));
     assert_eq!(step.frame, None, "still inside the idle window");
-    let step = cabinet.apply(Event::Tick, now + Duration::from_secs(60));
+    let step = cabinet.apply(Event::Tick, pressed + IDLE);
     assert!(matches!(screen(&step), Screen::Attract { .. }));
+}
 
+#[test]
+fn postgame_goes_back_to_attract_after_the_idle_time_from_game_over() {
     let (mut cabinet, now) = new_cabinet();
-    confirm_game(&mut cabinet, now, 0);
-    cabinet.apply(Event::DisplayReleased, now);
-    let step = cabinet.apply(Event::Tick, now + Duration::from_secs(3600));
+    play(&mut cabinet, now, 0);
+    let ended = now + Duration::from_secs(3600);
+    cabinet.apply(Event::GameEnded(outcome("bublbobl", Some(5), None)), ended);
+    let step = cabinet.apply(Event::Tick, ended + IDLE - Duration::from_secs(1));
+    assert_eq!(step.frame, None, "the game time does not count as idle");
+    assert_eq!(cabinet.state_name(), "postgame");
+    let step = cabinet.apply(Event::Tick, ended + IDLE);
+    assert!(matches!(screen(&step), Screen::Attract { .. }));
+}
+
+#[test]
+fn a_game_in_progress_never_times_out() {
+    let (mut cabinet, now) = new_cabinet();
+    play(&mut cabinet, now, 0);
+    let step = cabinet.apply(Event::Tick, now + Duration::from_secs(36_000));
     assert_eq!(step.frame, None);
     assert_eq!(cabinet.state_name(), "in_game");
 }
@@ -215,24 +281,30 @@ fn quit_is_an_effect_and_touches_no_state() {
 }
 
 #[test]
-fn a_scenario_command_jumps_to_that_screen() {
+fn a_scenario_command_jumps_to_that_screen_and_resets_the_idle_time() {
     let (mut cabinet, now) = new_cabinet();
+    let later = now + Duration::from_secs(3600);
     let step = cabinet.apply(
         Event::Command(DevCommand::Scenario(Scenario::Postgame)),
-        now,
+        later,
     );
     assert!(matches!(screen(&step), Screen::Postgame { .. }));
-    let step = cabinet.apply(Event::Command(DevCommand::Scenario(Scenario::Select)), now);
+    let step = cabinet.apply(Event::Tick, later + Duration::from_secs(1));
+    assert_eq!(step.frame, None, "the scenario counts as input");
+    let step = cabinet.apply(
+        Event::Command(DevCommand::Scenario(Scenario::Select)),
+        later,
+    );
     assert!(matches!(screen(&step), Screen::Select { selected: 0, .. }));
 }
 
 #[test]
-fn a_cabinet_without_games_never_launches() {
+fn a_cabinet_without_games_never_launches_and_shows_attract_for_a_postgame_scenario() {
     let now = Instant::now();
     let mut cabinet = Cabinet::new(
         CabinetConfig {
             games: Vec::new(),
-            idle: Duration::from_secs(60),
+            idle: IDLE,
         },
         now,
     );
@@ -241,4 +313,9 @@ fn a_cabinet_without_games_never_launches() {
     assert_eq!(step.frame, None);
     assert!(step.effects.is_empty());
     assert_eq!(cabinet.state_name(), "select");
+    let step = cabinet.apply(
+        Event::Command(DevCommand::Scenario(Scenario::Postgame)),
+        now,
+    );
+    assert!(matches!(screen(&step), Screen::Attract { .. }));
 }

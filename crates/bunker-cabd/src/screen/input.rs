@@ -1,6 +1,6 @@
 //! From an SDL event to what the conductor understands. Keyboard for the
 //! desktop, the first joystick for the cabinet. Debug builds add function keys
-//! that jump to a scenario.
+//! that jump to a scenario, and a key that quits.
 
 use cabd_core::view::{DevCommand, Input, Scenario};
 use sdl2::JoystickSubsystem;
@@ -22,6 +22,9 @@ pub(crate) enum Mapped {
     Quit,
 }
 
+/// The joystick and the state that turns its reports into inputs. One per
+/// window: the subsystem is opened with the window and closed with it, so the
+/// emulator gets the device to itself while a game runs.
 pub(crate) struct InputMap {
     subsystem: JoystickSubsystem,
     joystick: Option<Joystick>,
@@ -30,16 +33,75 @@ pub(crate) struct InputMap {
 
 impl InputMap {
     pub(crate) fn new(subsystem: JoystickSubsystem) -> Self {
-        Self {
+        let mut map = Self {
             subsystem,
             joystick: None,
             axes: AxisState::default(),
-        }
+        };
+        map.open_joystick();
+        map
     }
 
-    /// Opens the first joystick. RetroArch takes the device while a game runs,
-    /// so the screen closes it before a launch and opens it again after.
-    pub(crate) fn open_joystick(&mut self) {
+    /// True for an event a player makes. The quit and device events are not
+    /// input, and a screen that comes back after a game keeps those.
+    pub(crate) fn is_player_input(event: &SdlEvent) -> bool {
+        matches!(
+            event,
+            SdlEvent::KeyDown { .. }
+                | SdlEvent::KeyUp { .. }
+                | SdlEvent::JoyButtonDown { .. }
+                | SdlEvent::JoyButtonUp { .. }
+                | SdlEvent::JoyHatMotion { .. }
+                | SdlEvent::JoyAxisMotion { .. }
+        )
+    }
+
+    pub(crate) fn map(&mut self, event: SdlEvent) -> Option<Mapped> {
+        let mapped = match event {
+            SdlEvent::Quit { .. } => Some(Mapped::Quit),
+            SdlEvent::JoyDeviceAdded { .. } => {
+                self.open_joystick();
+                None
+            }
+            SdlEvent::JoyDeviceRemoved { .. } => {
+                if self.joystick.take().is_some() {
+                    warn!("joystick removed");
+                }
+                self.axes = AxisState::default();
+                None
+            }
+            SdlEvent::KeyDown {
+                keycode: Some(key),
+                repeat: false,
+                ..
+            } => map_key(key),
+            SdlEvent::JoyButtonDown { button_idx, .. } => match button_idx {
+                BUTTON_CONFIRM => Some(Mapped::Input(Input::Confirm)),
+                BUTTON_BACK => Some(Mapped::Input(Input::Back)),
+                _ => None,
+            },
+            SdlEvent::JoyHatMotion { state, .. } => {
+                self.axes.hat_seen = true;
+                match state {
+                    HatState::Up => Some(Mapped::Input(Input::Up)),
+                    HatState::Down => Some(Mapped::Input(Input::Down)),
+                    HatState::Left => Some(Mapped::Input(Input::Left)),
+                    HatState::Right => Some(Mapped::Input(Input::Right)),
+                    _ => None,
+                }
+            }
+            SdlEvent::JoyAxisMotion {
+                axis_idx, value, ..
+            } => self.axes.update(axis_idx, value).map(Mapped::Input),
+            _ => None,
+        };
+        if let Some(mapped) = &mapped {
+            debug!(?mapped, "input");
+        }
+        mapped
+    }
+
+    fn open_joystick(&mut self) {
         if self.joystick.is_some() {
             return;
         }
@@ -55,56 +117,24 @@ impl InputMap {
             Err(e) => warn!(error = %e, "cannot count joysticks"),
         }
     }
-
-    pub(crate) fn close_joystick(&mut self) {
-        if self.joystick.take().is_some() {
-            info!("joystick closed");
-        }
-        self.axes = AxisState::default();
-    }
-
-    pub(crate) fn map(&mut self, event: SdlEvent) -> Option<Mapped> {
-        let mapped = match event {
-            SdlEvent::Quit { .. } => Some(Mapped::Quit),
-            SdlEvent::KeyDown {
-                keycode: Some(key),
-                repeat: false,
-                ..
-            } => map_key(key),
-            SdlEvent::JoyButtonDown { button_idx, .. } => match button_idx {
-                BUTTON_CONFIRM => Some(Mapped::Input(Input::Confirm)),
-                BUTTON_BACK => Some(Mapped::Input(Input::Back)),
-                _ => None,
-            },
-            SdlEvent::JoyHatMotion { state, .. } => match state {
-                HatState::Up => Some(Mapped::Input(Input::Up)),
-                HatState::Down => Some(Mapped::Input(Input::Down)),
-                HatState::Left => Some(Mapped::Input(Input::Left)),
-                HatState::Right => Some(Mapped::Input(Input::Right)),
-                _ => None,
-            },
-            SdlEvent::JoyAxisMotion {
-                axis_idx, value, ..
-            } => self.axes.update(axis_idx, value).map(Mapped::Input),
-            _ => None,
-        };
-        if let Some(mapped) = &mapped {
-            debug!(?mapped, "input");
-        }
-        mapped
-    }
 }
 
 /// The last direction seen on the x and y axes, so a held stick sends one
-/// event and not one per motion report.
+/// event and not one per motion report. A stick that reports on a hat and on
+/// the axes both would send each direction two times, so once a hat report
+/// arrives the axes are ignored.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 struct AxisState {
     x: i8,
     y: i8,
+    hat_seen: bool,
 }
 
 impl AxisState {
     fn update(&mut self, axis_idx: u8, value: i16) -> Option<Input> {
+        if self.hat_seen {
+            return None;
+        }
         let direction: i8 = if value <= -AXIS_THRESHOLD {
             -1
         } else if value >= AXIS_THRESHOLD {
@@ -138,7 +168,7 @@ fn map_key(key: Keycode) -> Option<Mapped> {
         Keycode::Right => Input::Right,
         Keycode::Return | Keycode::Space | Keycode::Z => Input::Confirm,
         Keycode::Escape | Keycode::X => Input::Back,
-        Keycode::Q => return Some(Mapped::Quit),
+        Keycode::Q if cfg!(debug_assertions) => return Some(Mapped::Quit),
         Keycode::F1 if cfg!(debug_assertions) => {
             return Some(Mapped::Command(DevCommand::Scenario(Scenario::Attract)));
         }
@@ -178,5 +208,14 @@ mod tests {
         assert_eq!(axes.update(0, 15999), None);
         assert_eq!(axes.update(0, -15999), None);
         assert_eq!(axes.update(2, 32767), None);
+    }
+
+    #[test]
+    fn once_a_hat_reports_the_axes_are_ignored() {
+        let mut axes = AxisState::default();
+        assert_eq!(axes.update(0, 32767), Some(Input::Right));
+        axes.hat_seen = true;
+        assert_eq!(axes.update(0, -32768), None);
+        assert_eq!(axes.update(1, 32767), None);
     }
 }

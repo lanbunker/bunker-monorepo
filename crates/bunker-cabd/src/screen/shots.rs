@@ -17,8 +17,17 @@ use super::draw::draw_view;
 use super::samples::samples;
 use super::text::{Cache, Fonts};
 
-/// A 4:3 output, the shape of the CRT.
+/// A 4:3 output at scale 1, the shape of the CRT.
 const OUTPUT: (u32, u32) = (320, 240);
+
+/// The output size that gives the canvas shape of the configuration at scale
+/// 1, so the PNG is the canvas itself.
+fn output_for(config: &ScreenConfig) -> (u32, u32) {
+    match config.display_aspect {
+        Some(aspect) => (240 * aspect.width / aspect.height.max(1), 240),
+        None => OUTPUT,
+    }
+}
 
 pub(crate) fn screenshots(out: &Path, config: ScreenConfig) -> Result<(), ScreenError> {
     std::fs::create_dir_all(out).map_err(|source| ScreenError::Io {
@@ -27,7 +36,7 @@ pub(crate) fn screenshots(out: &Path, config: ScreenConfig) -> Result<(), Screen
     })?;
     let ttf = sdl2::ttf::init()?;
     let fonts = Fonts::load(&ttf)?;
-    let layout = Layout::new(OUTPUT, &config);
+    let layout = Layout::new(output_for(&config), &config);
     info!(canvas_w = layout.width, canvas_h = layout.height, safe = ?layout.safe, "rendering samples");
 
     for (name, vm) in samples() {

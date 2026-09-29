@@ -4,7 +4,7 @@
 
 use std::time::{Duration, Instant};
 
-use bunker_models::{RomName, Score};
+use bunker_models::{GameTitle, RomName, Score};
 
 use crate::hiscore::Decoder;
 use crate::view::{
@@ -12,19 +12,27 @@ use crate::view::{
     format_score,
 };
 
-/// What the attract QR code encodes until the check-in flow exists. The site
-/// root is true today and the nonce URL replaces it.
+/// What the attract QR code encodes while no check-in flow exists: the site
+/// root. The nonce URL takes its place.
 const ATTRACT_QR_PAYLOAD: &str = "https://lanbunker.eu";
+
+/// After a game ends, input is ignored for this long. A player who mashes a
+/// button at game over must see the postgame screen, not skip it.
+const POSTGAME_LOCKOUT: Duration = Duration::from_millis(1500);
+
+/// The score a scenario shows, so a screen can be reviewed without a run.
+const SCENARIO_SCORE: u64 = 123_450;
 
 /// One entry of `games.toml`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Game {
     pub rom: RomName,
-    pub title: String,
+    pub title: GameTitle,
     pub orientation: Orientation,
     pub decoder: Decoder,
 }
 
+/// What the state machine needs to know about the cabinet.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CabinetConfig {
     pub games: Vec<Game>,
@@ -37,8 +45,8 @@ pub struct CabinetConfig {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Event {
     Input(Input),
-    /// The conductor sends one when nothing else arrives for a while. The
-    /// idle timeout runs on these.
+    /// The conductor sends one at a fixed interval. The idle timeout runs on
+    /// these.
     Tick,
     /// The screen has destroyed its window. The launcher may start.
     DisplayReleased,
@@ -67,6 +75,7 @@ pub enum Effect {
     Quit,
 }
 
+/// What one event produced.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Step {
     /// A new frame, or nothing when the screen has nothing new to draw.
@@ -74,29 +83,13 @@ pub struct Step {
     pub effects: Vec<Effect>,
 }
 
+/// The cabinet as a value. `apply` moves it and returns what changed.
 #[derive(Debug)]
 pub struct Cabinet {
     config: CabinetConfig,
     state: State,
     last_input: Instant,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-enum State {
-    Attract,
-    Select {
-        selected: usize,
-    },
-    /// Confirm was pressed. The screen is giving the display away.
-    Releasing {
-        game: Game,
-    },
-    InGame {
-        game: Game,
-    },
-    Postgame {
-        outcome: Outcome,
-    },
+    input_blocked_until: Option<Instant>,
 }
 
 impl Cabinet {
@@ -105,6 +98,7 @@ impl Cabinet {
             config,
             state: State::Attract,
             last_input: now,
+            input_blocked_until: None,
         }
     }
 
@@ -127,7 +121,7 @@ impl Cabinet {
                         .games
                         .iter()
                         .map(|game| GameCard {
-                            title: game.title.clone(),
+                            title: game.title.to_string(),
                         })
                         .collect(),
                     selected: *selected,
@@ -161,6 +155,8 @@ impl Cabinet {
         }
     }
 
+    /// Applies one event at time `now` and returns the frame and the effects
+    /// it produced.
     pub fn apply(&mut self, event: Event, now: Instant) -> Step {
         match event {
             Event::Quit => Step {
@@ -168,6 +164,10 @@ impl Cabinet {
                 effects: vec![Effect::Quit],
             },
             Event::Input(input) => {
+                if self.input_blocked_until.is_some_and(|until| now < until) {
+                    return Step::nothing();
+                }
+                self.input_blocked_until = None;
                 self.last_input = now;
                 self.on_input(input)
             }
@@ -186,6 +186,7 @@ impl Cabinet {
             Event::GameEnded(outcome) => match &self.state {
                 State::InGame { .. } => {
                     self.last_input = now;
+                    self.input_blocked_until = Some(now + POSTGAME_LOCKOUT);
                     self.goto(State::Postgame { outcome })
                 }
                 _ => Step::nothing(),
@@ -199,7 +200,6 @@ impl Cabinet {
 
     fn on_input(&mut self, input: Input) -> Step {
         match (&self.state, input) {
-            (State::Attract, Input::Back) => Step::nothing(),
             (State::Attract, _) => self.goto(State::Select { selected: 0 }),
             (State::Select { selected }, Input::Up) => {
                 let selected = selected
@@ -227,15 +227,15 @@ impl Cabinet {
             (State::Select { .. }, Input::Left | Input::Right) => Step::nothing(),
             (State::Releasing { .. } | State::InGame { .. }, _) => Step::nothing(),
             (State::Postgame { outcome }, Input::Confirm) => {
-                let selected = self
-                    .config
-                    .games
-                    .iter()
-                    .position(|game| game.rom == outcome.rom)
-                    .unwrap_or(0);
+                match self.game_of(&outcome.rom.clone()) {
+                    Some(game) => self.goto(State::Releasing { game }),
+                    None => self.goto(State::Select { selected: 0 }),
+                }
+            }
+            (State::Postgame { outcome }, Input::Back) => {
+                let selected = self.index_of(&outcome.rom.clone()).unwrap_or(0);
                 self.goto(State::Select { selected })
             }
-            (State::Postgame { .. }, Input::Back) => self.goto(State::Attract),
             (State::Postgame { .. }, Input::Up | Input::Down | Input::Left | Input::Right) => {
                 Step::nothing()
             }
@@ -261,7 +261,7 @@ impl Cabinet {
                 Some(game) => State::Postgame {
                     outcome: Outcome {
                         rom: game.rom.clone(),
-                        score: Some(Score(123_450)),
+                        score: Score::try_new(SCENARIO_SCORE).ok(),
                         note: Some("Scenario, not a real run".to_owned()),
                     },
                 },
@@ -277,6 +277,18 @@ impl Cabinet {
             effects: Vec::new(),
         }
     }
+
+    fn game_of(&self, rom: &RomName) -> Option<Game> {
+        self.config
+            .games
+            .iter()
+            .find(|game| &game.rom == rom)
+            .cloned()
+    }
+
+    fn index_of(&self, rom: &RomName) -> Option<usize> {
+        self.config.games.iter().position(|game| &game.rom == rom)
+    }
 }
 
 impl Step {
@@ -286,6 +298,24 @@ impl Step {
             effects: Vec::new(),
         }
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum State {
+    Attract,
+    Select {
+        selected: usize,
+    },
+    /// Confirm was pressed. The screen is giving the display away.
+    Releasing {
+        game: Game,
+    },
+    InGame {
+        game: Game,
+    },
+    Postgame {
+        outcome: Outcome,
+    },
 }
 
 fn show(command: &str, screen: Screen) -> Frame {
