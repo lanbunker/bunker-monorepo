@@ -116,7 +116,11 @@ A failure the visitor caused must reach the page as **one sentence they can act 
 ## Tests
 
 - Playwright only, under `e2e/`. Shared helpers live in `e2e/support.ts`
-- `signup`, `logout`, `signupAdmin` and `tokenFor` do the setup. Bulk setup goes straight to the API through `tokenFor`, because the UI is slow for thirty rows
+- One file per subject: `auth` for the account flows, `players` for the roster and the ledger, `admin` for the backoffice, `tournaments`, `events`, `errors` for the message of a refused form, and `pages` for the public pages
+- **The suite runs fully parallel.** Every test builds the rows it needs and names them in every assertion. Never assert a count over the whole roster, the whole list of tournaments or the whole leaderboard: another worker is writing at the same time. Scope the page with `?q=<prefix>` instead, and assert on `[data-tournament=<id>]` or `[data-event=<id>]`
+- **Setup goes through the API, not the UI.** `newPlayer` and `newAdmin` sign an account up and put its token in the session cookie, so a logged-in test starts with no page load at all. `clearSession` makes the browser a stranger again, and `setSession` puts a token back. `apiDraft`, `enrol`, `signupMany` and `adjustCycles` build the rest
+- Drive the UI only for the flow under test. `signup`, `login` and `logout` exist for the tests of those forms
+- Every handle comes from `handle(prefix)`, which carries the process, a counter and a random tail, so two workers cannot pick the same name
 - Write a test that can fail. An assertion that still passes after you delete the feature is worse than no test
 - Target a control by its role and name. Use a `data-*` attribute only when a role cannot say which element is meant, as `data-pick` does for a bracket side that takes a result
-- The suite shares one database, so every handle comes from `handle(prefix)`
+- A change in the backoffice redirects to the whole list and drops the `?q=` term, so a test that searched must search again after the change

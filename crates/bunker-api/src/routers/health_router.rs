@@ -10,8 +10,9 @@ use crate::services::PlayerService;
 use super::AppState;
 
 /// `/health/live` tells that the process runs. `/health/ready` tells that the
-/// process can query the database. The version lets a deploy script confirm that
-/// the new binary is the one that answers.
+/// process can query the database. The commit lets a deploy script confirm that
+/// the new binary is the one that answers: the version only changes with a
+/// release.
 pub fn health_router() -> Router<AppState> {
     Router::new()
         .route("/health/live", get(live))
@@ -22,11 +23,17 @@ pub fn health_router() -> Router<AppState> {
 pub(super) struct Health {
     status: &'static str,
     version: &'static str,
+    /// The git commit the binary was built from, `dev` for a local build.
+    commit: &'static str,
 }
 
 const HEALTHY: Health = Health {
     status: "ok",
     version: env!("CARGO_PKG_VERSION"),
+    commit: match option_env!("BUNKER_GIT_SHA") {
+        Some(sha) => sha,
+        None => "dev",
+    },
 };
 
 #[utoipa::path(get, path = "/health/live", tag = "health", responses((status = 200, body = Health)))]

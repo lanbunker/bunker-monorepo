@@ -1,6 +1,6 @@
-use bunker_models::{Handle, Paginated, Player, PlayerId, Role, RosterQuery};
+use bunker_models::{Account, Handle, Paginated, Player, PlayerId, Role, RosterQuery};
 
-use crate::storage::{ListOrder, PlayerStorage, Renamed};
+use crate::storage::{ListOrder, PlayerStorage, Removal, Renamed, RoleChanged};
 
 use super::error::ServiceError;
 
@@ -19,6 +19,14 @@ impl PlayerService {
             .get_by_handle(handle)
             .await?
             .ok_or_else(|| ServiceError::PlayerNotFound(handle.clone()))
+    }
+
+    /// The caller's own account, with what only the owner sees.
+    pub async fn account(&self, id: PlayerId) -> Result<Account, ServiceError> {
+        self.storage
+            .account(id)
+            .await?
+            .ok_or(ServiceError::PlayerIdNotFound(id))
     }
 
     /// The public leaderboard: first place first.
@@ -40,8 +48,8 @@ impl PlayerService {
             .await?)
     }
 
-    /// `actor` is the admin doing it. Nobody changes their own role, so the last
-    /// admin cannot lock the crew out by accident.
+    /// `actor` is the admin doing it. Nobody changes their own role, and the
+    /// crew keeps at least one admin, so nobody locks the crew out.
     pub async fn set_role(
         &self,
         actor: PlayerId,
@@ -51,10 +59,11 @@ impl PlayerService {
         if actor == id {
             return Err(ServiceError::SelfAction);
         }
-        self.storage
-            .set_role(id, role)
-            .await?
-            .ok_or(ServiceError::PlayerIdNotFound(id))
+        match self.storage.set_role(id, role).await? {
+            RoleChanged::Player(player) => Ok(player),
+            RoleChanged::NotFound => Err(ServiceError::PlayerIdNotFound(id)),
+            RoleChanged::LastAdmin => Err(ServiceError::LastAdmin),
+        }
     }
 
     /// The glyph stays. A handle that another player holds, in any letter case, is refused.
@@ -71,9 +80,10 @@ impl PlayerService {
         if actor == id {
             return Err(ServiceError::SelfAction);
         }
-        self.storage.delete(id).await?;
-
-        Ok(())
+        match self.storage.delete(id).await? {
+            Removal::Removed | Removal::Absent => Ok(()),
+            Removal::LastAdmin => Err(ServiceError::LastAdmin),
+        }
     }
 
     pub async fn check_ready(&self) -> Result<(), ServiceError> {

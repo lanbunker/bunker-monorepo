@@ -21,7 +21,11 @@ const previous = items.filter(e => phaseOf(e) === "past")
 ---
 
 <Layout title="EVENTS//LAN_BUNKER" active="events" events={listed?.items}>
-  <Prompt command="ls -la ./upcoming" comment={`${upcoming.length} entries`} />
+  <Prompt
+    heading="h1"
+    command="ls -la ./upcoming"
+    comment={`${upcoming.length} entries`}
+  />
 
   {!listed ? (
     <Alert message="The event database is unreachable." />

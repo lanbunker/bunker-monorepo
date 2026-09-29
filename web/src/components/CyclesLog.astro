@@ -2,6 +2,7 @@
 import type { PointEntry } from "../lib/api"
 import { entryLabel, signed } from "../lib/cycles"
 import { formatDate } from "../lib/dates"
+import { LOG_LIST, LOG_ROW } from "../lib/styles"
 
 interface Props {
   entries: PointEntry[]
@@ -15,9 +16,9 @@ const { entries, empty = "no cycles yet." } = Astro.props
 {entries.length === 0 ? (
   <p class="m-0 text-xs text-mute">{empty}</p>
 ) : (
-  <ol class="m-0 flex list-none flex-col p-0 text-xs" data-cycles-log>
+  <ol class={LOG_LIST} data-cycles-log>
     {entries.map(entry => (
-      <li class="grid grid-cols-[4.5rem_minmax(0,1fr)_auto] items-baseline gap-x-3 border-t border-faint py-2 first:border-t-0 hover:bg-faint/40">
+      <li class={LOG_ROW}>
         <span
           class:list={[
             "text-right font-bold tabular-nums",

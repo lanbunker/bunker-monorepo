@@ -6,7 +6,7 @@ import Button from "../../../components/ui/Button.astro"
 import Prompt from "../../../components/ui/Prompt.astro"
 import Layout from "../../../layouts/Layout.astro"
 import { call, dataOf, failureOf, isMissing } from "../../../lib/api"
-import { STATUS_LABEL } from "../../../lib/tournaments"
+import { statusBadge } from "../../../lib/tournaments"
 
 const id = Astro.params.id ?? ""
 const result = await call(client =>
@@ -16,15 +16,15 @@ const failure = failureOf(result)
 if (failure && isMissing(failure)) return Astro.rewrite("/404")
 
 const detail = dataOf(result)
-// A tournament with no bracket has no bracket page.
 if (detail && !detail.bracket) return Astro.rewrite("/404")
 const t = detail?.tournament
+const badge = t ? statusBadge(t) : undefined
 ---
 
 <Layout title={`${t?.name ?? "bracket"}//LAN_BUNKER`} active="tournaments">
-  <Prompt command={`cat ./tournaments/${id.slice(0, 8)}/bracket`} />
+  <Prompt heading="p" command={`cat ./tournaments/${id.slice(0, 8)}/bracket`} />
 
-  {detail && detail.bracket && t ? (
+  {detail && detail.bracket && t && badge ? (
     <>
       <div class="mb-4 flex flex-wrap items-baseline justify-between gap-3">
         <div>
@@ -32,11 +32,8 @@ const t = detail?.tournament
           <h1 class="m-0 text-base tracking-wider text-bright">{t.name}</h1>
           <div class="mt-1 text-xs text-dim">{t.mode}</div>
         </div>
-        <Badge
-          tone={t.status === "concluded" ? "muted" : "warn"}
-          filled={t.status === "live"}
-        >
-          {STATUS_LABEL[t.status]}
+        <Badge tone={badge.tone} filled={badge.filled}>
+          {badge.label}
         </Badge>
       </div>
       <BracketView bracket={detail.bracket} entrants={detail.entrants} />

@@ -1,6 +1,7 @@
 import { match } from "ts-pattern"
 
 import type { Event } from "./api"
+import type { BadgeTone } from "./styles"
 
 export type EventPhase = "upcoming" | "live" | "past"
 
@@ -17,8 +18,6 @@ export const nextEvent = (items: readonly Event[], now = Date.now()): Event | un
 
 /** The first night ever, for the uptime counter. */
 export const firstEvent = (items: readonly Event[]): Event | undefined => items.at(-1)
-
-export type BadgeTone = "accent" | "warn" | "muted"
 
 /** The badge of a card. Tonight is the loud one. */
 export const phaseBadge = (

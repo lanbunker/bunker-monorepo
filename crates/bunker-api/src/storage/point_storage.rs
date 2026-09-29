@@ -42,8 +42,7 @@ impl PointStorage {
         Self { pool }
     }
 
-    /// The service checks that the player exists first, so a foreign key
-    /// failure here is a bug and stays a failure.
+    /// The entry comes back with the time as the row holds it, in micros.
     pub async fn add_adjustment(
         &self,
         adjustment: &NewAdjustment,
@@ -81,7 +80,7 @@ impl PointStorage {
             event_id: None,
             event_name: None,
             note: Some(adjustment.note.clone()),
-            created_at: adjustment.created_at,
+            created_at: from_micros(TABLE, created_at)?,
         })
     }
 
@@ -162,8 +161,8 @@ impl PointStorage {
 }
 
 /// Writes the awards of a source on the caller's transaction, so they land with
-/// the write that earned them or not at all. A duplicate is a bug of the caller
-/// and stays a failure: the unique index reports it.
+/// the write that earned them or not at all. A duplicate stays a failure: the
+/// caller guards the write that pays, so the unique index sees a bug only.
 pub(super) async fn insert_awards(
     connection: &mut SqliteConnection,
     source: AwardSource,

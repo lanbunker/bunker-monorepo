@@ -1,6 +1,6 @@
 [package]
 name = "bunker-api"
-description = "The LAN BUNKER backend: players, glyphs and auth over SQLite"
+description = "The LAN BUNKER backend over SQLite: players and auth, tournaments and brackets, events and check-ins, and the cycles ledger"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

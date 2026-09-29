@@ -2,14 +2,6 @@ import { z } from "zod"
 
 import type { TournamentDetail } from "./api"
 
-/**
- * The kiosk reads the tournament detail from a site route, so the body arrives
- * over the wire and is data, not a type. This schema is the one place the site
- * turns it back into a value. It is the shape `openapi.json` declares: the
- * return type of `parseTournamentDetail` fails to compile when the two drift
- * apart.
- */
-
 /** The twelve palette colors. The API never sends another one. */
 const GLYPH_COLORS = [
     "#ffb000",
@@ -94,8 +86,13 @@ const detail = z.object({
 })
 
 /**
- * The detail, or `undefined` when the body is not one. The return type is the
- * contract check: the schema stops compiling when `make api-types` moves it.
+ * The detail, or `undefined` when the body is not one. The kiosk reads it from a
+ * site route, so it arrives over the wire and is data, not a type.
+ *
+ * The return type is the contract check against `openapi.json`, and it is only
+ * half of one. A `z.object` drops keys it does not declare, so a field the API
+ * adds passes unseen. Only a new required field, or a changed type, fails to
+ * compile after `make api-types`.
  */
 export const parseTournamentDetail = (body: unknown): TournamentDetail | undefined => {
     const parsed = detail.safeParse(body)

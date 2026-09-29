@@ -1,4 +1,5 @@
 ---
+import Alert from "./ui/Alert.astro"
 import type { KindTotal, Standing } from "../lib/api"
 import {
   RANKS,
@@ -31,14 +32,11 @@ const fresh =
 // 24 cells at text-sm is about 14rem. The panels go side by side only past 48rem,
 // so a half panel is always wider than the bar and the brackets stay on its line.
 const BAR_WIDTH = 24
-// The zombie grey names the rank well but reads as an empty bar. The bar of a
-// zombie borrows the ink color, so the filled cells show.
-const barClass = standing.rank === "zombie" ? "text-ink" : rank.text
 ---
 
 <div class="mt-4 grid gap-4 min-[48rem]:grid-cols-2">
   <Panel>
-    <h2 class="m-0 text-2xs font-normal tracking-wider text-dim">rank</h2>
+    <h2 class="m-0 text-sm font-normal tracking-wider text-dim">rank</h2>
     {fresh && standing.next ? (
       <div class="mt-3 flex flex-col gap-3 text-xs">
         <p class="m-0 text-dim">
@@ -67,7 +65,7 @@ const barClass = standing.rank === "zombie" ? "text-ink" : rank.text
           aria-hidden="true"
         >
           <span class="text-dim">[</span>
-          <span class={barClass}>{asciiBar(progress, BAR_WIDTH)}</span>
+          <span class={rank.text}>{asciiBar(progress, BAR_WIDTH)}</span>
           <span class="text-dim">]</span>
         </div>
         {standing.next ? (
@@ -91,7 +89,7 @@ const barClass = standing.rank === "zombie" ? "text-ink" : rank.text
   </Panel>
 
   <Panel>
-    <h2 class="m-0 text-2xs font-normal tracking-wider text-dim">cycles</h2>
+    <h2 class="m-0 text-sm font-normal tracking-wider text-dim">cycles</h2>
     <div class="mt-3 flex flex-col gap-1">
       {sources ? (
         SOURCES.map(source => (
@@ -102,7 +100,7 @@ const barClass = standing.rank === "zombie" ? "text-ink" : rank.text
           </Kv>
         ))
       ) : (
-        <p class="m-0 text-xs text-alert">the ledger is unreachable.</p>
+        <Alert message="the ledger is unreachable." />
       )}
       <Kv label="arcade">
         <span class="text-mute">coming soon</span>

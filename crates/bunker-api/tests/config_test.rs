@@ -14,7 +14,7 @@
 use std::collections::HashMap;
 
 use bunker_api::config::{
-    AppEnv, Env, EnvError, JWT_SECRET_MIN_LEN, Lookup, MaxConnections, NotUnicode,
+    AppEnv, DEV_JWT_SECRET, Env, EnvError, JWT_SECRET_MIN_LEN, Lookup, MaxConnections, NotUnicode,
     resolve_app_config,
 };
 
@@ -62,6 +62,24 @@ fn prod_refuses_to_start_without_a_jwt_secret() {
         matches!(&error, EnvError::Missing { name } if name == "JWT_SECRET"),
         "got {error:?}"
     );
+}
+
+/// The development secret is in the repository, so a token signed with it is a
+/// token anyone can sign.
+#[test]
+fn prod_refuses_the_development_secret() {
+    let error = Env::read_with(&lookup(&[
+        ("APP_ENV", "prod"),
+        ("JWT_SECRET", DEV_JWT_SECRET),
+    ]))
+    .unwrap_err();
+
+    assert!(
+        matches!(&error, EnvError::InvalidValue { name, .. } if name == "JWT_SECRET"),
+        "got {error:?}"
+    );
+    let local = Env::read_with(&lookup(&[("JWT_SECRET", DEV_JWT_SECRET)])).unwrap();
+    assert_eq!(local.jwt_secret.as_ref(), DEV_JWT_SECRET);
 }
 
 #[test]
@@ -154,6 +172,27 @@ fn an_empty_value_falls_back_to_the_default() {
 
     assert_eq!(env.port, 3000);
     assert!(env.database.url.starts_with("sqlite://"));
+}
+
+#[test]
+fn rust_log_is_read_and_a_blank_one_is_absent() {
+    let env = Env::read_with(&lookup(&[("RUST_LOG", "bunker_api=trace")])).unwrap();
+    assert_eq!(env.rust_log.as_deref(), Some("bunker_api=trace"));
+
+    let blank = Env::read_with(&lookup(&[("RUST_LOG", "")])).unwrap();
+    assert_eq!(blank.rust_log, None);
+}
+
+/// A typing error in `RUST_LOG` would otherwise start a server that logs
+/// nothing, and nobody would see why.
+#[test]
+fn an_invalid_log_filter_fails_the_start() {
+    let result = bunker_api::internal::init_tracing(
+        resolve_app_config(AppEnv::Test),
+        Some("bunker_api=loud"),
+    );
+
+    assert!(result.is_err());
 }
 
 #[test]

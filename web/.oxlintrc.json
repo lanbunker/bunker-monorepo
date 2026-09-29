@@ -41,6 +41,12 @@
     "rules": {
         "typescript/no-explicit-any": "error",
         "typescript/no-unsafe-type-assertion": "error",
+        "typescript/consistent-type-assertions": [
+            "error",
+            {
+                "assertionStyle": "never"
+            }
+        ],
         "typescript/no-non-null-assertion": "error",
         "typescript/no-unnecessary-type-assertion": "error",
         "typescript/no-confusing-non-null-assertion": "error",

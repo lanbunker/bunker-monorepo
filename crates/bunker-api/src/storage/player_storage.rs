@@ -2,14 +2,14 @@ use bunker_models::{Account, Glyph, Handle, PageQuery, Paginated, Player, Player
 use sqlx::SqliteConnection;
 use time::OffsetDateTime;
 
-use super::db::DbPool;
+use super::db::{DbPool, begin_write, check_reachable};
 use super::error::StorageError;
 use super::row::{MalformedField, PlayerRow, parse_uuid, to_micros};
 
 const TABLE: &str = "players";
 
 /// The unique index that the migration makes on `players.handle`, as SQLite names
-/// it in its error message. Storage owns the index, so storage knows its name.
+/// it in its error message.
 const HANDLE_CONSTRAINT: &str = "players.handle";
 
 #[derive(Debug, Clone)]
@@ -37,15 +37,34 @@ pub enum Renamed {
     NotFound,
 }
 
-/// An account with the fact that tokens need to check.
-#[derive(Debug, Clone)]
-pub struct StoredAccount {
-    pub account: Account,
+/// What a role change did. The last admin is a result: only the service can
+/// say what it means to a client.
+#[derive(Debug)]
+pub enum RoleChanged {
+    Player(Player),
+    NotFound,
+    LastAdmin,
+}
+
+/// What a delete did.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Removal {
+    Removed,
+    Absent,
+    LastAdmin,
+}
+
+/// What a token check needs, from the players table alone. The standing is a
+/// window over the whole ledger, and no token check needs it.
+#[derive(Debug, Clone, Copy)]
+pub struct StoredAccess {
+    pub id: PlayerId,
+    pub role: Role,
+    pub must_change_password: bool,
     /// Unix seconds of the last password change. A token issued before is dead.
     pub credentials_changed_at: i64,
 }
 
-/// How a list of players is sorted.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ListOrder {
     /// The leaderboard: first place first.
@@ -79,7 +98,7 @@ impl PlayerStorage {
         let created_at = to_micros(TABLE, player.created_at)?;
 
         let role = Role::User.as_str();
-        let mut tx = self.pool.begin().await.map_err(StorageError::from_query)?;
+        let mut tx = begin_write(&self.pool).await?;
         let inserted = sqlx::query!(
             "insert into players (id, handle, password_hash, glyph_bits, glyph_color, role, created_at)
              values (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
@@ -98,7 +117,7 @@ impl PlayerStorage {
             return handle_taken(error).map(|()| Created::HandleTaken);
         }
         // The standing comes from the view, so the new row is read back instead
-        // of built here. The row was just written on this same transaction.
+        // of built here.
         let player = public_by_id(&mut tx, player.id)
             .await?
             .ok_or_else(|| StorageError::malformed_row(TABLE, MalformedField("id")))?;
@@ -126,24 +145,14 @@ impl PlayerStorage {
         row.map(TryInto::try_into).transpose()
     }
 
-    /// The public player with the id, without the account fields.
-    pub async fn get_by_id_public(&self, id: PlayerId) -> Result<Option<Player>, StorageError> {
-        let mut connection = self
-            .pool
-            .acquire()
-            .await
-            .map_err(StorageError::from_query)?;
-
-        public_by_id(&mut connection, id).await
-    }
-
-    pub async fn get_by_id(&self, id: PlayerId) -> Result<Option<StoredAccount>, StorageError> {
+    /// The account of `/api/me`, with the standing.
+    pub async fn account(&self, id: PlayerId) -> Result<Option<Account>, StorageError> {
         let id = id.into_inner().to_string();
         let row = sqlx::query_as!(
             AccountRow,
             r#"select p.id, p.handle, p.glyph_bits, p.glyph_color, p.role, p.created_at,
                       s.cycles as "cycles!: i64", s.place as "place!: i64", s.players as "players!: i64",
-                      p.must_change_password, p.credentials_changed_at
+                      p.must_change_password
                from players p join player_standings s on s.player_id = p.id
                where p.id = ?1"#,
             id,
@@ -153,6 +162,43 @@ impl PlayerStorage {
         .map_err(StorageError::from_query)?;
 
         row.map(TryInto::try_into).transpose()
+    }
+
+    pub async fn access(&self, id: PlayerId) -> Result<Option<StoredAccess>, StorageError> {
+        let key = id.into_inner().to_string();
+        let row = sqlx::query!(
+            "select role, must_change_password, credentials_changed_at from players where id = ?1",
+            key,
+        )
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(StorageError::from_query)?;
+
+        row.map(|row| {
+            Ok(StoredAccess {
+                id,
+                role: row
+                    .role
+                    .parse()
+                    .map_err(|error| StorageError::malformed_row(TABLE, error))?,
+                must_change_password: row.must_change_password != 0,
+                credentials_changed_at: row.credentials_changed_at,
+            })
+        })
+        .transpose()
+    }
+
+    pub async fn exists(&self, id: PlayerId) -> Result<bool, StorageError> {
+        let id = id.into_inner().to_string();
+        let found = sqlx::query_scalar!(
+            r#"select exists(select 1 from players where id = ?1) as "found!: bool""#,
+            id,
+        )
+        .fetch_one(&self.pool)
+        .await
+        .map_err(StorageError::from_query)?;
+
+        Ok(found)
     }
 
     pub async fn credentials_by_id(
@@ -225,12 +271,8 @@ impl PlayerStorage {
         .transpose()
     }
 
-    /// The count and the page run in one transaction, so both see the same rows.
-    /// The id breaks every tie, so two signups in the same microsecond keep one
-    /// order.
-    /// `term` keeps the rows whose handle contains it, without case. The match
-    /// is `instr` and not `like`, so `_` in a term means the character and not
-    /// any character.
+    /// The count and the page share one transaction. The id breaks every tie.
+    /// `term` matches with `instr` and not `like`, so `_` is a literal.
     pub async fn list(
         &self,
         query: PageQuery,
@@ -283,30 +325,50 @@ impl PlayerStorage {
         ))
     }
 
-    /// `None` when no row has the id. The write and the read back share one
-    /// transaction, so a delete in between cannot turn a done update into a
-    /// missing player.
-    pub async fn set_role(&self, id: PlayerId, role: Role) -> Result<Option<Player>, StorageError> {
+    /// The write and the read back share one transaction, so a delete in
+    /// between cannot turn a done update into a missing player. A demotion
+    /// never takes the last admin: the condition is in the statement that
+    /// writes, so two admins who demote each other at once cannot both win.
+    pub async fn set_role(&self, id: PlayerId, role: Role) -> Result<RoleChanged, StorageError> {
         let key = id.into_inner().to_string();
         let role = role.as_str();
-        let mut tx = self.pool.begin().await.map_err(StorageError::from_query)?;
-        let result = sqlx::query!("update players set role = ?1 where id = ?2", role, key)
-            .execute(&mut *tx)
+        let admin = Role::Admin.as_str();
+        let mut tx = begin_write(&self.pool).await?;
+        let result = sqlx::query!(
+            "update players set role = ?1
+             where id = ?2
+               and (?1 = ?3 or role != ?3 or (select count(*) from players where role = ?3) > 1)",
+            role,
+            key,
+            admin,
+        )
+        .execute(&mut *tx)
+        .await
+        .map_err(StorageError::from_query)?;
+        if result.rows_affected() == 0 {
+            let exists = sqlx::query_scalar!(
+                r#"select exists(select 1 from players where id = ?1) as "found!: bool""#,
+                key,
+            )
+            .fetch_one(&mut *tx)
             .await
             .map_err(StorageError::from_query)?;
-        if result.rows_affected() == 0 {
-            return Ok(None);
+            return Ok(if exists {
+                RoleChanged::LastAdmin
+            } else {
+                RoleChanged::NotFound
+            });
         }
         let player = public_by_id(&mut tx, id).await?;
         tx.commit().await.map_err(StorageError::from_query)?;
 
-        Ok(player)
+        Ok(player.map_or(RoleChanged::NotFound, RoleChanged::Player))
     }
 
     pub async fn rename(&self, id: PlayerId, handle: &Handle) -> Result<Renamed, StorageError> {
         let key = id.into_inner().to_string();
         let handle = handle.as_ref();
-        let mut tx = self.pool.begin().await.map_err(StorageError::from_query)?;
+        let mut tx = begin_write(&self.pool).await?;
         let updated = sqlx::query!("update players set handle = ?1 where id = ?2", handle, key)
             .execute(&mut *tx)
             .await;
@@ -323,30 +385,48 @@ impl PlayerStorage {
         Ok(player.map_or(Renamed::NotFound, Renamed::Player))
     }
 
-    /// `true` when a row was removed.
-    pub async fn delete(&self, id: PlayerId) -> Result<bool, StorageError> {
-        let id = id.into_inner().to_string();
-        let result = sqlx::query!("delete from players where id = ?1", id)
-            .execute(&self.pool)
+    /// Never the last admin, for the reason given on [`Self::set_role`].
+    pub async fn delete(&self, id: PlayerId) -> Result<Removal, StorageError> {
+        let key = id.into_inner().to_string();
+        let admin = Role::Admin.as_str();
+        let mut tx = begin_write(&self.pool).await?;
+        let result = sqlx::query!(
+            "delete from players
+             where id = ?1
+               and (role != ?2 or (select count(*) from players where role = ?2) > 1)",
+            key,
+            admin,
+        )
+        .execute(&mut *tx)
+        .await
+        .map_err(StorageError::from_query)?;
+        let removal = if result.rows_affected() > 0 {
+            Removal::Removed
+        } else {
+            let exists = sqlx::query_scalar!(
+                r#"select exists(select 1 from players where id = ?1) as "found!: bool""#,
+                key,
+            )
+            .fetch_one(&mut *tx)
             .await
             .map_err(StorageError::from_query)?;
+            if exists {
+                Removal::LastAdmin
+            } else {
+                Removal::Absent
+            }
+        };
+        tx.commit().await.map_err(StorageError::from_query)?;
 
-        Ok(result.rows_affected() > 0)
+        Ok(removal)
     }
 
-    /// Sends a query and waits for the answer, which is the only proof that the
-    /// database file is present and readable.
     pub async fn check_reachable(&self) -> Result<(), StorageError> {
-        sqlx::query!("select 1 as one")
-            .fetch_one(&self.pool)
-            .await
-            .map_err(StorageError::from_query)?;
-
-        Ok(())
+        check_reachable(&self.pool).await
     }
 }
 
-/// The player columns plus what a token check needs.
+/// The player columns plus the flag only the owner sees.
 #[derive(Debug)]
 struct AccountRow {
     id: String,
@@ -359,10 +439,9 @@ struct AccountRow {
     place: i64,
     players: i64,
     must_change_password: i64,
-    credentials_changed_at: i64,
 }
 
-impl TryFrom<AccountRow> for StoredAccount {
+impl TryFrom<AccountRow> for Account {
     type Error = StorageError;
 
     fn try_from(row: AccountRow) -> Result<Self, Self::Error> {
@@ -380,11 +459,8 @@ impl TryFrom<AccountRow> for StoredAccount {
         .try_into()?;
 
         Ok(Self {
-            account: Account {
-                player,
-                must_change_password: row.must_change_password != 0,
-            },
-            credentials_changed_at: row.credentials_changed_at,
+            player,
+            must_change_password: row.must_change_password != 0,
         })
     }
 }

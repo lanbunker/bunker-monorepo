@@ -8,6 +8,7 @@ import { call, dataOf } from "../lib/api"
 import LocalTime from "../components/ui/LocalTime.astro"
 import { nextEvent as soonest } from "../lib/events"
 import { isRegistrationOpen, nextOpen } from "../lib/tournaments"
+import { sessionOf } from "../lib/session"
 
 // One row proves the API is up and carries the head count. The tournament and
 // event lists are small, so the first page holds every one that matters.
@@ -52,6 +53,14 @@ const canRegister = upcomingTournament ? isRegistrationOpen(upcomingTournament) 
       class="m-0 mt-2 list-none p-0 text-xs text-dim"
       aria-live="polite"
     ></ol>
+    <noscript>
+      <style is:inline>
+        #tagline,
+        #status-block {
+          display: block;
+        }
+      </style>
+    </noscript>
     <p id="tagline" class="mt-2 hidden text-base text-bright">
       Enter the bunker. LAN party reimagined for the modern age.
       <span class="animate-blink text-accent" aria-hidden="true">
@@ -100,7 +109,7 @@ const canRegister = upcomingTournament ? isRegistrationOpen(upcomingTournament) 
         </div>
       </Panel>
 
-      {netOnline && !Astro.locals.player && (
+      {netOnline && !sessionOf(Astro.locals) && (
         <Panel tone="accent" class="mt-4">
           <div class="flex flex-wrap items-center justify-between gap-4">
             <div>
@@ -156,7 +165,9 @@ const canRegister = upcomingTournament ? isRegistrationOpen(upcomingTournament) 
       for (const line of BOOT_LINES) printLine(line)
       finish()
     } else {
-      BOOT_LINES.map((line, i) => setTimeout(() => printLine(line), STEP_MS * (i + 1)))
+      for (const [i, line] of BOOT_LINES.entries()) {
+        setTimeout(() => printLine(line), STEP_MS * (i + 1))
+      }
       setTimeout(finish, STEP_MS * (BOOT_LINES.length + 1))
     }
   </script>

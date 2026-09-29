@@ -9,14 +9,24 @@
 
 use bunker_models::{
     HANDLE_MAX_LEN, HANDLE_MIN_LEN, Handle, HandleError, PASSWORD_MAX_LEN, PASSWORD_MIN_LEN,
-    Password, PasswordError, PlayerId, SignupRequest,
+    Password, PasswordError, PlayerId, SignupRequest, TemporaryPassword, TokenResponse,
 };
+use time::OffsetDateTime;
 
 #[test]
 fn a_handle_trims_and_keeps_its_case() {
     let handle = Handle::try_new("  Fede_88 ").unwrap();
 
     assert_eq!(handle.as_ref(), "Fede_88");
+}
+
+#[test]
+fn two_handles_that_differ_in_case_are_equal() {
+    let typed = Handle::try_new("Fede_88").unwrap();
+
+    assert_eq!(typed, Handle::try_new("fede_88").unwrap());
+    assert_ne!(typed, Handle::try_new("fede_89").unwrap());
+    assert_eq!(typed.to_string(), "Fede_88", "the typed case stays");
 }
 
 #[test]
@@ -70,6 +80,28 @@ fn a_password_never_prints_itself() {
     let password = Password::try_new("hunter2hunter2").unwrap();
 
     assert_eq!(format!("{password:?}"), "Password(<redacted>)");
+}
+
+#[test]
+fn a_token_never_prints_itself() {
+    let token = TokenResponse {
+        token: "eyJhbGciOiJIUzI1NiJ9.secret.signature".to_owned(),
+        expires_at: OffsetDateTime::UNIX_EPOCH,
+    };
+
+    let printed = format!("{token:?}");
+
+    assert!(!printed.contains("secret"), "the token leaked: {printed}");
+    assert!(printed.contains("<redacted>"));
+}
+
+#[test]
+fn a_temporary_password_never_prints_itself() {
+    let temporary = TemporaryPassword {
+        temporary_password: "0123456789abcdef".to_owned(),
+    };
+
+    assert_eq!(format!("{temporary:?}"), "TemporaryPassword(<redacted>)");
 }
 
 #[test]

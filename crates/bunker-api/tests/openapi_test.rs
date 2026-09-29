@@ -30,52 +30,17 @@ fn the_committed_document_matches_the_code() {
     );
 }
 
+/// `http_contract_test` walks every documented route, so this test only proves
+/// that the document is served, and is the one in the code.
 #[tokio::test]
-async fn the_document_is_served_and_lists_every_route() {
+async fn the_document_is_served() {
     let api = TestApi::without_database().await;
 
     let response = api.get("/api/openapi.json").await;
 
     assert_eq!(response.status(), StatusCode::OK);
-    let document: Value = read_json(response).await;
-    let paths = document["paths"].as_object().unwrap();
-    for path in [
-        "/api/auth/signup",
-        "/api/auth/login",
-        "/api/me",
-        "/api/me/password",
-        "/api/admin/players/{id}/password-reset",
-        "/api/players",
-        "/api/players/{handle}",
-        "/api/players/{handle}/cycles",
-        "/api/admin/players/{id}/cycles",
-        "/api/cycles/rules",
-        "/api/admin/players",
-        "/api/admin/players/{id}",
-        "/api/tournaments",
-        "/api/tournaments/{id}",
-        "/api/tournaments/{id}/registration",
-        "/api/me/registrations",
-        "/api/admin/tournaments",
-        "/api/admin/tournaments/{id}",
-        "/api/admin/tournaments/{id}/status",
-        "/api/admin/tournaments/{id}/entrants",
-        "/api/admin/tournaments/{id}/entrants/{entrantId}",
-        "/api/admin/tournaments/{id}/bracket",
-        "/api/admin/tournaments/{id}/seeds",
-        "/api/admin/tournaments/{id}/matches/{matchId}/result",
-        "/api/events",
-        "/api/checkin/{code}",
-        "/api/me/checkins",
-        "/api/admin/events",
-        "/api/admin/events/{id}",
-        "/api/admin/events/{id}/status",
-        "/api/admin/events/{id}/checkins",
-        "/health/live",
-        "/health/ready",
-    ] {
-        assert!(paths.contains_key(path), "{path} is not documented");
-    }
+    let served: Value = read_json(response).await;
+    assert_eq!(served, serde_json::to_value(ApiDoc::openapi()).unwrap());
 }
 
 /// The site trusts these names. A rename here is a breaking change for it.

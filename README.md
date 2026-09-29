@@ -39,7 +39,10 @@ make cabd-shots          # every cabinet screen as PNG under .dev/shots
 ```
 
 An admin can reset a password from the backoffice. The player logs in with the
-temporary password and must choose a new one before any other page opens.
+temporary password and must choose a new one before any other page opens. Until
+then, the API answers every route except `/api/me` and `/api/me/password` with
+`403 PasswordChangeRequired`, so the rule holds for every client and not only
+the site.
 
 The database is `.dev/bunker.db`, ignored by git and kept between runs. Delete it
 with `make db-reset`.
@@ -54,8 +57,8 @@ curl -s localhost:3000/api/players/dave
 ```
 
 `make dev` rebuilds and restarts the API after each save. `make web-dev` starts
-the site. `make checklist` runs format, clippy, every test and the offline query
-check, which is what CI runs.
+the site. `make checklist` formats the code, then runs clippy and every test. CI runs the
+same clippy and the same tests, and fails when the format is not current.
 
 ## Why the backend is built this way
 
@@ -73,17 +76,24 @@ check, which is what CI runs.
   the migrations, to learn the current shape.
 - **The tests bring their own database.** Each test creates a SQLite file in a
   temporary directory and migrates it. No Docker, no setup, no shared state.
-- **Passwords never travel.** Argon2id hashes on the blocking pool, the type
-  redacts itself, and login answers the same for an unknown handle and a wrong
-  password.
+- **Passwords never travel.** Argon2id hashes on the blocking pool, at most four
+  at once, so a burst of logins fits in memory. The type redacts itself, and
+  login answers the same for an unknown handle and a wrong password.
 - **A token is a signed claim.** HS256 with one secret from the environment. The
-  check reads no database. Production refuses to start without a real secret.
+  check reads one row of `players`, so a deleted player, a changed password, a
+  demotion and a pending password change take effect at once. Production
+  refuses to start without a real secret, and refuses the development one.
+- **A concurrent change never lands half.** A write carries the state that its
+  request read, and storage checks that state in the statement that writes. A
+  lost race answers `409 InvalidState`. Every write transaction starts with
+  `BEGIN IMMEDIATE`.
 
 ## Data flow
 
 ```
 Request
-  -> ValidJson / ValidPath / Authenticated    (rejected at the boundary)
+  -> ValidJson / ValidQuery / ValidPath
+     Authenticated / AdminOnly               (rejected at the boundary)
     -> routers/    handler
       -> services/ business rules, ServiceError
         -> storage/ typed queries, StorageError
@@ -93,8 +103,11 @@ Request
 A failure goes up as a typed error and becomes an `ApiError` one time:
 
 ```json
-{ "code": "HandleTaken", "message": "handle `dave` is already taken", "status": 409 }
+{ "code": "HandleTaken", "message": "That handle is already taken", "status": 409 }
 ```
+
+The message is a fixed sentence for the client. The internal text, with ids and
+handles, is the first link of the `cause` chain and of the log.
 
 A `cause` field with the chain of causes appears only when `APP_ENV` is `local`
 or `test`.
@@ -105,28 +118,29 @@ or `test`.
 | --- | --- | --- | --- |
 | POST | `/api/auth/signup` | none | 201, token |
 | POST | `/api/auth/login` | none | 200, token |
-| GET | `/api/me` | bearer | the caller and whether a password change is due |
-| POST | `/api/me/password` | bearer | change the password, current one required. Answers a fresh token, every older token dies |
+| GET | `/api/me` | bearer | the caller and whether a password change is due. A temporary password opens it |
+| POST | `/api/me/password` | bearer | change the password, current one required. Answers a fresh token, every older token dies. A temporary password opens it |
 | PUT | `/api/me/handle` | bearer | change the handle. The glyph stays |
 | GET | `/api/players` | none | the leaderboard, first place first. `?page=1&pageSize=20`, pageSize up to 100 |
 | GET | `/api/players/{handle}` | none | one player, with cycles, rank and place |
 | GET | `/api/players/{handle}/cycles` | none | the cycles log, newest first, with the totals by kind |
+| GET | `/api/players/{handle}/matches` | none | the match log, newest first, with the record and the nemesis |
 | GET | `/api/cycles/rules` | none | how cycles are earned, and the ladder |
 | GET | `/api/admin/players` | admin | every player, newest first, same paging as `/api/players` |
 | POST | `/api/admin/players/{id}/cycles` | admin | add or take cycles, with a note |
-| PATCH | `/api/admin/players/{id}` | admin | set the role |
+| PATCH | `/api/admin/players/{id}` | admin | set the role. The last admin stays an admin |
 | PUT | `/api/admin/players/{id}/handle` | admin | rename a player |
 | POST | `/api/admin/players/{id}/password-reset` | admin | temporary password, forces a change at login |
-| DELETE | `/api/admin/players/{id}` | admin | remove a player |
+| DELETE | `/api/admin/players/{id}` | admin | remove a player. Never the last admin |
 | GET | `/api/tournaments` | none | tournaments, newest event first, drafts hidden. Same paging |
 | GET | `/api/tournaments/{id}` | none | one tournament with entrants and bracket |
 | GET | `/api/me/registrations` | bearer | the tournaments the caller entered |
 | POST | `/api/tournaments/{id}/registration` | bearer | apply with a level from 1 to 5. A second call changes the level |
 | DELETE | `/api/tournaments/{id}/registration` | bearer | retire. Idempotent |
 | GET, POST | `/api/admin/tournaments` | admin | every tournament, create a draft |
-| GET, PATCH, DELETE | `/api/admin/tournaments/{id}` | admin | detail, edit fields, delete with entrants and matches |
-| POST | `/api/admin/tournaments/{id}/status` | admin | move the status, name the winner |
-| POST | `/api/admin/tournaments/{id}/entrants` | admin | add a player, with an optional level |
+| GET, PATCH, DELETE | `/api/admin/tournaments/{id}` | admin | detail, edit fields until concluded, delete with entrants and matches |
+| POST | `/api/admin/tournaments/{id}/status` | admin | move the status, name the winner. A repeat, also two at once, answers the same and pays one time |
+| POST | `/api/admin/tournaments/{id}/entrants` | admin | add a player, with an optional level. Refused after the conclusion, or when 256 entrants are in |
 | DELETE | `/api/admin/tournaments/{id}/entrants/{entrantId}` | admin | remove an entrant |
 | POST, DELETE | `/api/admin/tournaments/{id}/bracket` | admin | generate a bracket seeded by level, remove it |
 | PUT | `/api/admin/tournaments/{id}/seeds` | admin | rebuild the bracket in a given seed order |
@@ -140,7 +154,7 @@ or `test`.
 | POST | `/api/admin/events/{id}/status` | admin | publish, or back to draft |
 | POST | `/api/admin/events/{id}/checkins` | admin | check a player in by hand, any status, any time. Pays like a scan |
 | GET | `/api/openapi.json` | none | the contract |
-| GET | `/health/live` | none | process is up, version |
+| GET | `/health/live` | none | process is up, version and commit |
 | GET | `/health/ready` | none | database answers |
 
 ## Events
@@ -186,13 +200,13 @@ know renders no cover. A new cover is a commit and a deploy.
 A tournament moves through four statuses. `draft` is visible to admins only.
 `open` takes registrations until `registrationClosesAt`. `live` freezes the
 entrants and opens the bracket work. `concluded` is final: nothing changes after
-it. A draft can go live at once, which is how an old tournament is backfilled.
+it, and the API refuses an entrant change or a field edit with 409. A
+tournament takes at most 256 entrants. A draft can go live at once, which is how an old tournament is backfilled.
 `live` can go back to `open` only while no bracket exists.
 
 A player applies with a level from 1 to 5: how good they say they are at the
 game. The site asks for it on its own page, with the player's glyph and handle
-above the confirm button. To change the level, the player retires and applies
-again. An admin can add a player with a level or without one. An admin add with
+above the confirm button. An admin can add a player with a level or without one. An admin add with
 a level corrects the level of a player who is already in.
 
 The bracket is single elimination and optional. The admin generates it seeded by
@@ -210,6 +224,28 @@ decides the winner. Without one, the admin names the winner among the entrants,
 or nobody.
 
 Matches point at entrants and not at players, so a team can enter one day.
+
+### Nemesis
+
+The public profile and the private profile show a match log, and name the
+opponent who beats the player the most. A view, `player_matches`, holds every
+played match two times, one row per side, with the day of its tournament. A bye
+is not a match, and only a `live` or a `concluded` tournament is in the view.
+Every read goes to the bracket rows, so a corrected result changes the answer at
+once.
+
+One opponent must win at least two matches against the player before the site
+names them. A tie on the count goes to the opponent whose last win is the more
+recent. Recency is the day of the tournament, and then its creation instant for
+two tournaments on one day. The handle breaks a full tie, so two reads answer
+the same name. An opponent who deleted their account stays in the log without a
+link, and never holds the title: the next opponent takes it.
+
+`player_matches` is the join point a casual match extends, with a table of its
+own and a `union all` branch in the view. The record and the nemesis read the
+view alone and need no other change. The log also joins `tournaments` for the
+name and the game, and counts the rounds of the bracket, so a match outside a
+tournament needs those two columns to come from the branch itself.
 
 ## Cycles
 
@@ -239,7 +275,7 @@ deleted player.
 The amounts and the ladder live in one file, `crates/bunker-models/src/points.rs`.
 `GET /api/cycles/rules` serves them, and the site renders its legend from that
 call, so the page can never disagree with the ledger. The ranks, bottom first:
-zombie, guest at 100, user at 600, sudoer at 1500, daemon at 3000, kernel at 6000.
+zombie, guest at 80, user at 600, sudoer at 1500, daemon at 3000, kernel at 6000.
 
 A future source, such as an arcade score, is one variant in `PointKind` with its amount, one writer that names its source, and
 one migration that recreates the table with the new kind in the CHECK list,
@@ -263,7 +299,8 @@ generated types are stale.
 
 `make checklist` runs the Rust suite. `make web-check` checks the format, runs
 both type checkers, lints and builds the site. `make web-e2e` runs Playwright
-against a fresh API on `.dev/e2e.db` and the dev site: signup, login, the roster,
+against a fresh API on `.dev/e2e.db` and the production build of the site, served
+by the Workers runtime as on Cloudflare: signup, login, the roster,
 the profile, every public page, 404s, the backoffice, tournaments and brackets.
 It also asserts that every refusal reaches the page as one readable sentence.
 
@@ -280,10 +317,16 @@ keeps the two in step. `CLAUDE.md` gives the procedure and the rules.
 | `APP_ENV` | `local` | `test`, `local` or `prod`. Selects every capability. |
 | `BIND_ADDRESS` | `127.0.0.1` | Listen address. `0.0.0.0` when the LAN needs the API directly |
 | `PORT` | `3000` | Listen port |
-| `DATABASE_URL` | `sqlite://.dev/bunker.db?mode=rwc` | SQLite file. `mode=rwc` creates it |
+| `DATABASE_URL` | `sqlite://.dev/bunker.db?mode=rwc` | SQLite file. `mode=rwc` creates it. Production uses `mode=rw`, which never creates it |
 | `DB_MAX_CONNECTIONS` | `8` | Pool size |
-| `JWT_SECRET` | dev value | 32 characters or more. Required when `APP_ENV=prod` |
-| `RUST_LOG` | from `APP_ENV` | Replaces the log filter |
+| `JWT_SECRET` | dev value | 32 characters or more. Required when `APP_ENV=prod`, and the dev value is refused there |
+| `RUST_LOG` | from `APP_ENV` | Replaces the log filter. An invalid filter stops the start |
+
+A process that runs with `APP_ENV=prod` does not read `.env`.
+
+Answers that carry a token, a temporary password or the caller's account have
+`Cache-Control: no-store`. The logs name the route template and not the path,
+so a check-in code never reaches the journal.
 
 The sqlx macros compile each query against `DATABASE_URL` from `.env`, which
 must point at the migrated local database from `make db`. A build against an
@@ -297,23 +340,33 @@ gives the detail.
 
 ## Deploy
 
-Two pipelines, both from GitHub Actions on a push to `main`. The `dev` branch
-runs CI and deploys nothing.
+One workflow, `.github/workflows/ci.yml`, runs CI on every push and every pull
+request. Only a push to `main` deploys. A push to `dev` and a pull request run
+CI and deploy nothing.
 
 | What | Where it runs | How |
 | --- | --- | --- |
-| Site | Cloudflare Workers | `deploy.yml`: `pnpm build`, then wrangler. The Worker var `API_URL` points at the API name. |
-| API | A Debian 12 LXC container on the Proxmox box in the office | `deploy-api` job in `ci.yml`, after `rust`, `web` and `e2e` are green |
+| API | A Debian 12 LXC container on the Proxmox box in the office | `deploy-api` job, after `rust`, `web` and `e2e` are green |
+| Site | Cloudflare Workers | `deploy-web` job, after `deploy-api`: `pnpm build`, then wrangler. The Worker var `API_URL` points at the API name. |
 
-The API job builds a static musl binary, opens SSH through a Cloudflare Tunnel
-with `cloudflared` and a key made for CI, uploads the binary, runs the root
-script `bunker-deploy` on the box, and checks `/health/ready` on
-`api.lanbunker.eu`. Migrations run at startup, so a deploy is one binary swap.
-The box keeps no open port: `cloudflared` inside the container dials out, and
-Cloudflare routes `api.lanbunker.eu` to port 3000 and `ssh.lanbunker.eu` to
-port 22.
+The site ships after the API, so each route that the new site calls exists
+when the site goes live.
 
-GitHub Actions needs one secret, `DEPLOY_SSH_KEY`, and two variables,
-`API_HOST` and `SSH_HOST`. `deploy/README.md` holds the one-time setup of the
-container and the tunnel, the bootstrap script, and the day-to-day commands:
-logs, backups, making an admin, rotating the key.
+The API job builds a static musl binary with the commit in it, opens SSH
+through a Cloudflare Tunnel with `cloudflared` and a key made for CI, uploads
+the binary, and runs the root script `bunker-deploy` on the box. The script
+stops the API, copies the database to `/var/backups/bunker/pre-deploy.db`, keeps
+the old binary as `bunker-api.prev`, and starts the new one. Migrations run at
+startup. When `/health/ready` does not answer in 15 seconds, the script puts
+back the old binary and the pre-deploy database, and the job fails. Then the
+job checks `/health/ready` on `api.lanbunker.eu`, and checks that
+`/health/live` answers the commit of the run. The box keeps no open port:
+`cloudflared` inside the container dials out, and Cloudflare routes
+`api.lanbunker.eu` to port 3000 and `ssh.lanbunker.eu` to port 22.
+
+Both deploy jobs use the GitHub environment `production`. They need three
+secrets, `DEPLOY_SSH_KEY`, `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`,
+and three variables, `API_HOST`, `SSH_HOST` and `SSH_KNOWN_HOSTS`.
+`deploy/README.md` holds the one-time setup of the container and the tunnel,
+the bootstrap script, and the day-to-day commands: logs, backups, making an
+admin, rotating the key.

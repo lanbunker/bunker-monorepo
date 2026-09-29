@@ -1,16 +1,20 @@
 use tracing_subscriber::EnvFilter;
+use tracing_subscriber::filter::ParseError;
 
 use crate::config::AppConfig;
 
 /// Installs the global subscriber. It writes JSON where a collector reads the
-/// logs, and human-readable lines during development. `RUST_LOG` replaces the
-/// filter.
+/// logs, and human-readable lines during development. `directives`, from
+/// `RUST_LOG`, replaces the filter, and an invalid one fails the startup
+/// instead of logging nothing.
 ///
 /// A second call does nothing, so a test that builds more than one server is
 /// safe.
-pub fn init_tracing(config: AppConfig) {
-    let filter = EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| EnvFilter::new(default_directives(config)));
+pub fn init_tracing(config: AppConfig, directives: Option<&str>) -> Result<(), ParseError> {
+    let filter = match directives {
+        Some(directives) => EnvFilter::try_new(directives)?,
+        None => EnvFilter::new(default_directives(config)),
+    };
 
     let builder = tracing_subscriber::fmt().with_env_filter(filter);
 
@@ -26,6 +30,8 @@ pub fn init_tracing(config: AppConfig) {
     };
 
     drop(installed);
+
+    Ok(())
 }
 
 fn default_directives(config: AppConfig) -> String {

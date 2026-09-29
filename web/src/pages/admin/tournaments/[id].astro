@@ -7,7 +7,7 @@ import Glyph from "../../../components/ui/Glyph.astro"
 import Table from "../../../components/ui/Table.astro"
 import AdminLayout from "../../../layouts/AdminLayout.astro"
 import { call, dataOf, failureOf, isMissing } from "../../../lib/api"
-import { formatDate, toLocalInput } from "../../../lib/dates"
+import { SITE_TIME_ZONE, formatDate, toLocalInput } from "../../../lib/dates"
 import { firstError, noticeFrom } from "../../../lib/form"
 import { adminSessionOf } from "../../../lib/session"
 import { ADMIN_FIELD, ADMIN_FIELD_INLINE } from "../../../lib/styles"
@@ -24,7 +24,6 @@ const NOTICES = {
   removed: "entrant removed",
 }
 
-// Every form redirects after success, so a refresh repeats nothing.
 const saved = Astro.getActionResult(actions.updateTournament)
 const status = Astro.getActionResult(actions.setTournamentStatus)
 const added = Astro.getActionResult(actions.addEntrant)
@@ -59,7 +58,7 @@ const t = detail?.tournament
 <AdminLayout title={`BACKOFFICE//${t?.name ?? "tournament"}`} active="tournaments">
   <Alert error={failure} class="mb-3" />
   {!detail || !t ? (
-    <p class="text-xs text-alert">the api is unreachable.</p>
+    <Alert message="the api is unreachable." />
   ) : (
     <>
       <div class="flex flex-wrap items-baseline justify-between gap-3">
@@ -68,7 +67,7 @@ const t = detail?.tournament
           <span class="text-admin-dim"># {t.status}</span>
         </h1>
         <div class="flex flex-wrap gap-2">
-          {t.status !== "draft" && (
+          {t.hasBracket && (
             <Button
               href={`/tournaments/${t.id}/bracket`}
               variant="ghost"
@@ -217,7 +216,7 @@ const t = detail?.tournament
               required
               data-iso-for="registrationClosesAt"
               data-iso={t.registrationClosesAt}
-              value={toLocalInput(t.registrationClosesAt)}
+              value={toLocalInput(t.registrationClosesAt, SITE_TIME_ZONE)}
               class={ADMIN_FIELD}
             />
             <input

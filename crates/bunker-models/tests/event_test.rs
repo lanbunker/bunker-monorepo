@@ -9,7 +9,7 @@
 
 use bunker_models::{
     CheckinCode, CheckinWindow, Description, Event, EventFields, EventId, EventName, EventStatus,
-    Games, ImageName, Location,
+    EventWindow, Games, ImageName, Location,
 };
 use time::{Duration, OffsetDateTime};
 
@@ -25,8 +25,7 @@ fn night(starts: i64, ends: i64) -> Event {
         games: Games::default(),
         description: Description::default(),
         image: None,
-        starts_at: at(starts),
-        ends_at: at(ends),
+        window: EventWindow::try_new(at(starts), at(ends)).unwrap(),
         status: EventStatus::Published,
         checkin_count: 0,
         created_at: at(0),
@@ -54,31 +53,42 @@ fn the_door_is_open_from_the_start_to_the_end() {
 
 #[test]
 fn a_window_needs_its_end_after_its_start() {
-    let fields = |starts: &str, ends: &str| -> EventFields {
-        serde_json::from_value(serde_json::json!({
+    assert!(EventWindow::try_new(at(19), at(25)).is_ok());
+    assert!(EventWindow::try_new(at(19), at(18)).is_err());
+    assert!(EventWindow::try_new(at(19), at(19)).is_err(), "zero length");
+
+    let fields = |starts: &str, ends: &str| {
+        serde_json::from_value::<EventFields>(serde_json::json!({
             "name": "Night",
             "startsAt": starts,
             "endsAt": ends,
         }))
-        .unwrap()
     };
+    let parsed = fields("2026-10-24T19:00:00Z", "2026-10-25T01:30:00Z").unwrap();
+    assert!(parsed.window.starts_at() < parsed.window.ends_at());
+    assert!(
+        fields("2026-10-24T19:00:00Z", "2026-10-24T18:00:00Z").is_err(),
+        "a body out of order does not parse"
+    );
+    assert!(fields("2026-10-24T19:00:00Z", "2026-10-24T19:00:00Z").is_err());
+}
 
-    assert!(
-        fields("2026-10-24T19:00:00Z", "2026-10-25T01:30:00Z")
-            .check_window()
-            .is_ok()
+#[test]
+fn an_event_keeps_its_window_flat_on_the_wire() {
+    let event = night(21, 27);
+
+    let json = serde_json::to_value(&event).unwrap();
+    assert_eq!(json["startsAt"], "1970-01-01T21:00:00Z");
+    assert_eq!(json["endsAt"], "1970-01-02T03:00:00Z");
+    assert!(json.get("window").is_none());
+    assert_eq!(
+        serde_json::from_value::<Event>(json.clone()).unwrap(),
+        event
     );
-    assert!(
-        fields("2026-10-24T19:00:00Z", "2026-10-24T18:00:00Z")
-            .check_window()
-            .is_err()
-    );
-    assert!(
-        fields("2026-10-24T19:00:00Z", "2026-10-24T19:00:00Z")
-            .check_window()
-            .is_err(),
-        "zero length"
-    );
+
+    let mut backwards = json;
+    backwards["endsAt"] = serde_json::json!("1970-01-01T20:00:00Z");
+    assert!(serde_json::from_value::<Event>(backwards).is_err());
 }
 
 #[test]
@@ -127,12 +137,11 @@ fn a_cover_is_a_file_name_and_never_a_path() {
     assert!(ImageName::try_new("events/cover.webp").is_err());
     assert!(ImageName::try_new("cover image.webp").is_err(), "a space");
     assert!(ImageName::try_new("x".repeat(81)).is_err());
-}
-
-#[test]
-fn a_status_reads_back_from_its_name() {
-    for status in [EventStatus::Draft, EventStatus::Published] {
-        assert_eq!(status.as_str().parse::<EventStatus>().unwrap(), status);
+    for dotted in [".", "..", ".hidden", "-cover.webp", "_cover.webp"] {
+        assert!(
+            ImageName::try_new(dotted).is_err(),
+            "{dotted} does not start with a letter or a digit"
+        );
     }
-    assert!("open".parse::<EventStatus>().is_err());
+    assert!(ImageName::try_new("9.webp").is_ok());
 }

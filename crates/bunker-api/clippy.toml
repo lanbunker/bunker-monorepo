@@ -7,3 +7,10 @@ disallowed-types = [
     { path = "axum::extract::Query", reason = "use internal::http::ValidQuery so rejections use the error body" },
     { path = "axum::extract::Path", reason = "use internal::http::ValidPath so rejections use the error body" },
 ]
+
+# `config/env.rs` is the one file that reads the environment. It allows these
+# on the one function that does.
+disallowed-methods = [
+    { path = "std::env::var", reason = "read the environment through config::Env" },
+    { path = "std::env::var_os", reason = "read the environment through config::Env" },
+]

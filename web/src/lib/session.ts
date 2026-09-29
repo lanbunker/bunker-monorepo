@@ -4,6 +4,8 @@ import type { Player } from "./api"
 export type Session = {
     readonly player: Player
     readonly token: string
+    /** Set after an admin reset. The middleware holds the player on `/password`. */
+    readonly mustChangePassword: boolean
 }
 
 /**
@@ -13,7 +15,11 @@ export type Session = {
  */
 export const sessionOf = (locals: App.Locals): Session | undefined =>
     locals.player && locals.token
-        ? { player: locals.player, token: locals.token }
+        ? {
+              player: locals.player,
+              token: locals.token,
+              mustChangePassword: locals.mustChangePassword ?? false,
+          }
         : undefined
 
 /**

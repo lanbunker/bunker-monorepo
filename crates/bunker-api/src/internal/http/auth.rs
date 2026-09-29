@@ -1,24 +1,49 @@
-use axum::extract::{FromRef, FromRequestParts};
+use axum::extract::{FromRef, FromRequestParts, Request, State};
 use axum::http::header::AUTHORIZATION;
 use axum::http::request::Parts;
-use bunker_models::{Account, Role};
+use axum::middleware::Next;
+use axum::response::Response;
+use bunker_models::Role;
 
-use crate::services::{AuthService, ErrorCode};
+use crate::services::{AuthService, Caller, ErrorCode};
 
 use super::api_error::ApiError;
 
-/// The account behind a valid `Authorization: Bearer <jwt>` header. One database
-/// read per request: it is what refuses a deleted player and a token older than
-/// the last password change.
-#[derive(Debug, Clone)]
-pub struct Authenticated(pub Account);
+/// The caller behind a valid `Authorization: Bearer <jwt>` header, with a
+/// settled password. One read of the players table per request: it is what
+/// refuses a deleted player, a token older than the last password change, and
+/// an account that must choose a new password first.
+#[derive(Debug, Clone, Copy)]
+pub struct Authenticated(pub Caller);
 
-/// The account behind the token, checked to be an admin. The role comes from the
-/// database, so a demotion takes effect at once.
-#[derive(Debug, Clone)]
-pub struct AdminOnly(pub Account);
+/// The caller behind a valid token, even one with a temporary password. Only
+/// `GET /api/me` and `POST /api/me/password` take it: they are how the player
+/// finishes the change.
+#[derive(Debug, Clone, Copy)]
+pub struct PendingPassword(pub Caller);
 
-impl<S> FromRequestParts<S> for Authenticated
+/// An authenticated admin. The role comes from the database, so a demotion
+/// takes effect at once.
+#[derive(Debug, Clone, Copy)]
+pub struct AdminOnly(pub Caller);
+
+/// Refuses every request that is not from an admin, before a handler runs.
+/// `server.rs` puts it on the admin routers, so a new admin route cannot forget
+/// the check. The admin goes into the request, and a handler that names the
+/// actor reads it back through [`AdminOnly`] without a second lookup.
+pub async fn require_admin(
+    State(auth): State<AuthService>,
+    request: Request,
+    next: Next,
+) -> Result<Response, ApiError> {
+    let (mut parts, body) = request.into_parts();
+    let admin = AdminOnly::from_request_parts(&mut parts, &auth).await?;
+    parts.extensions.insert(admin);
+
+    Ok(next.run(Request::from_parts(parts, body)).await)
+}
+
+impl<S> FromRequestParts<S> for PendingPassword
 where
     S: Send + Sync,
     AuthService: FromRef<S>,
@@ -47,9 +72,30 @@ where
                 )
             })?;
 
-        let account = AuthService::from_ref(state).authenticate(token).await?;
+        let caller = AuthService::from_ref(state).authenticate(token).await?;
 
-        Ok(Self(account))
+        Ok(Self(caller))
+    }
+}
+
+impl<S> FromRequestParts<S> for Authenticated
+where
+    S: Send + Sync,
+    AuthService: FromRef<S>,
+{
+    type Rejection = ApiError;
+
+    async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
+        let PendingPassword(caller) = PendingPassword::from_request_parts(parts, state).await?;
+
+        if caller.must_change_password {
+            return Err(ApiError::new(
+                ErrorCode::PasswordChangeRequired,
+                "Choose a new password first",
+            ));
+        }
+
+        Ok(Self(caller))
     }
 }
 
@@ -61,10 +107,13 @@ where
     type Rejection = ApiError;
 
     async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
-        let Authenticated(account) = Authenticated::from_request_parts(parts, state).await?;
+        if let Some(admin) = parts.extensions.get::<Self>() {
+            return Ok(*admin);
+        }
+        let Authenticated(caller) = Authenticated::from_request_parts(parts, state).await?;
 
-        match account.player.role {
-            Role::Admin => Ok(Self(account)),
+        match caller.role {
+            Role::Admin => Ok(Self(caller)),
             Role::User => Err(ApiError::new(
                 ErrorCode::Forbidden,
                 "This route is for admins",

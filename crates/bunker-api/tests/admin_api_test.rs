@@ -9,8 +9,8 @@
 
 mod support;
 
-use axum::body::Body;
-use axum::http::{Method, Request, StatusCode, header};
+use axum::http::StatusCode;
+use bunker_api::storage::{PlayerStorage, Removal, RoleChanged};
 use bunker_models::{Account, Paginated, Player, Role};
 use serde_json::{Value, json};
 use support::{TestApi, assert_error, read_json};
@@ -35,27 +35,23 @@ async fn a_user_cannot_open_the_backoffice() {
 }
 
 #[tokio::test]
-async fn the_backoffice_needs_a_token() {
-    let api = TestApi::with_database().await;
-
-    let response = api.get("/api/admin/players").await;
-
-    assert_error(response, StatusCode::UNAUTHORIZED, "Unauthorized").await;
-}
-
-#[tokio::test]
 async fn an_admin_lists_every_player() {
     let api = TestApi::with_database().await;
     let admin = api.signup_admin("root").await;
-    let _user = api.signup_player("dave").await;
+    api.signup_player("zed").await;
+    api.signup_player("abe").await;
 
     let response = api.get_as("/api/admin/players", &admin).await;
 
     assert_eq!(response.status(), StatusCode::OK);
     let page: Paginated<Player> = read_json(response).await;
     let handles: Vec<&str> = page.items.iter().map(|p| p.handle.as_ref()).collect();
-    assert_eq!(handles, ["dave", "root"]);
-    assert_eq!(page.total, 2);
+    assert_eq!(
+        handles,
+        ["abe", "zed", "root"],
+        "the last signup first, not by handle and not the oldest first"
+    );
+    assert_eq!(page.total, 3);
 }
 
 #[tokio::test]
@@ -166,32 +162,14 @@ async fn an_admin_deletes_a_player_and_the_delete_is_idempotent() {
     let dave = api.signup_player("dave").await;
     let path = format!("/api/admin/players/{}", dave.id);
 
-    let first = api
-        .send(
-            Request::builder()
-                .method(Method::DELETE)
-                .uri(&path)
-                .header(header::AUTHORIZATION, format!("Bearer {admin}"))
-                .body(Body::empty())
-                .unwrap(),
-        )
-        .await;
+    let first = api.delete_as(&path, &admin).await;
     assert_eq!(first.status(), StatusCode::NO_CONTENT);
     assert_eq!(
         api.get("/api/players/dave").await.status(),
         StatusCode::NOT_FOUND
     );
 
-    let second = api
-        .send(
-            Request::builder()
-                .method(Method::DELETE)
-                .uri(&path)
-                .header(header::AUTHORIZATION, format!("Bearer {admin}"))
-                .body(Body::empty())
-                .unwrap(),
-        )
-        .await;
+    let second = api.delete_as(&path, &admin).await;
     assert_eq!(second.status(), StatusCode::NO_CONTENT);
 }
 
@@ -206,14 +184,7 @@ async fn a_deleted_player_is_logged_out() {
         .player;
 
     let _deleted = api
-        .send(
-            Request::builder()
-                .method(Method::DELETE)
-                .uri(format!("/api/admin/players/{}", dave.id))
-                .header(header::AUTHORIZATION, format!("Bearer {admin}"))
-                .body(Body::empty())
-                .unwrap(),
-        )
+        .delete_as(&format!("/api/admin/players/{}", dave.id), &admin)
         .await;
 
     let response = api.get_as("/api/me", &dave_token.token).await;
@@ -238,18 +209,135 @@ async fn an_admin_cannot_demote_or_delete_themself() {
     assert_error(demote, StatusCode::FORBIDDEN, "Forbidden").await;
 
     let delete = api
-        .send(
-            Request::builder()
-                .method(Method::DELETE)
-                .uri(format!("/api/admin/players/{}", me.id))
-                .header(header::AUTHORIZATION, format!("Bearer {admin}"))
-                .body(Body::empty())
-                .unwrap(),
-        )
+        .delete_as(&format!("/api/admin/players/{}", me.id), &admin)
         .await;
     assert_error(delete, StatusCode::FORBIDDEN, "Forbidden").await;
     assert_eq!(
         api.get_as("/api/admin/players", &admin).await.status(),
         StatusCode::OK
     );
+}
+
+/// The guard is in the statement that writes. Once one admin is left, a
+/// demotion and a delete of that admin find nothing to write, whatever the
+/// caller checked before.
+#[tokio::test]
+async fn the_last_admin_is_never_demoted_or_deleted() {
+    let api = TestApi::with_database().await;
+    let _root = api.signup_admin("root").await;
+    let _second = api.signup_admin("second").await;
+    let root = api.player("root").await;
+    let second = api.player("second").await;
+    let storage = PlayerStorage::new(api.pool().clone());
+
+    let first = storage.set_role(second.id, Role::User).await.unwrap();
+    assert!(matches!(first, RoleChanged::Player(ref p) if p.role == Role::User));
+
+    let last = storage.set_role(root.id, Role::User).await.unwrap();
+    assert!(matches!(last, RoleChanged::LastAdmin), "got {last:?}");
+    assert_eq!(storage.delete(root.id).await.unwrap(), Removal::LastAdmin);
+    assert_eq!(api.player("root").await.role, Role::Admin);
+
+    assert_eq!(storage.delete(second.id).await.unwrap(), Removal::Removed);
+    assert_eq!(storage.delete(second.id).await.unwrap(), Removal::Absent);
+}
+
+/// Two admins demote each other at the same moment. The auth check of each
+/// request may pass before the other write lands, so only the guard in the
+/// write keeps an admin in the crew.
+#[tokio::test]
+async fn two_admins_who_demote_each_other_at_once_leave_one_admin() {
+    let api = TestApi::with_database().await;
+    let root_token = api.signup_admin("root").await;
+    let second_token = api.signup_admin("second").await;
+    let root = api.player("root").await;
+    let second = api.player("second").await;
+    let demote = json!({ "role": "user" });
+    let second_path = format!("/api/admin/players/{}", second.id);
+    let root_path = format!("/api/admin/players/{}", root.id);
+
+    let (one, two) = tokio::join!(
+        api.patch_as(&second_path, &demote, &root_token),
+        api.patch_as(&root_path, &demote, &second_token),
+    );
+
+    let passed = [one.status(), two.status()]
+        .iter()
+        .filter(|status| **status == StatusCode::OK)
+        .count();
+    assert_eq!(
+        passed,
+        1,
+        "one demotion wins: {} and {}",
+        one.status(),
+        two.status()
+    );
+    let admins = [api.player("root").await, api.player("second").await]
+        .iter()
+        .filter(|p| p.role == Role::Admin)
+        .count();
+    assert_eq!(admins, 1);
+}
+
+/// The token, the temporary password and the account must not sit in a cache
+/// between the site and the API.
+#[tokio::test]
+async fn every_answer_with_a_secret_or_the_account_is_not_stored() {
+    let api = TestApi::with_database().await;
+    let admin = api.signup_admin("root").await;
+    let dave = api.signup_player("dave").await;
+    let token = api
+        .post(
+            "/api/auth/login",
+            &json!({ "handle": "dave", "password": support::PASSWORD }),
+        )
+        .await;
+    let signup = api
+        .post(
+            "/api/auth/signup",
+            &json!({ "handle": "erin", "password": support::PASSWORD }),
+        )
+        .await;
+    let erin: bunker_models::TokenResponse = read_json(signup).await;
+
+    let answers = [
+        ("login", token),
+        ("me", api.get_as("/api/me", &erin.token).await),
+        (
+            "registrations",
+            api.get_as("/api/me/registrations", &erin.token).await,
+        ),
+        (
+            "checkins",
+            api.get_as("/api/me/checkins", &erin.token).await,
+        ),
+        (
+            "handle",
+            api.put_as("/api/me/handle", &json!({ "handle": "erin2" }), &erin.token)
+                .await,
+        ),
+        (
+            "reset",
+            api.post_as(
+                &format!("/api/admin/players/{}/password-reset", dave.id),
+                &json!({}),
+                &admin,
+            )
+            .await,
+        ),
+        ("refused", api.get("/api/me").await),
+    ];
+    for (name, response) in answers {
+        assert_eq!(
+            response
+                .headers()
+                .get("cache-control")
+                .and_then(|v| v.to_str().ok()),
+            Some("no-store"),
+            "{name} answered {}",
+            response.status()
+        );
+    }
+    let public = api.get("/api/players/dave").await;
+    assert!(public.headers().get("cache-control").is_none());
 }

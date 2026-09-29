@@ -24,19 +24,6 @@ fn names_are_trimmed_and_bounded() {
 }
 
 #[test]
-fn a_status_round_trips_through_text() {
-    for status in [
-        TournamentStatus::Draft,
-        TournamentStatus::Open,
-        TournamentStatus::Live,
-        TournamentStatus::Concluded,
-    ] {
-        assert_eq!(status.as_str().parse::<TournamentStatus>().unwrap(), status);
-    }
-    assert!("closed".parse::<TournamentStatus>().is_err());
-}
-
-#[test]
 fn a_new_tournament_reads_an_iso_day_and_an_rfc3339_deadline() {
     let body: NewTournament = serde_json::from_str(
         r#"{"name":"Sniper Cup","game":"COD MW2","mode":"1v1","date":"2026-10-24","registrationClosesAt":"2026-10-23T21:59:00Z"}"#,

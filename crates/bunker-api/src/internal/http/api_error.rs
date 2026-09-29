@@ -3,6 +3,7 @@ use std::error::Error;
 use axum::Json;
 use axum::extract::Request;
 use axum::http::StatusCode;
+use axum::http::header::{CONTENT_LENGTH, CONTENT_TYPE};
 use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
 use serde::Serialize;
@@ -42,22 +43,18 @@ impl ApiError {
         }
     }
 
-    /// Adds the causes below `error`. The log always holds them, and a client sees
-    /// them only if the configuration permits it.
-    ///
-    /// This skips the `Display` of `error`, because that text is the message. A
-    /// `cause` that repeats the message helps nobody.
+    /// Adds `error` and the causes below it. The log always holds them, and a
+    /// client sees them only if the configuration permits it. The client
+    /// message is a fixed sentence, so the chain is where the ids and the driver
+    /// text survive.
     pub fn with_cause(mut self, error: &dyn Error) -> Self {
-        let mut chain = Vec::new();
+        let mut chain = vec![error.to_string()];
         let mut current = error.source();
         while let Some(cause) = current {
             chain.push(cause.to_string());
             current = cause.source();
         }
-
-        if !chain.is_empty() {
-            self.cause = Some(chain.join(": "));
-        }
+        self.cause = Some(chain.join(": "));
 
         self
     }
@@ -98,6 +95,10 @@ impl IntoResponse for ApiError {
                 cause = self.cause.as_deref(),
                 "request failed"
             );
+        } else if is_access_refusal(self.code) {
+            // An operator watches these for a guessing attack. The code is
+            // enough, and a handle or a token would put a secret in the log.
+            tracing::info!(code = ?self.code, "access refused");
         } else {
             tracing::debug!(
                 code = ?self.code,
@@ -121,17 +122,25 @@ pub async fn render_errors(verbose: bool, request: Request, next: Next) -> Respo
         return response;
     }
 
-    match response.extensions().get::<ApiError>() {
-        Some(error) => error.render(true),
-        None => response,
+    let Some(error) = response.extensions().get::<ApiError>() else {
+        return response;
+    };
+    // A route layer can set a header on the error, such as `Cache-Control`, and
+    // the new body must keep it. The length and the type are the new body's.
+    let mut rendered = error.render(true);
+    for (name, value) in response.headers() {
+        if name != CONTENT_LENGTH && name != CONTENT_TYPE {
+            rendered.headers_mut().append(name.clone(), value.clone());
+        }
     }
+
+    rendered
 }
 
 /// This lets a handler write `?` and touch no error.
 impl From<ServiceError> for ApiError {
     fn from(error: ServiceError) -> Self {
-        let (code, public) = error.public();
-        let message = public.map_or_else(|| error.to_string(), str::to_owned);
+        let (code, message) = error.public();
 
         Self::new(code, message).with_cause(&error)
     }
@@ -144,11 +153,22 @@ pub async fn route_not_found() -> ApiError {
     )
 }
 
-/// Without this, axum answers `405` with an empty body. That is the one failure
-/// that escapes the error contract.
+/// Without this, axum answers `405` with an empty body.
 pub async fn method_not_allowed() -> ApiError {
     ApiError::new(
         ErrorCode::MethodNotAllowed,
         "The requested method is not allowed for this route",
+    )
+}
+
+/// A refused login or a refused token. `Forbidden` is here too: a user who
+/// tries every admin route is worth a line.
+const fn is_access_refusal(code: ErrorCode) -> bool {
+    matches!(
+        code,
+        ErrorCode::InvalidCredentials
+            | ErrorCode::Unauthorized
+            | ErrorCode::Forbidden
+            | ErrorCode::PasswordChangeRequired
     )
 }

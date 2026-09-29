@@ -10,6 +10,7 @@ import LocalTime from "../../components/ui/LocalTime.astro"
 import Panel from "../../components/ui/Panel.astro"
 import Layout from "../../layouts/Layout.astro"
 import { call, dataOf, failureOf, isMissing } from "../../lib/api"
+import { checkinCycles, formatCycles, signed } from "../../lib/cycles"
 import { checkinPath } from "../../lib/events"
 import { checkinCode } from "../../lib/schemas"
 import { sessionOf } from "../../lib/session"
@@ -30,16 +31,17 @@ const loggedOut = Astro.getActionResult(actions.logout)
 if (loggedOut && !loggedOut.error) {
   return Astro.redirect(`/login?next=${encodeURIComponent(here)}`)
 }
-// The confirmation shows one time, right after the scan that paid. A later
-// visit, or a scan that found the player in, shows the quieter "already in".
-// The query string is anyone's to write, so the API must agree that the
-// player is in before the page claims a payment.
+// The confirmation shows on `?done=checked`, the redirect of the scan that
+// paid. A scan that found the player in redirects to `?done=already`, which
+// shows the quieter "already in". The query string is anyone's to write, so the
+// API must agree that the player is in before the page claims a payment.
 const justChecked = Astro.url.searchParams.get("done") === "checked"
 
 const session = sessionOf(Astro.locals)
-const [gateResult, mine] = await Promise.all([
+const [gateResult, mine, rules] = await Promise.all([
   call(client => client.GET("/api/checkin/{code}", { params: { path: { code } } })),
   session ? call(client => client.GET("/api/me/checkins"), session.token) : undefined,
+  call(client => client.GET("/api/cycles/rules")),
 ])
 const failure = failureOf(gateResult)
 if (failure && isMissing(failure)) return Astro.rewrite("/404")
@@ -49,6 +51,7 @@ const event = gate?.event
 // refuses nothing on a repeat, so the button stays and the answer is the same.
 const already = mine ? (dataOf(mine)?.events ?? []).includes(event?.id ?? "") : false
 const next = encodeURIComponent(here)
+const pays = checkinCycles(dataOf(rules))
 ---
 
 <Layout title={`CHECK-IN//${event?.name ?? "LAN_BUNKER"}`} bare noindex>
@@ -99,7 +102,9 @@ const next = encodeURIComponent(here)
                       CHECKED IN
                     </div>
                     <div class="mt-2 truncate text-sm">{session.player.handle}</div>
-                    <div class="mt-1 text-xs font-bold">+100 cycles</div>
+                    {pays !== undefined && (
+                      <div class="mt-1 text-xs font-bold">{signed(pays)} cycles</div>
+                    )}
                   </div>
                 </div>
                 <p class="m-0 mt-3 text-dim">welcome to the bunker. have a good night.</p>
@@ -130,7 +135,11 @@ const next = encodeURIComponent(here)
                   check-in opens with them.
                 </p>
                 <div class="mt-3">
-                  <Countdown deadline={event.startsAt} label="doors in" />
+                  <Countdown
+                    deadline={event.startsAt}
+                    label="doors in"
+                    expiredLabel="Doors are open"
+                  />
                 </div>
               </div>
             ) : gate.window === "over" ? (
@@ -145,8 +154,14 @@ const next = encodeURIComponent(here)
             ) : !session ? (
               <div data-state="anonymous">
                 <p class="m-0 text-dim">
-                  log in or enlist to check in. check-in gives you{" "}
-                  <span class="text-bright">100 cycles</span>.
+                  log in or enlist to check in.
+                  {pays !== undefined && (
+                    <>
+                      {" "}
+                      check-in gives you{" "}
+                      <span class="text-bright">{formatCycles(pays)} cycles</span>.
+                    </>
+                  )}
                 </p>
                 <div class="mt-4 flex flex-wrap items-center gap-4">
                   <Button href={`/signup?next=${next}`}>ENLIST</Button>
@@ -168,7 +183,11 @@ const next = encodeURIComponent(here)
                     <div class="truncate text-base leading-tight tracking-wider text-(--player)">
                       {session.player.handle}
                     </div>
-                    <div class="mt-1 text-2xs text-dim">check-in: +100 cycles</div>
+                    {pays !== undefined && (
+                      <div class="mt-1 text-2xs text-dim">
+                        check-in: {signed(pays)} cycles
+                      </div>
+                    )}
                   </div>
                 </div>
                 <div class="mt-5 flex flex-wrap items-center gap-4">

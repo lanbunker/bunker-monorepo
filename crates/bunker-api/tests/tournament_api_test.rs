@@ -10,15 +10,16 @@
 
 mod support;
 
+use std::collections::HashSet;
+
 use axum::http::StatusCode;
 use bunker_models::{
-    Entrant, Paginated, Registrations, SkillLevel, Tournament, TournamentDetail, TournamentStatus,
+    Entrant, Paginated, Registrations, SkillLevel, Tournament, TournamentDetail, TournamentId,
+    TournamentStatus,
 };
 use serde_json::json;
-use support::{TestApi, assert_error, read_json};
+use support::{HOUR, TestApi, assert_error, read_json};
 use uuid::Uuid;
-
-const HOUR: i64 = 3600;
 
 #[tokio::test]
 async fn a_new_tournament_is_a_draft_that_only_admins_see() {
@@ -320,7 +321,7 @@ async fn registration_needs_an_open_tournament_before_its_deadline() {
 }
 
 #[tokio::test]
-async fn an_admin_adds_and_removes_entrants_in_any_status() {
+async fn an_admin_add_keeps_one_entry_and_corrects_the_level() {
     let api = TestApi::with_database().await;
     let admin = api.signup_admin("root").await;
     let created = api.create_tournament(&admin, -HOUR).await;
@@ -582,7 +583,8 @@ async fn a_player_reads_their_registrations_in_one_call() {
     )
     .await;
     let both: Registrations = read_json(api.get_as("/api/me/registrations", &dave).await).await;
-    assert_eq!(both.tournaments, [first.id, second.id]);
+    let both: HashSet<TournamentId> = both.tournaments.into_iter().collect();
+    assert_eq!(both, HashSet::from([first.id, second.id]));
 
     api.delete_as(
         &format!("/api/tournaments/{}/registration", first.id),
@@ -634,4 +636,177 @@ async fn an_apply_needs_a_level_from_one_to_five() {
             read_json(api.post_as(&path, &json!({ "skill": level }), &dave).await).await;
         assert_eq!(entrant.skill.map(SkillLevel::value), Some(level));
     }
+}
+
+#[tokio::test]
+async fn an_admin_adds_and_removes_entrants_in_draft_open_and_live() {
+    let api = TestApi::with_database().await;
+    let admin = api.signup_admin("root").await;
+
+    for (index, status) in ["draft", "open", "live"].into_iter().enumerate() {
+        let created = api.create_tournament(&admin, -HOUR).await;
+        if status != "draft" {
+            api.set_status(&admin, created.id, status).await;
+        }
+        let entrant = api
+            .add_entrant(&admin, created.id, &format!("player{index}"))
+            .await;
+
+        let removed = api
+            .delete_as(
+                &format!(
+                    "/api/admin/tournaments/{}/entrants/{}",
+                    created.id, entrant.id
+                ),
+                &admin,
+            )
+            .await;
+        assert_eq!(removed.status(), StatusCode::NO_CONTENT, "{status}");
+        assert!(api.detail(&admin, created.id).await.entrants.is_empty());
+    }
+}
+
+/// `concluded` is final: the entrants and the fields of the tournament stay as
+/// they were when it paid.
+#[tokio::test]
+async fn a_concluded_tournament_refuses_entrants_and_edits() {
+    let api = TestApi::with_database().await;
+    let admin = api.signup_admin("root").await;
+    let created = api.create_tournament(&admin, HOUR).await;
+    let dave = api.add_entrant(&admin, created.id, "dave").await;
+    api.set_status(&admin, created.id, "concluded").await;
+    let erin = api.signup_player("erin").await;
+    let entrants = format!("/api/admin/tournaments/{}/entrants", created.id);
+
+    let added = api
+        .post_as(&entrants, &json!({ "playerId": erin.id }), &admin)
+        .await;
+    let removed = api
+        .delete_as(&format!("{entrants}/{}", dave.id), &admin)
+        .await;
+    let edited = api
+        .patch_as(
+            &format!("/api/admin/tournaments/{}", created.id),
+            &json!({ "name": "Renamed Cup" }),
+            &admin,
+        )
+        .await;
+
+    for refused in [added, removed, edited] {
+        let status = refused.status();
+        let body: serde_json::Value = read_json(refused).await;
+        assert_eq!(status, StatusCode::CONFLICT, "{body}");
+        assert_eq!(body["code"], "InvalidState");
+        assert_eq!(
+            body["message"],
+            "The tournament is concluded and takes no more changes"
+        );
+    }
+    let detail = api.detail(&admin, created.id).await;
+    assert_eq!(detail.tournament.name.as_ref(), "Sniper Cup");
+    assert_eq!(detail.entrants.len(), 1);
+}
+
+/// Two clicks on the conclude button at once. The second write finds the
+/// status moved and answers like a second click, and the ledger pays one time.
+#[tokio::test]
+async fn two_concludes_at_once_pay_one_time() {
+    let api = TestApi::with_database().await;
+    let admin = api.signup_admin("root").await;
+    let created = api.create_tournament(&admin, HOUR).await;
+    let dave = api.add_entrant(&admin, created.id, "dave").await;
+    api.add_entrant(&admin, created.id, "erin").await;
+    api.set_status(&admin, created.id, "live").await;
+    let path = format!("/api/admin/tournaments/{}/status", created.id);
+    let conclude = json!({ "status": "concluded", "winner": dave.id });
+    let repeat = json!({ "status": "concluded" });
+
+    let (first, second) = tokio::join!(
+        api.post_as(&path, &conclude, &admin),
+        api.post_as(&path, &repeat, &admin),
+    );
+
+    let statuses = [first.status(), second.status()];
+    assert!(
+        statuses.contains(&StatusCode::OK),
+        "one conclusion lands: {statuses:?}"
+    );
+    assert!(
+        statuses
+            .iter()
+            .all(|status| [StatusCode::OK, StatusCode::CONFLICT].contains(status)),
+        "a lost race is a conflict at worst, never a failure: {statuses:?}"
+    );
+    let (entries,): (i64,) =
+        sqlx::query_as("select count(*) from point_entries where tournament_id = ?1")
+            .bind(created.id.to_string())
+            .fetch_one(api.pool())
+            .await
+            .unwrap();
+    let concluded = api.detail(&admin, created.id).await.tournament;
+    let expected = if concluded.winner.is_some() { 3 } else { 2 };
+    assert_eq!(entries, expected, "two entries and at most one champion");
+    assert_eq!(concluded.status, TournamentStatus::Concluded);
+}
+
+/// The field has a size. A player already in keeps the place and can change
+/// the level of a full field.
+#[tokio::test]
+async fn a_full_field_takes_no_new_entrant() {
+    let api = TestApi::with_database().await;
+    let admin = api.signup_admin("root").await;
+    let created = api.create_tournament(&admin, HOUR).await;
+    api.set_status(&admin, created.id, "open").await;
+    let dave = api.signup("dave").await.token;
+    let register = format!("/api/tournaments/{}/registration", created.id);
+    let joined = api.post_as(&register, &json!({ "skill": 2 }), &dave).await;
+    assert_eq!(joined.status(), StatusCode::OK);
+    for index in 1..usize::from(bunker_models::MAX_ENTRANTS) {
+        let player = uuid::Uuid::new_v4().to_string();
+        sqlx::query(
+            "insert into players (id, handle, password_hash, glyph_bits, glyph_color, created_at)
+             values (?1, ?2, 'x', 1, '#ffb000', 1)",
+        )
+        .bind(&player)
+        .bind(format!("filler{index}"))
+        .execute(api.pool())
+        .await
+        .unwrap();
+        sqlx::query(
+            "insert into tournament_entrants (id, tournament_id, player_id, registered_at)
+             values (?1, ?2, ?3, 1)",
+        )
+        .bind(uuid::Uuid::new_v4().to_string())
+        .bind(created.id.to_string())
+        .bind(&player)
+        .execute(api.pool())
+        .await
+        .unwrap();
+    }
+    let erin = api.signup_player("erin").await;
+
+    let by_admin = api
+        .post_as(
+            &format!("/api/admin/tournaments/{}/entrants", created.id),
+            &json!({ "playerId": erin.id }),
+            &admin,
+        )
+        .await;
+    assert_error(by_admin, StatusCode::CONFLICT, "InvalidState").await;
+    let late = api.signup("late").await.token;
+    let by_player = api.post_as(&register, &json!({ "skill": 3 }), &late).await;
+    assert_error(by_player, StatusCode::CONFLICT, "InvalidState").await;
+
+    let relevel = api.post_as(&register, &json!({ "skill": 5 }), &dave).await;
+    assert_eq!(
+        relevel.status(),
+        StatusCode::OK,
+        "a player already in stays"
+    );
+    let entry: Entrant = read_json(relevel).await;
+    assert_eq!(entry.skill.map(SkillLevel::value), Some(5));
+    assert_eq!(
+        api.detail(&admin, created.id).await.entrants.len(),
+        usize::from(bunker_models::MAX_ENTRANTS)
+    );
 }

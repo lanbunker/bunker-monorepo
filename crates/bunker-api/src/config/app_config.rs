@@ -61,12 +61,7 @@ pub struct AppConfig {
     /// Log at debug level. Separate from [`Self::verbose_errors`], so a hidden
     /// cause still goes to the logs.
     pub debug_logs: bool,
-    /// Write logs as JSON instead of human-readable lines.
     pub json_logs: bool,
-    /// Apply pending migrations at startup. One process owns the SQLite file, so
-    /// there is no race between instances, and the service unit runs the binary
-    /// with no separate migrate step.
-    pub migrate_on_startup: bool,
     /// Hash passwords with the smallest Argon2 parameters. Only for tests, where
     /// a suite that signs up fifty players must not spend seconds on hashing.
     pub fast_password_hash: bool,
@@ -82,7 +77,6 @@ pub const fn resolve_app_config(app_env: AppEnv) -> AppConfig {
             verbose_errors: true,
             debug_logs: true,
             json_logs: false,
-            migrate_on_startup: true,
             fast_password_hash: true,
             jwt_secret_required: false,
         },
@@ -91,7 +85,6 @@ pub const fn resolve_app_config(app_env: AppEnv) -> AppConfig {
             verbose_errors: true,
             debug_logs: true,
             json_logs: false,
-            migrate_on_startup: true,
             fast_password_hash: false,
             jwt_secret_required: false,
         },
@@ -100,7 +93,6 @@ pub const fn resolve_app_config(app_env: AppEnv) -> AppConfig {
             verbose_errors: false,
             debug_logs: false,
             json_logs: true,
-            migrate_on_startup: true,
             fast_password_hash: false,
             jwt_secret_required: true,
         },

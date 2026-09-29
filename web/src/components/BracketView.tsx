@@ -162,7 +162,6 @@ export const BracketView = (props: BracketViewProps) => {
     const box = (m: Match) => {
         const decided = m.winner !== null && m.winner !== undefined
         const ready = Boolean(m.entrantA && m.entrantB)
-        // In round 1 an empty side is a bye. Later an empty side waits for a result.
         const placeholder = m.round === 1 ? "bye" : "tbd"
         const interactive = Boolean(editing) && ready && !(editing?.isFrozen(m) ?? false)
         const draggable = Boolean(editing?.canSwap) && m.round === 1
@@ -229,8 +228,12 @@ export const BracketView = (props: BracketViewProps) => {
                                     size={props.kiosk ? "6rem" : "4rem"}
                                     framed
                                 />
+                                {/* The box is built around this one player, so
+                                    the name wears their color, as the winner of
+                                    a tournament card does. */}
                                 <span
-                                    className={`handle ${props.kiosk ? "text-2xl" : "text-base"} text-accent tracking-wider`}
+                                    className={`handle ${props.kiosk ? "text-2xl" : "text-base"} tracking-wider`}
+                                    style={{ color: champion.player.glyph.color }}
                                     title={champion.player.handle}
                                 >
                                     {champion.player.handle}

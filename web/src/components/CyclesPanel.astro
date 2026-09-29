@@ -1,4 +1,5 @@
 ---
+import Alert from "./ui/Alert.astro"
 import type { CyclesLog as Log } from "../lib/api"
 import { RECENT_ENTRIES } from "../lib/paging"
 import CyclesLog from "./CyclesLog.astro"
@@ -29,7 +30,7 @@ const path = own ? "~/.cycles" : `/players/${handle}/cycles`
       empty={own ? "no cycles yet. enter a tournament." : "no cycles yet."}
     />
   ) : (
-    <p class="m-0 text-xs text-alert">the ledger is unreachable.</p>
+    <Alert message="the ledger is unreachable." />
   )}
   <div class="mt-4 flex flex-wrap gap-3">
     {log && log.entries.total > RECENT_ENTRIES && (

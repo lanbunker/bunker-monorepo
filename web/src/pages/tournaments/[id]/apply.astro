@@ -20,9 +20,11 @@ import {
   statusBadge,
 } from "../../../lib/tournaments"
 
-const session = sessionOf(Astro.locals)
-if (!session) return Astro.redirect("/login")
 const id = Astro.params.id ?? ""
+const session = sessionOf(Astro.locals)
+if (!session) {
+  return Astro.redirect(`/login?next=${encodeURIComponent(`/tournaments/${id}/apply`)}`)
+}
 
 // The list page shows the notice, so a refresh here never applies twice.
 const applied = Astro.getActionResult(actions.applyToTournament)
@@ -48,6 +50,7 @@ const level = skillLevel.safeParse(Astro.locals.submitted.skill).data ?? UNRATED
 
 <Layout title={`APPLY//${t?.name ?? "tournament"}`} active="tournaments" noindex>
   <Prompt
+    heading="p"
     command={`./apply --tournament ${id.slice(0, 8)}`}
     comment="an honest level makes a fun bracket"
   />

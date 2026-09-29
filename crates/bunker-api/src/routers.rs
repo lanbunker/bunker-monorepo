@@ -9,6 +9,7 @@ mod event_router;
 mod health_router;
 mod openapi;
 mod player_router;
+mod responses;
 mod tournament_router;
 
 pub use admin_event_router::admin_event_router;
@@ -21,9 +22,16 @@ pub use openapi::{ApiDoc, openapi_router};
 pub use player_router::player_router;
 pub use tournament_router::tournament_router;
 
+use axum::Json;
 use axum::extract::FromRef;
+use axum::http::StatusCode;
+use bunker_models::TournamentId;
+use serde::Deserialize;
 
-use crate::services::{AuthService, EventService, PlayerService, PointsService, TournamentService};
+use crate::services::{
+    AuthService, EventService, MatchService, Outcome, PlayerService, PointsService,
+    TournamentService,
+};
 
 /// Given to each handler. It holds services, and never storage or configuration.
 /// A handler with direct database access could skip the business rules.
@@ -34,6 +42,7 @@ use crate::services::{AuthService, EventService, PlayerService, PointsService, T
 pub struct AppState {
     pub auth: AuthService,
     pub events: EventService,
+    pub matches: MatchService,
     pub players: PlayerService,
     pub points: PointsService,
     pub tournaments: TournamentService,
@@ -42,6 +51,12 @@ pub struct AppState {
 impl FromRef<AppState> for EventService {
     fn from_ref(state: &AppState) -> Self {
         state.events.clone()
+    }
+}
+
+impl FromRef<AppState> for MatchService {
+    fn from_ref(state: &AppState) -> Self {
+        state.matches.clone()
     }
 }
 
@@ -66,5 +81,18 @@ impl FromRef<AppState> for AuthService {
 impl FromRef<AppState> for PlayerService {
     fn from_ref(state: &AppState) -> Self {
         state.players.clone()
+    }
+}
+
+#[derive(Debug, Deserialize, utoipa::IntoParams)]
+struct TournamentPath {
+    id: TournamentId,
+}
+
+/// `201` for a row the call created, `200` for one that was already there.
+fn created_or_existing<T>(outcome: Outcome<T>) -> (StatusCode, Json<T>) {
+    match outcome {
+        Outcome::Created(value) => (StatusCode::CREATED, Json(value)),
+        Outcome::Existing(value) => (StatusCode::OK, Json(value)),
     }
 }

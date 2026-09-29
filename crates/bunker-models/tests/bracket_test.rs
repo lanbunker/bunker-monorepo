@@ -7,7 +7,7 @@
     clippy::indexing_slicing
 )]
 
-use bunker_models::{Bracket, BracketError, EntrantId, Match, MatchId};
+use bunker_models::{Bracket, BracketError, EntrantId, MAX_ENTRANTS, Match, MatchId};
 
 fn entrants(n: usize) -> Vec<EntrantId> {
     (0..n).map(|_| EntrantId::generate()).collect()
@@ -24,6 +24,20 @@ fn one_entrant_is_not_a_bracket() {
         Err(BracketError::TooFewEntrants(1))
     );
     assert_eq!(Bracket::generate(&[]), Err(BracketError::TooFewEntrants(0)));
+}
+
+#[test]
+fn the_largest_field_fills_eight_rounds_and_one_more_is_refused() {
+    let largest = usize::from(MAX_ENTRANTS);
+
+    let bracket = Bracket::generate(&entrants(largest)).unwrap();
+    assert_eq!(bracket.rounds.len(), 8);
+    assert_eq!(bracket.rounds[0].len(), largest / 2);
+
+    assert_eq!(
+        Bracket::generate(&entrants(largest + 1)),
+        Err(BracketError::TooManyEntrants(largest + 1))
+    );
 }
 
 #[test]

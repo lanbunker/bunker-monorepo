@@ -98,13 +98,16 @@ of exporting a variable:
 
 The `env.e2e` port must match `API_PORT` in `playwright.config.ts`.
 
+`API_URL` has no default in `astro.config.mjs`. A run that gets no value fails,
+and does not call a guessed port.
+
 ## Astro 7 notes
 
 `compressHTML: true` keeps the version 6 compression. The version 7 default
 follows JSX whitespace rules, which glue two inline elements that only a line
 break separates.
 
-`astro dev` puts itself in the background when it detects an agent, and it takes
-a lock on the project. The Playwright web server passes `ASTRO_DEV_BACKGROUND=0`
-so it stays in the foreground, and `--ignore-lock` so it starts beside a dev
-server that is already running.
+`astro preview` puts itself in the background when it detects an agent. The
+Playwright web server serves the production build with `astro preview` and
+passes `ASTRO_PREVIEW_BACKGROUND=0`, so it stays in the foreground and
+Playwright can stop it.

@@ -1,0 +1,43 @@
+---
+import type { Player } from "../lib/api"
+import Glyph from "./ui/Glyph.astro"
+
+type Tone = "default" | "spotlight"
+
+interface Props {
+  player: Player
+  /** The size of the glyph before the handle. Omit it to render the name alone. */
+  glyph?: string
+  /** A block that is about this one player, such as the winner of a cup. */
+  tone?: Tone
+  /** The name is the content of its row, so it is shown whole. */
+  whole?: boolean
+  class?: string
+}
+
+const { player, glyph, tone = "default", whole = false, class: className } = Astro.props
+
+// The two tones are mirrors, and both brighten on hover, so both read as links.
+// A name in a list or a log is a reference: it rests plain, and the hover says
+// whose name it is. A name a block is built around already belongs to its
+// player, so it wears the color and the hover takes it to the brightest step.
+const toneClass: Record<Tone, string> = {
+  default: "text-bright hover:text-(--player)",
+  spotlight: "text-(--player) hover:text-bright",
+}
+---
+
+<a
+  href={`/players/${player.handle}`}
+  class:list={[
+    "no-underline",
+    glyph && "inline-flex items-center gap-2",
+    toneClass[tone],
+    className,
+  ]}
+  style={`--player:${player.glyph.color}`}
+  title={player.handle}
+>
+  {glyph && <Glyph glyph={player.glyph} size={glyph} />}
+  <span class:list={[!whole && "handle"]}>{player.handle}</span>
+</a>

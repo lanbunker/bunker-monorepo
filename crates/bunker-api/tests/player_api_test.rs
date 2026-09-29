@@ -47,10 +47,11 @@ async fn an_unknown_handle_is_not_found() {
     assert_error(response, StatusCode::NOT_FOUND, "ItemNotFound").await;
 }
 
-/// Three signups in a row, so a text sort of the timestamps with a trimmed
-/// fraction would show. The order must be chronological, not lexical.
+/// Nobody has cycles, so every player shares the first place and the tie goes
+/// to the newest signup. Three signups in a row, so a text sort of the
+/// timestamps with a trimmed fraction would show.
 #[tokio::test]
-async fn the_roster_lists_every_player_newest_first() {
+async fn the_leaderboard_breaks_a_shared_place_with_the_newest_signup() {
     let api = TestApi::with_database().await;
     let mut expected = Vec::new();
     for handle in ["dave", "ziopera", "ciccio"] {
@@ -109,7 +110,7 @@ async fn a_player_has_the_documented_wire_shape() {
     assert_eq!(body["standing"]["place"], 1);
     assert_eq!(body["standing"]["players"], 1);
     assert_eq!(body["standing"]["next"]["rank"], "guest");
-    assert_eq!(body["standing"]["next"]["floor"], 100);
+    assert_eq!(body["standing"]["next"]["floor"], 80);
     assert_eq!(body["glyph"]["color"], "#ff6b57");
     assert_eq!(body["glyph"]["bits"], 4_554_623);
     assert!(body["createdAt"].as_str().unwrap().ends_with('Z'));

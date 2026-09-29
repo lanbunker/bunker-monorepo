@@ -2,20 +2,23 @@ import { defineConfig } from "@playwright/test"
 
 // Both servers start from scratch: the API on its own database file under
 // `.dev/`, so a run never touches the development data, and the site pointed at
-// that API. The API binary compiles against `.env` first, then runs elsewhere.
-// The API port must match `env.e2e.vars.API_URL` in `web/wrangler.jsonc`.
+// that API. The API compiles its queries against the `.env` database and then
+// runs on `.dev/e2e.db`. The API port must match `env.e2e.vars.API_URL` in
+// `web/wrangler.jsonc`.
 const API_PORT = 3999
 const WEB_PORT = 4399
 
 export default defineConfig({
     testDir: "./e2e",
-    // Warms the dev server, so the first test does not race the bundler.
-    globalSetup: "./e2e/warmup.ts",
-    fullyParallel: false,
-    workers: 1,
-    retries: 0,
+    // Every test builds its own players, tournaments and events, and asserts on
+    // rows it names. Nothing is shared but the database, which takes concurrent
+    // writes through WAL, so the whole suite runs at once.
+    fullyParallel: true,
+    workers: process.env.CI ? 4 : "75%",
+    // A shared runner is slower than a laptop, so a first failure there is worth
+    // one more attempt. A local run reports a flake instead of hiding it.
+    retries: process.env.CI ? 1 : 0,
     timeout: 30_000,
-    // The dev server compiles a page on its first visit, which takes seconds.
     expect: { timeout: 10_000 },
     reporter: [["list"]],
     use: {
@@ -35,17 +38,18 @@ export default defineConfig({
             stderr: "pipe",
         },
         {
-            // A Worker var beats the shell in local mode, so the API URL comes
-            // from the `e2e` environment of `wrangler.jsonc`, which holds this
-            // same port. `astro dev` also detaches itself when it detects an
-            // agent, and then Playwright cannot stop it: the variable turns that
-            // detection off, whatever its value.
-            // `--ignore-lock` starts this server beside a dev server the
-            // developer already has, instead of refusing to start.
-            command: `CLOUDFLARE_ENV=e2e ASTRO_DEV_BACKGROUND=0 pnpm astro dev --ignore-lock --host 127.0.0.1 --port ${WEB_PORT}`,
+            // The site under test is the production build, served by the same
+            // runtime that serves it on Cloudflare. The dev server runs the code
+            // through a module runner, which hangs on Linux on the first request
+            // to an action route. A Worker var beats the shell in local mode, so
+            // the API URL comes from the `e2e` environment of `wrangler.jsonc`,
+            // which holds this same port. `astro preview` detaches itself when it
+            // detects an agent, and then Playwright cannot stop it: the variable
+            // turns that detection off, whatever its value.
+            command: `CLOUDFLARE_ENV=e2e pnpm exec astro build && CLOUDFLARE_ENV=e2e ASTRO_PREVIEW_BACKGROUND=0 pnpm exec astro preview --host 127.0.0.1 --port ${WEB_PORT}`,
             url: `http://127.0.0.1:${WEB_PORT}/`,
             reuseExistingServer: false,
-            timeout: 120_000,
+            timeout: 240_000,
             stdout: "pipe",
             stderr: "pipe",
         },

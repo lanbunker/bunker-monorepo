@@ -13,8 +13,8 @@ pub const PASSWORD_MIN_LEN: usize = 8;
 /// not a credential.
 pub const PASSWORD_MAX_LEN: usize = 128;
 
-/// A password as a client sends it. It is never stored and never logged: `Debug`
-/// and `Display` are not derived, and the wrapper below redacts it.
+/// A password as a client sends it. `Debug` is written by hand and redacts it, and
+/// there is no `Display`.
 #[nutype(
     validate(len_char_min = PASSWORD_MIN_LEN, len_char_max = PASSWORD_MAX_LEN),
     derive(Clone, PartialEq, Eq, AsRef, Deserialize)
@@ -65,12 +65,24 @@ impl fmt::Debug for TemporaryPassword {
     }
 }
 
-/// The answer to a signup or a login. The token is a bearer JWT.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+/// The answer to a signup, a login or a password change. The token is a bearer
+/// JWT.
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct TokenResponse {
     pub token: String,
     #[serde(with = "time::serde::rfc3339")]
     #[schema(value_type = String, format = DateTime)]
     pub expires_at: OffsetDateTime,
+}
+
+/// The token is a credential, so a `debug!` of the response cannot log it.
+impl fmt::Debug for TokenResponse {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("TokenResponse")
+            .field("token", &"<redacted>")
+            .field("expires_at", &self.expires_at)
+            .finish()
+    }
 }

@@ -1,12 +1,16 @@
 ---
 import { actions } from "astro:actions"
 import CyclesPanel from "../components/CyclesPanel.astro"
+import MatchPanel from "../components/MatchPanel.astro"
+import NemesisPanel from "../components/NemesisPanel.astro"
 import PlayerCard from "../components/PlayerCard.astro"
 import StandingPanels from "../components/StandingPanels.astro"
+import Alert from "../components/ui/Alert.astro"
 import Button from "../components/ui/Button.astro"
 import Prompt from "../components/ui/Prompt.astro"
 import Layout from "../layouts/Layout.astro"
 import { call, dataOf } from "../lib/api"
+import { noticeFrom } from "../lib/form"
 import { RECENT_ENTRIES } from "../lib/paging"
 import { sessionOf } from "../lib/session"
 
@@ -18,9 +22,8 @@ if (loggedOut && !loggedOut.error) return Astro.redirect("/login")
 const session = sessionOf(Astro.locals)
 if (!session) return Astro.redirect("/login")
 const player = session.player
-// The middleware read the player already. The log is the one extra call.
-const log = dataOf(
-  await call(client =>
+const [logResult, matchResult] = await Promise.all([
+  call(client =>
     client.GET("/api/players/{handle}/cycles", {
       params: {
         path: { handle: player.handle },
@@ -28,31 +31,37 @@ const log = dataOf(
       },
     }),
   ),
-)
+  call(client =>
+    client.GET("/api/players/{handle}/matches", {
+      params: {
+        path: { handle: player.handle },
+        query: { page: 1, pageSize: RECENT_ENTRIES },
+      },
+    }),
+  ),
+])
+const log = dataOf(logResult)
+const matches = dataOf(matchResult)
 
-// `/password` and `/handle` redirect here after a change. An action result does
-// not survive a redirect, so the flag rides on the query string.
-const changed = Astro.url.searchParams.get("changed")
-const notice =
-  changed === "password"
-    ? "password changed."
-    : changed === "handle"
-      ? "handle changed."
-      : undefined
+// `/password` and `/handle` redirect here after a change.
+const notice = noticeFrom(Astro.url, {
+  password: "password changed.",
+  handle: "handle changed.",
+})
 ---
 
 <Layout title={`${player.handle}//LAN_BUNKER`} noindex>
-  <Prompt command="whoami" />
+  <Prompt heading="p" command="whoami" />
 
-  {notice && (
-    <p class="mb-4 text-xs text-accent" role="status">
-      {notice}
-    </p>
-  )}
+  <Alert message={notice} tone="notice" class="mb-4" />
 
   <PlayerCard player={player} own />
   <StandingPanels standing={player.standing} totals={log?.totals} />
+  {matches?.nemesis && (
+    <NemesisPanel handle={player.handle} nemesis={matches.nemesis} own />
+  )}
 
+  <MatchPanel handle={player.handle} log={matches} own />
   <CyclesPanel handle={player.handle} log={log} own />
 
   <div class="mt-6 flex flex-wrap items-center gap-3">

@@ -1,33 +1,18 @@
-//! Single elimination brackets, as pure data and rules. Nothing here touches a
-//! database, so the rules are tested on their own and any crate can reuse them.
+//! Single elimination brackets, as pure data and rules.
 
 use std::collections::BTreeMap;
 
-use nutype::nutype;
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
-use uuid::Uuid;
 
+use super::id::uuid_id;
 use super::tournament::EntrantId;
 
-#[nutype(derive(
-    Debug,
-    Clone,
-    Copy,
-    PartialEq,
-    Eq,
-    Hash,
-    Display,
-    Serialize,
-    Deserialize
-))]
-pub struct MatchId(Uuid);
+/// The largest field a tournament takes. It bounds every entrant list a query
+/// reads, and a bracket of this size has eight rounds.
+pub const MAX_ENTRANTS: u16 = 256;
 
-impl MatchId {
-    pub fn generate() -> Self {
-        Self::new(Uuid::new_v4())
-    }
-}
+uuid_id!(MatchId);
 
 /// One match. `round` starts at 1, `slot` at 0. An empty side is a bye in round
 /// 1 and an undecided feeder afterwards.
@@ -66,6 +51,8 @@ pub struct Bracket {
 pub enum BracketError {
     #[error("a bracket needs at least two entrants, got {0}")]
     TooFewEntrants(usize),
+    #[error("a bracket takes at most {MAX_ENTRANTS} entrants, got {0}")]
+    TooManyEntrants(usize),
     #[error("match {0} is not in this bracket")]
     UnknownMatch(MatchId),
     #[error("match {0} does not have both entrants yet")]
@@ -81,9 +68,7 @@ pub enum BracketError {
 impl Bracket {
     /// Builds every match from the entrants in seed order: the first is seed 1.
     /// Neighbours in that order meet in round one, seed 1 against seed 2, seed
-    /// 3 against seed 4, and so on. The service orders the entrants by skill, so
-    /// a round one match is between players of the same level, and the two
-    /// halves of the bracket only meet in the final.
+    /// 3 against seed 4, and so on.
     ///
     /// The size is the next power of two. The missing entrants are byes, one
     /// per match at most, and they go to the top seeds: the first `byes` matches
@@ -94,53 +79,59 @@ impl Bracket {
         if count < 2 {
             return Err(BracketError::TooFewEntrants(count));
         }
+        if count > usize::from(MAX_ENTRANTS) {
+            return Err(BracketError::TooManyEntrants(count));
+        }
         let size = count.next_power_of_two();
         let byes = size - count;
+        let slot_of =
+            |slot: usize| u32::try_from(slot).map_err(|_| BracketError::TooManyEntrants(count));
         let mut seeds = seeded.iter().copied();
 
         // `count > size / 2`, so `byes < size / 2` and every match has a side a.
-        let first_round: Vec<Match> = (0..size / 2)
+        let first_round = (0..size / 2)
             .map(|slot| {
                 let entrant_a = seeds.next();
                 let entrant_b = if slot < byes { None } else { seeds.next() };
                 let winner = if entrant_b.is_none() { entrant_a } else { None };
-                Match {
+                Ok(Match {
                     id: MatchId::generate(),
                     round: 1,
-                    slot: as_u32(slot),
+                    slot: slot_of(slot)?,
                     entrant_a,
                     entrant_b,
                     winner,
-                }
+                })
             })
-            .collect();
+            .collect::<Result<Vec<_>, BracketError>>()?;
 
         let round_count = size.trailing_zeros();
-        let later_rounds = (2..=round_count).map(|round| {
-            let slots = size >> round;
-            (0..slots)
-                .map(|slot| Match {
-                    id: MatchId::generate(),
-                    round,
-                    slot: as_u32(slot),
-                    entrant_a: None,
-                    entrant_b: None,
-                    winner: None,
-                })
-                .collect::<Vec<_>>()
-        });
+        let later_rounds = (2..=round_count)
+            .map(|round| {
+                (0..size >> round)
+                    .map(|slot| {
+                        Ok(Match {
+                            id: MatchId::generate(),
+                            round,
+                            slot: slot_of(slot)?,
+                            entrant_a: None,
+                            entrant_b: None,
+                            winner: None,
+                        })
+                    })
+                    .collect::<Result<Vec<_>, BracketError>>()
+            })
+            .collect::<Result<Vec<_>, _>>()?;
 
+        let bye_winners: Vec<(usize, EntrantId)> = first_round
+            .iter()
+            .enumerate()
+            .filter_map(|(slot, m)| Some((slot, m.winner?)))
+            .collect();
         let mut bracket = Self {
             rounds: std::iter::once(first_round).chain(later_rounds).collect(),
         };
-        let byes: Vec<(usize, EntrantId)> = bracket
-            .rounds
-            .first()
-            .into_iter()
-            .flatten()
-            .filter_map(|m| Some((usize::try_from(m.slot).ok()?, m.winner?)))
-            .collect();
-        for (slot, winner) in byes {
+        for (slot, winner) in bye_winners {
             bracket.feed(0, slot, Some(winner));
         }
 
@@ -192,7 +183,6 @@ impl Bracket {
         self.flat().any(Match::is_played)
     }
 
-    /// The winner of the final, once it has one.
     pub fn champion(&self) -> Option<EntrantId> {
         self.rounds.last()?.first()?.winner
     }
@@ -296,9 +286,4 @@ impl Bracket {
             .cloned()
             .collect()
     }
-}
-
-/// A slot index is bounded by the bracket size, which a `u32` holds with room.
-fn as_u32(index: usize) -> u32 {
-    u32::try_from(index).unwrap_or(u32::MAX)
 }

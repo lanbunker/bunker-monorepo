@@ -222,14 +222,37 @@ async fn a_token_with_another_algorithm_is_refused() {
     assert_error(response, StatusCode::UNAUTHORIZED, "Unauthorized").await;
 }
 
+/// Every other claim is valid, so only the missing `exp` can refuse it.
 #[tokio::test]
 async fn a_token_without_an_expiry_is_refused() {
     let api = TestApi::with_database().await;
     let player = api.signup_player("dave").await;
+    let now = OffsetDateTime::now_utc().unix_timestamp();
 
-    let eternal = signed(&json!({ "sub": player.id }), jsonwebtoken::Algorithm::HS256);
+    let eternal = signed(
+        &json!({ "sub": player.id, "iat": now }),
+        jsonwebtoken::Algorithm::HS256,
+    );
 
     let response = api.get_as("/api/me", &eternal).await;
+
+    assert_error(response, StatusCode::UNAUTHORIZED, "Unauthorized").await;
+}
+
+/// Without `iat` the token cannot be compared with the last password change,
+/// so it would outlive the change that should kill it.
+#[tokio::test]
+async fn a_token_without_an_issue_time_is_refused() {
+    let api = TestApi::with_database().await;
+    let player = api.signup_player("dave").await;
+    let in_an_hour = OffsetDateTime::now_utc().unix_timestamp() + 3600;
+
+    let timeless = signed(
+        &json!({ "sub": player.id, "exp": in_an_hour }),
+        jsonwebtoken::Algorithm::HS256,
+    );
+
+    let response = api.get_as("/api/me", &timeless).await;
 
     assert_error(response, StatusCode::UNAUTHORIZED, "Unauthorized").await;
 }
@@ -282,7 +305,6 @@ async fn a_valid_token_for_a_missing_player_is_unauthorized() {
     assert_error(response, StatusCode::UNAUTHORIZED, "Unauthorized").await;
 }
 
-/// The password never appears in a response, not even on the profile.
 #[tokio::test]
 async fn no_response_carries_the_password_or_its_hash() {
     let api = TestApi::with_database().await;

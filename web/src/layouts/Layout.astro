@@ -6,6 +6,7 @@ import LocalTime from "../components/ui/LocalTime.astro"
 import { call, dataOf } from "../lib/api"
 import type { Event } from "../lib/api"
 import { firstEvent, nextEvent as soonest } from "../lib/events"
+import { sessionOf } from "../lib/session"
 
 type Section = "home" | "events" | "tournaments" | "players" | "media" | "shop" | "about"
 
@@ -13,7 +14,7 @@ interface Props {
   title?: string
   /** The nav item to highlight. Account and player pages highlight none. */
   active?: Section
-  /** Hidden preview pages stay out of search engines. */
+  /** A private or per-player page stays out of search engines. */
   noindex?: boolean
   /** No header, nav, footer or status bar. The page fills the screen. */
   bare?: boolean
@@ -28,7 +29,7 @@ const {
   bare = false,
   events: given,
 } = Astro.props
-const player = Astro.locals.player
+const player = sessionOf(Astro.locals)?.player
 const description =
   "LAN BUNKER, a recurring local multiplayer event blending music and gaming."
 

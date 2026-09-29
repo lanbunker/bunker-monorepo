@@ -1,7 +1,7 @@
 ---
+import PlayerLink from "../../components/PlayerLink.astro"
 import Alert from "../../components/ui/Alert.astro"
 import Button from "../../components/ui/Button.astro"
-import Glyph from "../../components/ui/Glyph.astro"
 import Pager from "../../components/ui/Pager.astro"
 import Panel from "../../components/ui/Panel.astro"
 import RankMark from "../../components/ui/RankMark.astro"
@@ -9,9 +9,10 @@ import SearchBar from "../../components/ui/SearchBar.astro"
 import Table from "../../components/ui/Table.astro"
 import Layout from "../../layouts/Layout.astro"
 import { call, dataOf, failureOf, messageOf } from "../../lib/api"
-import { formatCycles } from "../../lib/cycles"
+import { formatCycles, isPodium } from "../../lib/cycles"
 import { formatDate } from "../../lib/dates"
 import { PAGE_SIZE, listPath, pageFrom, searchFrom } from "../../lib/paging"
+import { sessionOf } from "../../lib/session"
 
 const page = pageFrom(Astro.url)
 const q = searchFrom(Astro.url)
@@ -23,7 +24,7 @@ if (roster && page > roster.totalPages && roster.totalPages > 0) {
   return Astro.redirect(listPath("/players", q, roster.totalPages))
 }
 const failure = failureOf(result)
-const me = Astro.locals.player?.id
+const me = sessionOf(Astro.locals)?.player.id
 ---
 
 <Layout title="PLAYERS//LAN_BUNKER" active="players">
@@ -38,6 +39,7 @@ const me = Astro.locals.player?.id
           ? `bunkernet // ${roster.total} enlisted, by cycles`
           : `${roster.total} ${roster.total === 1 ? "match" : "matches"}, by cycles`
     }
+    heading="h1"
     class="mt-8 mb-4"
   />
 
@@ -80,24 +82,14 @@ const me = Astro.locals.player?.id
               <td
                 class:list={[
                   "nowrap px-3 py-2 tabular-nums",
-                  player.standing.place <= 3 && player.standing.cycles > 0
-                    ? "font-bold text-bright"
-                    : "text-mute",
+                  isPodium(player.standing) ? "font-bold text-bright" : "text-mute",
                 ]}
               >
                 #{String(player.standing.place).padStart(2, "0")}
               </td>
               <td class="nowrap py-2">
                 <span class="inline-flex items-center gap-2">
-                  <a
-                    href={`/players/${player.handle}`}
-                    class="inline-flex items-center gap-2 no-underline text-bright hover:text-accent"
-                  >
-                    <Glyph glyph={player.glyph} size="1.1em" />
-                    <span class="handle" title={player.handle}>
-                      {player.handle}
-                    </span>
-                  </a>
+                  <PlayerLink player={player} glyph="1.1em" />
                   {player.role === "admin" && (
                     <span class="text-2xs text-warn">admin</span>
                   )}

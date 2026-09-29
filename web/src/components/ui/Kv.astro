@@ -7,6 +7,8 @@ interface Props {
 }
 
 const { label, tone = "default" } = Astro.props
+// On a phone the value drops under the label, so a long value wraps as a
+// left-aligned line instead of a ragged right-aligned block.
 
 const valueClass: Record<Tone, string> = {
   default: "text-ink",
@@ -16,8 +18,6 @@ const valueClass: Record<Tone, string> = {
 }
 ---
 
-<!-- On a phone the value drops under the label, so a long value wraps as a
-     left-aligned line instead of a ragged right-aligned block. -->
 <div class="flex items-baseline gap-2 text-xs max-[30rem]:flex-col max-[30rem]:items-start max-[30rem]:gap-0">
   <span class="shrink-0 text-dim tracking-wide lowercase">{label}</span>
   <span class="leader max-[30rem]:hidden" aria-hidden="true"></span>

@@ -363,6 +363,7 @@ export interface paths {
             path?: never
             cookie?: never
         }
+        /** Takes a temporary password too, so the site can see that a change is due. */
         get: operations["me"]
         put?: never
         post?: never
@@ -484,6 +485,22 @@ export interface paths {
         patch?: never
         trace?: never
     }
+    "/api/players/{handle}/matches": {
+        parameters: {
+            query?: never
+            header?: never
+            path?: never
+            cookie?: never
+        }
+        get: operations["match_log"]
+        put?: never
+        post?: never
+        delete?: never
+        options?: never
+        head?: never
+        patch?: never
+        trace?: never
+    }
     "/api/tournaments": {
         parameters: {
             query?: never
@@ -571,8 +588,8 @@ export interface components {
         /** @description What `/api/me` answers: the public player plus what only the owner sees. */
         Account: {
             /**
-             * @description Set after an admin reset. The API only reports it: the site forces the
-             *     change before it shows any other page.
+             * @description Set after an admin reset. Until the player picks a new password, every
+             *     route but `/api/me` and `/api/me/password` answers `PasswordChangeRequired`.
              */
             mustChangePassword: boolean
             player: components["schemas"]["Player"]
@@ -672,7 +689,10 @@ export interface components {
         CyclesRules: {
             /** Format: int64 */
             adjustmentMax: number
-            /** @description In the order a player earns them: entry, wins, then placements. */
+            /**
+             * @description In the order of `PointKind::ALL`, without the kinds that have no fixed
+             *     amount.
+             */
             awards: components["schemas"]["AwardRule"][]
             /** @description Bottom first. */
             ranks: components["schemas"]["RankRule"][]
@@ -723,6 +743,7 @@ export interface components {
             | "InvalidCredentials"
             | "Unauthorized"
             | "Forbidden"
+            | "PasswordChangeRequired"
             | "WrongPassword"
             | "RegistrationClosed"
             | "CheckinClosed"
@@ -746,7 +767,7 @@ export interface components {
             description: components["schemas"]["Description"]
             /**
              * Format: date-time
-             * @description The last game. Past it the check-in is over.
+             * @description The last game.
              */
             endsAt: string
             games: components["schemas"]["Games"]
@@ -756,7 +777,7 @@ export interface components {
             name: components["schemas"]["EventName"]
             /**
              * Format: date-time
-             * @description The doors open, and with them the check-in.
+             * @description The doors open.
              */
             startsAt: string
             status: components["schemas"]["EventStatus"]
@@ -846,6 +867,8 @@ export interface components {
             handle: components["schemas"]["Handle"]
         }
         Health: {
+            /** @description The git commit the binary was built from, `dev` for a local build. */
+            commit: string
             status: string
             version: string
         }
@@ -878,6 +901,23 @@ export interface components {
         }
         /** Format: uuid */
         MatchId: string
+        /** @description Answer of `GET /api/players/{handle}/matches`. */
+        MatchLog: {
+            matches: components["schemas"]["Paginated_PlayedMatch"]
+            nemesis?: null | components["schemas"]["Rivalry"]
+            /** @description Over every played match, not only the page. */
+            record: components["schemas"]["MatchRecord"]
+        }
+        /**
+         * @description Wins and losses over every played match. `Record` alone is the name of a
+         *     built-in type in TypeScript, and the site generates its types from this one.
+         */
+        MatchRecord: {
+            /** Format: int32 */
+            losses: number
+            /** Format: int32 */
+            wins: number
+        }
         /** @description Body of `PUT /api/admin/tournaments/{id}/matches/{matchId}/result`. */
         MatchResult: {
             winner: components["schemas"]["EntrantId"]
@@ -909,7 +949,7 @@ export interface components {
                 description: components["schemas"]["Description"]
                 /**
                  * Format: date-time
-                 * @description The last game. Past it the check-in is over.
+                 * @description The last game.
                  */
                 endsAt: string
                 games: components["schemas"]["Games"]
@@ -919,10 +959,47 @@ export interface components {
                 name: components["schemas"]["EventName"]
                 /**
                  * Format: date-time
-                 * @description The doors open, and with them the check-in.
+                 * @description The doors open.
                  */
                 startsAt: string
                 status: components["schemas"]["EventStatus"]
+            }[]
+            /** Format: int32 */
+            page: number
+            /** Format: int32 */
+            pageSize: number
+            /**
+             * Format: int64
+             * @description Every row that matches, ignoring the window.
+             */
+            total: number
+            /** Format: int64 */
+            totalPages: number
+        }
+        /** @description One page of results, and the totals a client needs for a pager. */
+        Paginated_PlayedMatch: {
+            items: {
+                /**
+                 * Format: date
+                 * @description The day of the tournament. A match carries no clock of its own.
+                 */
+                date: string
+                game: components["schemas"]["GameName"]
+                id: components["schemas"]["MatchId"]
+                opponent?: null | components["schemas"]["Player"]
+                /**
+                 * Format: int32
+                 * @description 1 is the first round.
+                 */
+                round: number
+                /**
+                 * Format: int32
+                 * @description How many rounds the bracket has, so a client can name the final.
+                 */
+                rounds: number
+                tournamentId: components["schemas"]["TournamentId"]
+                tournamentName: components["schemas"]["TournamentName"]
+                won: boolean
             }[]
             /** Format: int32 */
             page: number
@@ -1035,6 +1112,30 @@ export interface components {
             currentPassword: components["schemas"]["Password"]
             newPassword: components["schemas"]["Password"]
         }
+        /** @description One played match from the view of the profile owner. */
+        PlayedMatch: {
+            /**
+             * Format: date
+             * @description The day of the tournament. A match carries no clock of its own.
+             */
+            date: string
+            game: components["schemas"]["GameName"]
+            id: components["schemas"]["MatchId"]
+            opponent?: null | components["schemas"]["Player"]
+            /**
+             * Format: int32
+             * @description 1 is the first round.
+             */
+            round: number
+            /**
+             * Format: int32
+             * @description How many rounds the bracket has, so a client can name the final.
+             */
+            rounds: number
+            tournamentId: components["schemas"]["TournamentId"]
+            tournamentName: components["schemas"]["TournamentName"]
+            won: boolean
+        }
         /** @description A player, as the API shows it to anyone. It holds no credential. */
         Player: {
             /** Format: date-time */
@@ -1111,6 +1212,17 @@ export interface components {
             tournaments: components["schemas"]["TournamentId"][]
         }
         /**
+         * @description A head-to-head record against one opponent, from the view of the profile
+         *     owner.
+         */
+        Rivalry: {
+            /** Format: int32 */
+            losses: number
+            opponent: components["schemas"]["Player"]
+            /** Format: int32 */
+            wins: number
+        }
+        /**
          * @description What a player may do. Admins reach the backoffice and manage players.
          * @enum {string}
          */
@@ -1178,7 +1290,10 @@ export interface components {
             minEntrants: number
             tier: components["schemas"]["FieldTier"]
         }
-        /** @description The answer to a signup or a login. The token is a bearer JWT. */
+        /**
+         * @description The answer to a signup, a login or a password change. The token is a bearer
+         *     JWT.
+         */
         TokenResponse: {
             /** Format: date-time */
             expiresAt: string
@@ -1269,6 +1384,7 @@ export interface operations {
                     "application/json": components["schemas"]["Paginated_Event"]
                 }
             }
+            /** @description A query parameter is malformed */
             400: {
                 headers: {
                     [name: string]: unknown
@@ -1277,6 +1393,7 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorBody"]
                 }
             }
+            /** @description No valid bearer token */
             401: {
                 headers: {
                     [name: string]: unknown
@@ -1285,6 +1402,7 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorBody"]
                 }
             }
+            /** @description Not an admin, or `PasswordChangeRequired`: a new password first */
             403: {
                 headers: {
                     [name: string]: unknown
@@ -1317,6 +1435,7 @@ export interface operations {
                     "application/json": components["schemas"]["Event"]
                 }
             }
+            /** @description The body is not valid JSON, or a parameter is malformed */
             400: {
                 headers: {
                     [name: string]: unknown
@@ -1325,6 +1444,7 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorBody"]
                 }
             }
+            /** @description No valid bearer token */
             401: {
                 headers: {
                     [name: string]: unknown
@@ -1333,7 +1453,26 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorBody"]
                 }
             }
+            /** @description Not an admin, or `PasswordChangeRequired`: a new password first */
             403: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            /** @description The body is too large */
+            413: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            /** @description The body is not `application/json` */
+            415: {
                 headers: {
                     [name: string]: unknown
                 }
@@ -1372,6 +1511,7 @@ export interface operations {
                     "application/json": components["schemas"]["EventDetail"]
                 }
             }
+            /** @description A path parameter is malformed */
             400: {
                 headers: {
                     [name: string]: unknown
@@ -1380,6 +1520,7 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorBody"]
                 }
             }
+            /** @description No valid bearer token */
             401: {
                 headers: {
                     [name: string]: unknown
@@ -1388,6 +1529,7 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorBody"]
                 }
             }
+            /** @description Not an admin, or `PasswordChangeRequired`: a new password first */
             403: {
                 headers: {
                     [name: string]: unknown
@@ -1430,6 +1572,7 @@ export interface operations {
                     "application/json": components["schemas"]["Event"]
                 }
             }
+            /** @description The body is not valid JSON, or a parameter is malformed */
             400: {
                 headers: {
                     [name: string]: unknown
@@ -1438,6 +1581,7 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorBody"]
                 }
             }
+            /** @description No valid bearer token */
             401: {
                 headers: {
                     [name: string]: unknown
@@ -1446,6 +1590,7 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorBody"]
                 }
             }
+            /** @description Not an admin, or `PasswordChangeRequired`: a new password first */
             403: {
                 headers: {
                     [name: string]: unknown
@@ -1455,6 +1600,24 @@ export interface operations {
                 }
             }
             404: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            /** @description The body is too large */
+            413: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            /** @description The body is not `application/json` */
+            415: {
                 headers: {
                     [name: string]: unknown
                 }
@@ -1491,6 +1654,7 @@ export interface operations {
                 }
                 content?: never
             }
+            /** @description A path parameter is malformed */
             400: {
                 headers: {
                     [name: string]: unknown
@@ -1499,6 +1663,7 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorBody"]
                 }
             }
+            /** @description No valid bearer token */
             401: {
                 headers: {
                     [name: string]: unknown
@@ -1507,6 +1672,7 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorBody"]
                 }
             }
+            /** @description Not an admin, or `PasswordChangeRequired`: a new password first */
             403: {
                 headers: {
                     [name: string]: unknown
@@ -1550,6 +1716,7 @@ export interface operations {
                     "application/json": components["schemas"]["CheckinReceipt"]
                 }
             }
+            /** @description The body is not valid JSON, or a parameter is malformed */
             400: {
                 headers: {
                     [name: string]: unknown
@@ -1558,6 +1725,7 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorBody"]
                 }
             }
+            /** @description No valid bearer token */
             401: {
                 headers: {
                     [name: string]: unknown
@@ -1566,6 +1734,7 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorBody"]
                 }
             }
+            /** @description Not an admin, or `PasswordChangeRequired`: a new password first */
             403: {
                 headers: {
                     [name: string]: unknown
@@ -1583,6 +1752,25 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorBody"]
                 }
             }
+            /** @description The body is too large */
+            413: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            /** @description The body is not `application/json` */
+            415: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            /** @description A field is missing, unknown or out of range */
             422: {
                 headers: {
                     [name: string]: unknown
@@ -1617,6 +1805,7 @@ export interface operations {
                     "application/json": components["schemas"]["Event"]
                 }
             }
+            /** @description The body is not valid JSON, or a parameter is malformed */
             400: {
                 headers: {
                     [name: string]: unknown
@@ -1625,6 +1814,7 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorBody"]
                 }
             }
+            /** @description No valid bearer token */
             401: {
                 headers: {
                     [name: string]: unknown
@@ -1633,6 +1823,7 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorBody"]
                 }
             }
+            /** @description Not an admin, or `PasswordChangeRequired`: a new password first */
             403: {
                 headers: {
                     [name: string]: unknown
@@ -1649,6 +1840,25 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorBody"]
                 }
             }
+            /** @description The body is too large */
+            413: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            /** @description The body is not `application/json` */
+            415: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            /** @description A field is missing, unknown or out of range */
             422: {
                 headers: {
                     [name: string]: unknown
@@ -1682,6 +1892,7 @@ export interface operations {
                     "application/json": components["schemas"]["Paginated_Player"]
                 }
             }
+            /** @description A query parameter is malformed */
             400: {
                 headers: {
                     [name: string]: unknown
@@ -1690,6 +1901,7 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorBody"]
                 }
             }
+            /** @description No valid bearer token */
             401: {
                 headers: {
                     [name: string]: unknown
@@ -1698,6 +1910,7 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorBody"]
                 }
             }
+            /** @description Not an admin, or `PasswordChangeRequired`: a new password first */
             403: {
                 headers: {
                     [name: string]: unknown
@@ -1725,6 +1938,7 @@ export interface operations {
                 }
                 content?: never
             }
+            /** @description A path parameter is malformed */
             400: {
                 headers: {
                     [name: string]: unknown
@@ -1733,6 +1947,7 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorBody"]
                 }
             }
+            /** @description No valid bearer token */
             401: {
                 headers: {
                     [name: string]: unknown
@@ -1743,6 +1958,15 @@ export interface operations {
             }
             /** @description Not an admin, or the admin's own account */
             403: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            /** @description The last admin cannot be deleted */
+            409: {
                 headers: {
                     [name: string]: unknown
                 }
@@ -1775,6 +1999,7 @@ export interface operations {
                     "application/json": components["schemas"]["Player"]
                 }
             }
+            /** @description The body is not valid JSON, or a parameter is malformed */
             400: {
                 headers: {
                     [name: string]: unknown
@@ -1783,6 +2008,7 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorBody"]
                 }
             }
+            /** @description No valid bearer token */
             401: {
                 headers: {
                     [name: string]: unknown
@@ -1808,6 +2034,34 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorBody"]
                 }
             }
+            /** @description The last admin cannot be demoted */
+            409: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            /** @description The body is too large */
+            413: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            /** @description The body is not `application/json` */
+            415: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            /** @description A field is missing, unknown or out of range */
             422: {
                 headers: {
                     [name: string]: unknown
@@ -1842,6 +2096,7 @@ export interface operations {
                     "application/json": components["schemas"]["PointEntry"]
                 }
             }
+            /** @description The body is not valid JSON, or a parameter is malformed */
             400: {
                 headers: {
                     [name: string]: unknown
@@ -1850,6 +2105,7 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorBody"]
                 }
             }
+            /** @description No valid bearer token */
             401: {
                 headers: {
                     [name: string]: unknown
@@ -1868,6 +2124,24 @@ export interface operations {
                 }
             }
             404: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            /** @description The body is too large */
+            413: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            /** @description The body is not `application/json` */
+            415: {
                 headers: {
                     [name: string]: unknown
                 }
@@ -1909,6 +2183,7 @@ export interface operations {
                     "application/json": components["schemas"]["Player"]
                 }
             }
+            /** @description The body is not valid JSON, or a parameter is malformed */
             400: {
                 headers: {
                     [name: string]: unknown
@@ -1917,6 +2192,7 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorBody"]
                 }
             }
+            /** @description No valid bearer token */
             401: {
                 headers: {
                     [name: string]: unknown
@@ -1925,6 +2201,7 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorBody"]
                 }
             }
+            /** @description Not an admin, or `PasswordChangeRequired`: a new password first */
             403: {
                 headers: {
                     [name: string]: unknown
@@ -1949,6 +2226,25 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorBody"]
                 }
             }
+            /** @description The body is too large */
+            413: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            /** @description The body is not `application/json` */
+            415: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            /** @description A field is missing, unknown or out of range */
             422: {
                 headers: {
                     [name: string]: unknown
@@ -1970,6 +2266,7 @@ export interface operations {
         }
         requestBody?: never
         responses: {
+            /** @description Shown one time. Sent with `Cache-Control: no-store` */
             200: {
                 headers: {
                     [name: string]: unknown
@@ -1978,6 +2275,7 @@ export interface operations {
                     "application/json": components["schemas"]["TemporaryPassword"]
                 }
             }
+            /** @description A path parameter is malformed */
             400: {
                 headers: {
                     [name: string]: unknown
@@ -1986,6 +2284,7 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorBody"]
                 }
             }
+            /** @description No valid bearer token */
             401: {
                 headers: {
                     [name: string]: unknown
@@ -1994,6 +2293,7 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorBody"]
                 }
             }
+            /** @description Not an admin, or `PasswordChangeRequired`: a new password first */
             403: {
                 headers: {
                     [name: string]: unknown
@@ -2033,6 +2333,7 @@ export interface operations {
                     "application/json": components["schemas"]["Paginated_Tournament"]
                 }
             }
+            /** @description A query parameter is malformed */
             400: {
                 headers: {
                     [name: string]: unknown
@@ -2041,6 +2342,7 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorBody"]
                 }
             }
+            /** @description No valid bearer token */
             401: {
                 headers: {
                     [name: string]: unknown
@@ -2049,6 +2351,7 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorBody"]
                 }
             }
+            /** @description Not an admin, or `PasswordChangeRequired`: a new password first */
             403: {
                 headers: {
                     [name: string]: unknown
@@ -2081,6 +2384,7 @@ export interface operations {
                     "application/json": components["schemas"]["Tournament"]
                 }
             }
+            /** @description The body is not valid JSON, or a parameter is malformed */
             400: {
                 headers: {
                     [name: string]: unknown
@@ -2089,6 +2393,7 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorBody"]
                 }
             }
+            /** @description No valid bearer token */
             401: {
                 headers: {
                     [name: string]: unknown
@@ -2097,6 +2402,7 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorBody"]
                 }
             }
+            /** @description Not an admin, or `PasswordChangeRequired`: a new password first */
             403: {
                 headers: {
                     [name: string]: unknown
@@ -2105,6 +2411,25 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorBody"]
                 }
             }
+            /** @description The body is too large */
+            413: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            /** @description The body is not `application/json` */
+            415: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            /** @description A field is missing, unknown or out of range */
             422: {
                 headers: {
                     [name: string]: unknown
@@ -2134,6 +2459,7 @@ export interface operations {
                     "application/json": components["schemas"]["TournamentDetail"]
                 }
             }
+            /** @description A path parameter is malformed */
             400: {
                 headers: {
                     [name: string]: unknown
@@ -2142,6 +2468,7 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorBody"]
                 }
             }
+            /** @description No valid bearer token */
             401: {
                 headers: {
                     [name: string]: unknown
@@ -2150,6 +2477,7 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorBody"]
                 }
             }
+            /** @description Not an admin, or `PasswordChangeRequired`: a new password first */
             403: {
                 headers: {
                     [name: string]: unknown
@@ -2186,6 +2514,7 @@ export interface operations {
                 }
                 content?: never
             }
+            /** @description A path parameter is malformed */
             400: {
                 headers: {
                     [name: string]: unknown
@@ -2194,6 +2523,7 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorBody"]
                 }
             }
+            /** @description No valid bearer token */
             401: {
                 headers: {
                     [name: string]: unknown
@@ -2202,6 +2532,7 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorBody"]
                 }
             }
+            /** @description Not an admin, or `PasswordChangeRequired`: a new password first */
             403: {
                 headers: {
                     [name: string]: unknown
@@ -2235,6 +2566,7 @@ export interface operations {
                     "application/json": components["schemas"]["Tournament"]
                 }
             }
+            /** @description The body is not valid JSON, or a parameter is malformed */
             400: {
                 headers: {
                     [name: string]: unknown
@@ -2243,6 +2575,7 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorBody"]
                 }
             }
+            /** @description No valid bearer token */
             401: {
                 headers: {
                     [name: string]: unknown
@@ -2251,6 +2584,7 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorBody"]
                 }
             }
+            /** @description Not an admin, or `PasswordChangeRequired`: a new password first */
             403: {
                 headers: {
                     [name: string]: unknown
@@ -2267,6 +2601,34 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorBody"]
                 }
             }
+            /** @description The tournament is concluded, or changed in the meantime */
+            409: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            /** @description The body is too large */
+            413: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            /** @description The body is not `application/json` */
+            415: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            /** @description A field is missing, unknown or out of range */
             422: {
                 headers: {
                     [name: string]: unknown
@@ -2297,6 +2659,7 @@ export interface operations {
                     "application/json": components["schemas"]["Bracket"]
                 }
             }
+            /** @description A path parameter is malformed */
             400: {
                 headers: {
                     [name: string]: unknown
@@ -2305,6 +2668,7 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorBody"]
                 }
             }
+            /** @description No valid bearer token */
             401: {
                 headers: {
                     [name: string]: unknown
@@ -2313,6 +2677,7 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorBody"]
                 }
             }
+            /** @description Not an admin, or `PasswordChangeRequired`: a new password first */
             403: {
                 headers: {
                     [name: string]: unknown
@@ -2358,6 +2723,7 @@ export interface operations {
                 }
                 content?: never
             }
+            /** @description A path parameter is malformed */
             400: {
                 headers: {
                     [name: string]: unknown
@@ -2366,6 +2732,7 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorBody"]
                 }
             }
+            /** @description No valid bearer token */
             401: {
                 headers: {
                     [name: string]: unknown
@@ -2374,6 +2741,7 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorBody"]
                 }
             }
+            /** @description Not an admin, or `PasswordChangeRequired`: a new password first */
             403: {
                 headers: {
                     [name: string]: unknown
@@ -2433,6 +2801,7 @@ export interface operations {
                     "application/json": components["schemas"]["Entrant"]
                 }
             }
+            /** @description The body is not valid JSON, or a parameter is malformed */
             400: {
                 headers: {
                     [name: string]: unknown
@@ -2441,6 +2810,7 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorBody"]
                 }
             }
+            /** @description No valid bearer token */
             401: {
                 headers: {
                     [name: string]: unknown
@@ -2449,6 +2819,7 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorBody"]
                 }
             }
+            /** @description Not an admin, or `PasswordChangeRequired`: a new password first */
             403: {
                 headers: {
                     [name: string]: unknown
@@ -2466,7 +2837,7 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorBody"]
                 }
             }
-            /** @description A bracket exists */
+            /** @description A bracket exists, the tournament is concluded, or the field is full */
             409: {
                 headers: {
                     [name: string]: unknown
@@ -2475,6 +2846,25 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorBody"]
                 }
             }
+            /** @description The body is too large */
+            413: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            /** @description The body is not `application/json` */
+            415: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            /** @description A field is missing, unknown or out of range */
             422: {
                 headers: {
                     [name: string]: unknown
@@ -2504,6 +2894,7 @@ export interface operations {
                 }
                 content?: never
             }
+            /** @description A path parameter is malformed */
             400: {
                 headers: {
                     [name: string]: unknown
@@ -2512,6 +2903,7 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorBody"]
                 }
             }
+            /** @description No valid bearer token */
             401: {
                 headers: {
                     [name: string]: unknown
@@ -2520,6 +2912,7 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorBody"]
                 }
             }
+            /** @description Not an admin, or `PasswordChangeRequired`: a new password first */
             403: {
                 headers: {
                     [name: string]: unknown
@@ -2536,7 +2929,7 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorBody"]
                 }
             }
-            /** @description A bracket exists, or this is the winner */
+            /** @description A bracket exists, or the tournament is concluded */
             409: {
                 headers: {
                     [name: string]: unknown
@@ -2572,6 +2965,7 @@ export interface operations {
                     "application/json": components["schemas"]["Bracket"]
                 }
             }
+            /** @description The body is not valid JSON, or a parameter is malformed */
             400: {
                 headers: {
                     [name: string]: unknown
@@ -2580,6 +2974,7 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorBody"]
                 }
             }
+            /** @description No valid bearer token */
             401: {
                 headers: {
                     [name: string]: unknown
@@ -2588,6 +2983,7 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorBody"]
                 }
             }
+            /** @description Not an admin, or `PasswordChangeRequired`: a new password first */
             403: {
                 headers: {
                     [name: string]: unknown
@@ -2604,8 +3000,26 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorBody"]
                 }
             }
-            /** @description The match is not ready, or the next one is decided */
+            /** @description The match is not ready, the next one is decided, or the bracket changed in the meantime */
             409: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            /** @description The body is too large */
+            413: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            /** @description The body is not `application/json` */
+            415: {
                 headers: {
                     [name: string]: unknown
                 }
@@ -2645,6 +3059,7 @@ export interface operations {
                     "application/json": components["schemas"]["Bracket"]
                 }
             }
+            /** @description A path parameter is malformed */
             400: {
                 headers: {
                     [name: string]: unknown
@@ -2653,6 +3068,7 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorBody"]
                 }
             }
+            /** @description No valid bearer token */
             401: {
                 headers: {
                     [name: string]: unknown
@@ -2661,6 +3077,7 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorBody"]
                 }
             }
+            /** @description Not an admin, or `PasswordChangeRequired`: a new password first */
             403: {
                 headers: {
                     [name: string]: unknown
@@ -2677,7 +3094,7 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorBody"]
                 }
             }
-            /** @description A bye, or the next match is decided */
+            /** @description A bye, the next match is decided, or the bracket changed in the meantime */
             409: {
                 headers: {
                     [name: string]: unknown
@@ -2712,6 +3129,7 @@ export interface operations {
                     "application/json": components["schemas"]["Bracket"]
                 }
             }
+            /** @description The body is not valid JSON, or a parameter is malformed */
             400: {
                 headers: {
                     [name: string]: unknown
@@ -2720,6 +3138,7 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorBody"]
                 }
             }
+            /** @description No valid bearer token */
             401: {
                 headers: {
                     [name: string]: unknown
@@ -2728,6 +3147,7 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorBody"]
                 }
             }
+            /** @description Not an admin, or `PasswordChangeRequired`: a new password first */
             403: {
                 headers: {
                     [name: string]: unknown
@@ -2746,6 +3166,24 @@ export interface operations {
             }
             /** @description No bracket, not live, or results exist */
             409: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            /** @description The body is too large */
+            413: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            /** @description The body is not `application/json` */
+            415: {
                 headers: {
                     [name: string]: unknown
                 }
@@ -2779,6 +3217,7 @@ export interface operations {
             }
         }
         responses: {
+            /** @description The tournament after the move. A repeat of a move answers the same, also when two arrive at once, and a conclusion pays one time */
             200: {
                 headers: {
                     [name: string]: unknown
@@ -2787,6 +3226,7 @@ export interface operations {
                     "application/json": components["schemas"]["Tournament"]
                 }
             }
+            /** @description The body is not valid JSON, or a parameter is malformed */
             400: {
                 headers: {
                     [name: string]: unknown
@@ -2795,6 +3235,7 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorBody"]
                 }
             }
+            /** @description No valid bearer token */
             401: {
                 headers: {
                     [name: string]: unknown
@@ -2803,6 +3244,7 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorBody"]
                 }
             }
+            /** @description Not an admin, or `PasswordChangeRequired`: a new password first */
             403: {
                 headers: {
                     [name: string]: unknown
@@ -2819,8 +3261,26 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorBody"]
                 }
             }
-            /** @description The transition is not allowed in this state */
+            /** @description The transition is not allowed in this state, or another request moved the status first */
             409: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            /** @description The body is too large */
+            413: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            /** @description The body is not `application/json` */
+            415: {
                 headers: {
                     [name: string]: unknown
                 }
@@ -2852,12 +3312,22 @@ export interface operations {
             }
         }
         responses: {
+            /** @description Sent with `Cache-Control: no-store` */
             200: {
                 headers: {
                     [name: string]: unknown
                 }
                 content: {
                     "application/json": components["schemas"]["TokenResponse"]
+                }
+            }
+            /** @description The body is not valid JSON, or a parameter is malformed */
+            400: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
                 }
             }
             401: {
@@ -2868,6 +3338,25 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorBody"]
                 }
             }
+            /** @description The body is too large */
+            413: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            /** @description The body is not `application/json` */
+            415: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            /** @description A field is missing, unknown or out of range */
             422: {
                 headers: {
                     [name: string]: unknown
@@ -2891,12 +3380,22 @@ export interface operations {
             }
         }
         responses: {
+            /** @description Logged in. Sent with `Cache-Control: no-store` */
             201: {
                 headers: {
                     [name: string]: unknown
                 }
                 content: {
                     "application/json": components["schemas"]["TokenResponse"]
+                }
+            }
+            /** @description The body is not valid JSON, or a parameter is malformed */
+            400: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
                 }
             }
             409: {
@@ -2907,6 +3406,25 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorBody"]
                 }
             }
+            /** @description The body is too large */
+            413: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            /** @description The body is not `application/json` */
+            415: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            /** @description A field is missing, unknown or out of range */
             422: {
                 headers: {
                     [name: string]: unknown
@@ -2937,6 +3455,7 @@ export interface operations {
                     "application/json": components["schemas"]["CheckinGate"]
                 }
             }
+            /** @description A path parameter is malformed */
             400: {
                 headers: {
                     [name: string]: unknown
@@ -2985,6 +3504,7 @@ export interface operations {
                     "application/json": components["schemas"]["CheckinReceipt"]
                 }
             }
+            /** @description A path parameter is malformed */
             400: {
                 headers: {
                     [name: string]: unknown
@@ -2993,7 +3513,17 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorBody"]
                 }
             }
+            /** @description No valid bearer token */
             401: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            /** @description `PasswordChangeRequired`: the caller must choose a new password first */
+            403: {
                 headers: {
                     [name: string]: unknown
                 }
@@ -3062,6 +3592,7 @@ export interface operations {
                     "application/json": components["schemas"]["Paginated_Event"]
                 }
             }
+            /** @description A query parameter is malformed */
             400: {
                 headers: {
                     [name: string]: unknown
@@ -3081,6 +3612,7 @@ export interface operations {
         }
         requestBody?: never
         responses: {
+            /** @description Sent with `Cache-Control: no-store`, like every `/api/me` answer */
             200: {
                 headers: {
                     [name: string]: unknown
@@ -3089,6 +3621,7 @@ export interface operations {
                     "application/json": components["schemas"]["Account"]
                 }
             }
+            /** @description No valid bearer token */
             401: {
                 headers: {
                     [name: string]: unknown
@@ -3117,7 +3650,17 @@ export interface operations {
                     "application/json": components["schemas"]["Checkins"]
                 }
             }
+            /** @description No valid bearer token */
             401: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            /** @description `PasswordChangeRequired`: the caller must choose a new password first */
+            403: {
                 headers: {
                     [name: string]: unknown
                 }
@@ -3149,6 +3692,7 @@ export interface operations {
                     "application/json": components["schemas"]["Player"]
                 }
             }
+            /** @description The body is not valid JSON, or a parameter is malformed */
             400: {
                 headers: {
                     [name: string]: unknown
@@ -3157,7 +3701,17 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorBody"]
                 }
             }
+            /** @description No valid bearer token */
             401: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            /** @description `PasswordChangeRequired`: the caller must choose a new password first */
+            403: {
                 headers: {
                     [name: string]: unknown
                 }
@@ -3173,6 +3727,25 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorBody"]
                 }
             }
+            /** @description The body is too large */
+            413: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            /** @description The body is not `application/json` */
+            415: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            /** @description A field is missing, unknown or out of range */
             422: {
                 headers: {
                     [name: string]: unknown
@@ -3196,7 +3769,7 @@ export interface operations {
             }
         }
         responses: {
-            /** @description A fresh token. Older tokens are refused from now on */
+            /** @description A fresh token. Older tokens are refused from now on. The one route besides `/api/me` that a temporary password opens */
             200: {
                 headers: {
                     [name: string]: unknown
@@ -3205,6 +3778,7 @@ export interface operations {
                     "application/json": components["schemas"]["TokenResponse"]
                 }
             }
+            /** @description The current password is wrong, or the body is not valid JSON */
             400: {
                 headers: {
                     [name: string]: unknown
@@ -3213,6 +3787,7 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorBody"]
                 }
             }
+            /** @description No valid bearer token */
             401: {
                 headers: {
                     [name: string]: unknown
@@ -3221,6 +3796,25 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorBody"]
                 }
             }
+            /** @description The body is too large */
+            413: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            /** @description The body is not `application/json` */
+            415: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            /** @description A field is missing, unknown or out of range */
             422: {
                 headers: {
                     [name: string]: unknown
@@ -3249,7 +3843,17 @@ export interface operations {
                     "application/json": components["schemas"]["Registrations"]
                 }
             }
+            /** @description No valid bearer token */
             401: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            /** @description `PasswordChangeRequired`: the caller must choose a new password first */
+            403: {
                 headers: {
                     [name: string]: unknown
                 }
@@ -3282,6 +3886,7 @@ export interface operations {
                     "application/json": components["schemas"]["Paginated_Player"]
                 }
             }
+            /** @description A query parameter is malformed */
             400: {
                 headers: {
                     [name: string]: unknown
@@ -3309,6 +3914,15 @@ export interface operations {
                 }
                 content: {
                     "application/json": components["schemas"]["Player"]
+                }
+            }
+            /** @description A path parameter is malformed */
+            400: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
                 }
             }
             404: {
@@ -3344,6 +3958,49 @@ export interface operations {
                     "application/json": components["schemas"]["CyclesLog"]
                 }
             }
+            /** @description The handle or a query parameter is malformed */
+            400: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            404: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+        }
+    }
+    match_log: {
+        parameters: {
+            query?: {
+                page?: number
+                pageSize?: number
+            }
+            header?: never
+            path: {
+                handle: components["schemas"]["Handle"]
+            }
+            cookie?: never
+        }
+        requestBody?: never
+        responses: {
+            /** @description Newest first, with the record and the nemesis */
+            200: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["MatchLog"]
+                }
+            }
+            /** @description The handle or a query parameter is malformed */
             400: {
                 headers: {
                     [name: string]: unknown
@@ -3383,6 +4040,7 @@ export interface operations {
                     "application/json": components["schemas"]["Paginated_Tournament"]
                 }
             }
+            /** @description A query parameter is malformed */
             400: {
                 headers: {
                     [name: string]: unknown
@@ -3412,6 +4070,7 @@ export interface operations {
                     "application/json": components["schemas"]["TournamentDetail"]
                 }
             }
+            /** @description A path parameter is malformed */
             400: {
                 headers: {
                     [name: string]: unknown
@@ -3455,6 +4114,7 @@ export interface operations {
                     "application/json": components["schemas"]["Entrant"]
                 }
             }
+            /** @description The body is not valid JSON, or a parameter is malformed */
             400: {
                 headers: {
                     [name: string]: unknown
@@ -3463,7 +4123,17 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorBody"]
                 }
             }
+            /** @description No valid bearer token */
             401: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            /** @description `PasswordChangeRequired`: the caller must choose a new password first */
+            403: {
                 headers: {
                     [name: string]: unknown
                 }
@@ -3479,8 +4149,26 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorBody"]
                 }
             }
-            /** @description Registration is not open */
+            /** @description Registration is not open, or the field is full */
             409: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            /** @description The body is too large */
+            413: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            /** @description The body is not `application/json` */
+            415: {
                 headers: {
                     [name: string]: unknown
                 }
@@ -3517,6 +4205,7 @@ export interface operations {
                 }
                 content?: never
             }
+            /** @description A path parameter is malformed */
             400: {
                 headers: {
                     [name: string]: unknown
@@ -3525,7 +4214,17 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorBody"]
                 }
             }
+            /** @description No valid bearer token */
             401: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            /** @description `PasswordChangeRequired`: the caller must choose a new password first */
+            403: {
                 headers: {
                     [name: string]: unknown
                 }

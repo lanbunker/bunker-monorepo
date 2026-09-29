@@ -12,9 +12,11 @@ interface Props {
   q?: string | undefined
   /** Singular noun for the count, such as "player". */
   noun: string
+  /** The plural, when adding an `s` does not make it. */
+  plural?: string
 }
 
-const { page, totalPages, total, href, q, noun } = Astro.props
+const { page, totalPages, total, href, q, noun, plural = `${noun}s` } = Astro.props
 const link = (to: number) => listPath(href, q, to)
 ---
 
@@ -26,7 +28,7 @@ const link = (to: number) => listPath(href, q, to)
     <span>
       page <span class="text-ink">{page}</span> of{" "}
       <span class="text-ink">{totalPages}</span>
-      <span class="ml-2">{`${total} ${noun}${total === 1 ? "" : "s"}`}</span>
+      <span class="ml-2">{`${total} ${total === 1 ? noun : plural}`}</span>
     </span>
     <div class="flex items-center gap-2">
       <Button href={link(page - 1)} variant="ghost" size="sm" disabled={page <= 1}>

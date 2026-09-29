@@ -1,14 +1,22 @@
 ---
+type Level = "h1" | "h2" | "p"
+
 interface Props {
   command: string
-  comment?: string
+  comment?: string | undefined
+  /**
+   * The first prompt of a page is its title, so it is an `h1`. A page whose
+   * title follows the prompt, such as the handle on a player card, uses `p`.
+   */
+  heading?: Level
   class?: string
 }
 
-const { command, comment, class: className } = Astro.props
+const { command, comment, heading = "h2", class: className } = Astro.props
+const Heading = heading
 ---
 
-<h2
+<Heading
   class:list={[
     "mt-8 mb-4 flex flex-wrap items-baseline gap-x-2 text-sm font-normal",
     className,
@@ -17,4 +25,4 @@ const { command, comment, class: className } = Astro.props
   <span class="text-dim">bunker@office:~$</span>
   <span class="text-accent-soft">{command}</span>
   {comment && <span class="text-mute"># {comment}</span>}
-</h2>
+</Heading>

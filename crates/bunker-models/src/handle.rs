@@ -10,8 +10,8 @@ pub const HANDLE_MAX_LEN: usize = 20;
 /// handle is safe in a URL path and in a terminal.
 ///
 /// Two handles that differ only in case are the same player. The database
-/// enforces that with a case-insensitive unique index, and this type keeps the
-/// case the player typed.
+/// enforces that with a case-insensitive unique index, this type keeps the case
+/// the player typed, and equality ignores it.
 #[nutype(
     sanitize(trim),
     validate(
@@ -19,9 +19,18 @@ pub const HANDLE_MAX_LEN: usize = 20;
         len_char_max = HANDLE_MAX_LEN,
         predicate = is_handle_charset
     ),
-    derive(Debug, Clone, PartialEq, Eq, Hash, Display, AsRef, Serialize, Deserialize)
+    derive(Debug, Clone, Display, AsRef, Serialize, Deserialize)
 )]
 pub struct Handle(String);
+
+/// The charset is ASCII, so an ASCII comparison is the whole case rule.
+impl PartialEq for Handle {
+    fn eq(&self, other: &Self) -> bool {
+        self.as_ref().eq_ignore_ascii_case(other.as_ref())
+    }
+}
+
+impl Eq for Handle {}
 
 fn is_handle_charset(value: &str) -> bool {
     value

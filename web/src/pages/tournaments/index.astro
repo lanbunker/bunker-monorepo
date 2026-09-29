@@ -52,7 +52,11 @@ const registered = new Set(mine?.tournaments ?? [])
 ---
 
 <Layout title="TOURNAMENTS//LAN_BUNKER" active="tournaments">
-  <Prompt command="cat ./tournaments/open" comment="apply with your bunkernet account" />
+  <Prompt
+    heading="h1"
+    command="cat ./tournaments/open"
+    comment="apply with your bunkernet account"
+  />
 
   <Alert message={notice} tone="notice" class="mb-4" />
   <Alert error={failure} class="mb-4" />

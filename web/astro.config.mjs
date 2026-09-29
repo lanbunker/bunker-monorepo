@@ -15,13 +15,10 @@ export default defineConfig({
 
     env: {
         schema: {
-            // Where the Rust API answers. A Worker var in production, the shell or
-            // `.env` locally, and the `make dev` port when nothing is set.
-            API_URL: envField.string({
-                context: "server",
-                access: "secret",
-                default: "http://127.0.0.1:3000",
-            }),
+            // Where the Rust API answers. Every environment of `wrangler.jsonc`
+            // sets it, so a run that selects none fails instead of calling a
+            // guessed port.
+            API_URL: envField.string({ context: "server", access: "secret" }),
         },
     },
 

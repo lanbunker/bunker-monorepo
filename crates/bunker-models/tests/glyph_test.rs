@@ -1,6 +1,6 @@
-//! The glyph algorithm is shared with the web renderer in `web/src/lib/glyph.ts`.
-//! The vectors below come from that implementation. A change that breaks them
-//! gives a player a different mark on the site and in the terminal.
+//! The glyph algorithm, from the contract. The vectors pin it: every stored
+//! glyph came from it, and a change that breaks them gives a new player a mark
+//! the old players never got.
 
 #![allow(
     clippy::unwrap_used,
@@ -9,14 +9,18 @@
     clippy::indexing_slicing
 )]
 
-use bunker_models::{GLYPH_CELLS, GLYPH_SIZE, Glyph, GlyphBits, GlyphColor, generate_glyph};
+use bunker_models::{
+    GLYPH_CELLS, GLYPH_MASK, GLYPH_SIZE, Glyph, GlyphBits, GlyphColor, generate_glyph,
+};
 
 #[test]
-fn known_handles_produce_the_same_marks_as_the_web_renderer() {
+fn known_handles_produce_the_same_marks() {
     let cases = [
         ("dave", 4_554_623, GlyphColor::Coral),
         ("ziopera", 18_404_923, GlyphColor::Gold),
         ("mortadella", 32_516_768, GlyphColor::Amber),
+        ("aav", 28_890_459, GlyphColor::Mint),
+        ("abr", 17_836_721, GlyphColor::Amber),
     ];
 
     for (handle, bits, color) in cases {
@@ -92,10 +96,29 @@ fn rows_render_the_dave_mark() {
     assert_eq!(rows, ["#####", "##.##", "#####", ".#.#.", "..#.."]);
 }
 
+/// The hash leaves the center column dark, so the middle cell of the spine is
+/// lit for it.
+#[test]
+fn a_dark_center_column_gets_its_spine() {
+    let rows = generate_glyph("aav").rows();
+
+    assert_eq!(rows, ["##.##", ".#.#.", "#.#.#", "#...#", "##.##"]);
+}
+
+/// The hash lights fewer than seven cells, so the four corners are lit for
+/// weight.
+#[test]
+fn a_light_mark_gets_its_corners() {
+    let rows = generate_glyph("abr").rows();
+
+    assert_eq!(rows, ["#...#", "#.#.#", ".#.#.", ".....", "#...#"]);
+}
+
 #[test]
 fn bits_past_the_grid_are_rejected() {
-    assert!(GlyphBits::try_new(1 << 25).is_err());
-    assert!(GlyphBits::try_new((1 << 25) - 1).is_ok());
+    assert_eq!(GLYPH_MASK, (1 << GLYPH_CELLS) - 1);
+    assert!(GlyphBits::try_new(GLYPH_MASK + 1).is_err());
+    assert!(GlyphBits::try_new(GLYPH_MASK).is_ok());
 }
 
 #[test]
@@ -117,8 +140,8 @@ fn every_color_round_trips_through_its_hex_value() {
     assert_eq!(GlyphColor::from_hex("#000000"), None);
 }
 
-/// Similar handles must not all land on one color. The low bits of the grid hash
-/// did that, so the color has its own hash.
+/// Similar handles must not all land on one color, which is what the low bits
+/// of the grid hash would give.
 #[test]
 fn similar_handles_spread_over_the_palette() {
     let colors: std::collections::BTreeSet<_> = [

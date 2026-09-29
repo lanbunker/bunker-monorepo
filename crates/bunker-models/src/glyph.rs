@@ -6,15 +6,21 @@ pub const GLYPH_SIZE: usize = 5;
 
 pub const GLYPH_CELLS: usize = GLYPH_SIZE * GLYPH_SIZE;
 
+/// Every bit a grid can set: the low `GLYPH_CELLS` bits.
+pub const GLYPH_MASK: u32 = (1 << GLYPH_CELLS) - 1;
+
 const HALF_COLUMNS: usize = 3;
 const CENTER_COLUMN: usize = 2;
 const MIN_LIT_CELLS: usize = 7;
 const CORNERS: [usize; 4] = [0, 4, 20, 24];
-const COLOR_COUNT: u32 = 12;
 /// Salt for the color hash. The low bits of the grid hash cluster for similar
 /// handles, so the color comes from its own hash.
 const COLOR_SALT: &str = "/color";
-const _: () = assert!(GLYPH_COLORS.len() == COLOR_COUNT as usize);
+/// The hash is a `u32`, so the modulus is one too. The assert below fails the
+/// build if the cast ever loses a bit.
+#[allow(clippy::cast_possible_truncation)]
+const COLOR_COUNT: u32 = GLYPH_COLORS.len() as u32;
+const _: () = assert!(COLOR_COUNT as usize == GLYPH_COLORS.len());
 
 /// Player colors. Each one reads on the dark background at small and large sizes.
 /// The order is part of the algorithm: the hash selects by index.
@@ -34,9 +40,9 @@ pub const GLYPH_COLORS: [GlyphColor; 12] = [
 ];
 
 /// The row-major grid as one integer. Bit `i` is cell `i`, and bit 0 is the top
-/// left cell. Only the low 25 bits can be set.
+/// left cell. Only the bits of [`GLYPH_MASK`] can be set.
 #[nutype(
-    validate(less_or_equal = 33_554_431),
+    validate(less_or_equal = GLYPH_MASK),
     default = 0,
     derive(
         Debug,
@@ -141,17 +147,16 @@ impl Glyph {
 
 /// Builds the mark for a new account from a seed, normally the handle.
 ///
-/// The algorithm is shared with the web renderer and must not change: the left
-/// three columns come from hash bits and mirror to the right, the center column
-/// always has a lit cell, and a mark with fewer than seven cells gets its corners
-/// filled for weight.
+/// The left three columns come from hash bits and mirror to the right, the
+/// center column always has a lit cell, and a mark with fewer than seven cells
+/// gets its corners filled for weight. The stored glyphs came from this code,
+/// so a change gives a new player a mark the old algorithm would not draw.
 pub fn generate_glyph(seed: &str) -> Glyph {
     let hash = fnv1a(seed);
 
-    // `index % 32` is a no-op for 15 cells. It stays for parity with `glyph.ts`.
     let mut half = [false; GLYPH_SIZE * HALF_COLUMNS];
     for (index, bit) in half.iter_mut().enumerate() {
-        *bit = (hash >> (index % 32)) & 1 == 1;
+        *bit = (hash >> index) & 1 == 1;
     }
 
     let center_lit = half
@@ -192,8 +197,8 @@ pub fn generate_glyph(seed: &str) -> Glyph {
         |bits, (index, lit)| if *lit { bits | (1 << index) } else { bits },
     );
 
-    // 25 cells never exceed the 25 bit limit, so the validation cannot fail. The
-    // default keeps the function total without a panic.
+    // `raw` sets only bits of `GLYPH_MASK`, so `try_new` cannot fail. nutype
+    // has no unchecked constructor, and the default keeps the function total.
     let bits = GlyphBits::try_new(raw).unwrap_or_default();
     let color_hash = fnv1a(&format!("{seed}{COLOR_SALT}"));
     let color = GLYPH_COLORS
@@ -204,10 +209,9 @@ pub fn generate_glyph(seed: &str) -> Glyph {
     Glyph { bits, color }
 }
 
-/// FNV-1a over the UTF-16 code units of the lowercased seed, 32 bit. The web
-/// renderer hashes `charCodeAt` values, so this reads code units and not bytes. The
-/// two differ on characters outside the Basic Multilingual Plane, which a `Handle`
-/// cannot hold.
+/// FNV-1a, 32 bit, over the UTF-16 code units of the lowercased seed. The code
+/// units are part of the algorithm: bytes would give every stored glyph another
+/// hash.
 fn fnv1a(seed: &str) -> u32 {
     seed.to_lowercase()
         .encode_utf16()

@@ -1,8 +1,9 @@
 import type { APIRoute } from "astro"
 
-import { call } from "../../../../lib/api"
+import { call, relayFailure } from "../../../../lib/api"
 import { checkinUrl } from "../../../../lib/events"
 import { checkinPoster, posterFileName } from "../../../../lib/qr"
+import { uuid } from "../../../../lib/schemas"
 import { adminSessionOf } from "../../../../lib/session"
 
 /**
@@ -12,19 +13,14 @@ import { adminSessionOf } from "../../../../lib/session"
  */
 export const GET: APIRoute = async ({ params, locals, url }) => {
     const session = adminSessionOf(locals)
-    if (!session) return new Response(null, { status: 404 })
+    const id = uuid.safeParse(params.id).data
+    if (!session || !id) return new Response(null, { status: 404 })
 
     const result = await call(
-        client =>
-            client.GET("/api/admin/events/{id}", {
-                params: { path: { id: params.id ?? "" } },
-            }),
+        client => client.GET("/api/admin/events/{id}", { params: { path: { id } } }),
         session.token,
     )
-    if (!result.ok) {
-        const status = result.failure.kind === "refused" ? result.failure.status : 502
-        return new Response(null, { status })
-    }
+    if (!result.ok) return relayFailure(result.failure)
 
     const detail = result.data
     const poster = checkinPoster(
@@ -36,6 +32,8 @@ export const GET: APIRoute = async ({ params, locals, url }) => {
     return new Response(poster, {
         headers: {
             "content-type": "image/svg+xml",
+            // An SVG opened on its own is a document that could run a script.
+            "content-security-policy": "default-src 'none'; style-src 'unsafe-inline'",
             "cache-control": "no-store",
             "content-disposition": `${disposition}; filename="${posterFileName(detail.event.name, "svg")}"`,
         },

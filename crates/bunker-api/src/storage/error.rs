@@ -1,5 +1,15 @@
 use std::error::Error as StdError;
 
+use sqlx::error::ErrorKind;
+
+/// SQLite primary result codes, the low byte of an extended code.
+const SQLITE_BUSY: i32 = 5;
+const SQLITE_LOCKED: i32 = 6;
+const SQLITE_READONLY: i32 = 8;
+const SQLITE_IOERR: i32 = 10;
+const SQLITE_FULL: i32 = 13;
+const SQLITE_CANTOPEN: i32 = 14;
+
 /// The failures of the storage layer. A constraint violation has its own
 /// variant, so a service can make a domain error from it and does not read
 /// driver messages.
@@ -17,6 +27,11 @@ pub enum StorageError {
         #[source]
         source: sqlx::Error,
     },
+
+    /// A row points at a row that is not there, most often one that a
+    /// concurrent request deleted.
+    #[error("a foreign key points at a missing row")]
+    ForeignKeyViolation(#[source] sqlx::Error),
 
     #[error("a row in `{table}` does not satisfy the domain model")]
     MalformedRow {
@@ -39,25 +54,32 @@ impl StorageError {
     /// violation as `UNIQUE constraint failed: table.column`, and the column list
     /// after the colon is the only name the constraint has.
     pub fn from_query(error: sqlx::Error) -> Self {
-        match &error {
-            sqlx::Error::Database(db) if db.is_unique_violation() => {
-                let constraint = db
-                    .message()
-                    .rsplit_once(": ")
-                    .map_or("unknown", |(_, columns)| columns)
-                    .to_owned();
+        let Some(db) = error.as_database_error() else {
+            return match error {
+                sqlx::Error::PoolTimedOut | sqlx::Error::PoolClosed => Self::Busy(error),
+                // A lazy pool opens the file at the first query, so a missing file
+                // arrives here and not from `connect`.
+                sqlx::Error::Io(_) => Self::Connection(Box::new(error)),
+                _ => Self::Query(error),
+            };
+        };
 
-                Self::UniqueViolation {
-                    constraint,
-                    source: error,
-                }
-            }
-            sqlx::Error::PoolTimedOut | sqlx::Error::PoolClosed => Self::Busy(error),
-            sqlx::Error::Database(db) if is_busy(db.code().as_deref()) => Self::Busy(error),
-            // The file cannot be opened, or the disk failed. A lazy pool reports
-            // this at the first query, so it arrives here and not from `connect`.
-            sqlx::Error::Io(_) => Self::Connection(Box::new(error)),
-            sqlx::Error::Database(db) if is_cannot_open(db.code().as_deref()) => {
+        let kind = db.kind();
+        let code = primary_code(db.code().as_deref());
+        let constraint = db
+            .message()
+            .rsplit_once(": ")
+            .map_or("unknown", |(_, columns)| columns)
+            .to_owned();
+
+        match (kind, code) {
+            (ErrorKind::UniqueViolation, _) => Self::UniqueViolation {
+                constraint,
+                source: error,
+            },
+            (ErrorKind::ForeignKeyViolation, _) => Self::ForeignKeyViolation(error),
+            (_, Some(SQLITE_BUSY | SQLITE_LOCKED)) => Self::Busy(error),
+            (_, Some(SQLITE_READONLY | SQLITE_IOERR | SQLITE_FULL | SQLITE_CANTOPEN)) => {
                 Self::Connection(Box::new(error))
             }
             _ => Self::Query(error),
@@ -84,16 +106,8 @@ impl StorageError {
     }
 }
 
-/// SQLite extended result codes for `SQLITE_BUSY` and `SQLITE_LOCKED`.
-fn is_busy(code: Option<&str>) -> bool {
-    matches!(code, Some("5" | "6" | "261" | "262" | "517"))
-}
-
-/// `SQLITE_CANTOPEN` and its extended codes: the file or its directory is not
-/// there, or is not readable.
-fn is_cannot_open(code: Option<&str>) -> bool {
-    matches!(
-        code,
-        Some("14" | "1038" | "1294" | "1550" | "1806" | "2062")
-    )
+/// The driver gives the extended code as text. Its low byte is the primary code,
+/// which names the family of the failure.
+fn primary_code(extended: Option<&str>) -> Option<i32> {
+    extended?.parse::<i32>().ok().map(|code| code & 0xff)
 }

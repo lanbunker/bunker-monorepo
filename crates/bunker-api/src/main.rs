@@ -1,5 +1,6 @@
 use std::process::ExitCode;
 
+use bunker_api::config::load_dotenv;
 use bunker_api::routers::ApiDoc;
 use bunker_api::server;
 use utoipa::OpenApi as _;
@@ -20,8 +21,7 @@ async fn main() -> ExitCode {
         };
     }
 
-    // A missing `.env` is normal: a deployment sets the variables directly.
-    drop(dotenvy::dotenv());
+    load_dotenv();
 
     match server::run().await {
         Ok(()) => ExitCode::SUCCESS,

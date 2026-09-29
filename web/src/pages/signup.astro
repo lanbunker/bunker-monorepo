@@ -7,11 +7,12 @@ import Panel from "../components/ui/Panel.astro"
 import Layout from "../layouts/Layout.astro"
 import { localPath } from "../lib/schemas"
 import { SITE_FIELD } from "../lib/styles"
+import { sessionOf } from "../lib/session"
 
 // `?next=` brings a player back where they came from, such as the door of an
 // event. Only a path of this site passes.
 const next = localPath.safeParse(Astro.url.searchParams.get("next")).data
-if (Astro.locals.player) return Astro.redirect(next ?? "/profile")
+if (sessionOf(Astro.locals)) return Astro.redirect(next ?? "/profile")
 
 // A success renders the boot sequence on the POST itself, then a script moves to
 // the profile, or to `next`. The response must never be cached: it belongs to
@@ -166,9 +167,9 @@ if (created) Astro.response.headers.set("Cache-Control", "no-store")
       if (reduced) {
         finish()
       } else {
-        LINES.map((line, i) =>
-          window.setTimeout(() => printLine(line), STEP_MS * (i + 1)),
-        )
+        for (const [i, line] of LINES.entries()) {
+          window.setTimeout(() => printLine(line), STEP_MS * (i + 1))
+        }
         window.setTimeout(finish, STEP_MS * (LINES.length + 1))
       }
     }

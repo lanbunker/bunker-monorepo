@@ -7,6 +7,7 @@ import LocalTime from "../../../components/ui/LocalTime.astro"
 import Table from "../../../components/ui/Table.astro"
 import AdminLayout from "../../../layouts/AdminLayout.astro"
 import { call, dataOf, failureOf, isMissing } from "../../../lib/api"
+import { checkinCycles, formatCycles } from "../../../lib/cycles"
 import { COVER_NAMES } from "../../../lib/event-images"
 import { checkinUrl, phaseOf } from "../../../lib/events"
 import { posterFileName } from "../../../lib/qr"
@@ -41,22 +42,26 @@ const notice = noticeFrom(Astro.url, NOTICES)
 // A refused add keeps the handle that was typed.
 const typed = Astro.locals.submitted
 
-const result = await call(
-  client => client.GET("/api/admin/events/{id}", { params: { path: { id } } }),
-  session.token,
-)
+const [result, rules] = await Promise.all([
+  call(
+    client => client.GET("/api/admin/events/{id}", { params: { path: { id } } }),
+    session.token,
+  ),
+  call(client => client.GET("/api/cycles/rules")),
+])
 const outage = failureOf(result)
 if (outage && isMissing(outage)) return Astro.rewrite("/404")
 
 const detail = dataOf(result)
 const e = detail?.event
 const door = detail ? checkinUrl(Astro.url.origin, detail.checkinCode) : ""
+const pays = checkinCycles(dataOf(rules))
 ---
 
 <AdminLayout title={`BACKOFFICE//${e?.name ?? "event"}`} active="events">
   <Alert error={failure} class="mb-3" />
   {!detail || !e ? (
-    <p class="text-xs text-alert">the api is unreachable.</p>
+    <Alert message="the api is unreachable." />
   ) : (
     <>
       <div class="flex flex-wrap items-baseline justify-between gap-3">
@@ -131,7 +136,8 @@ const door = detail ? checkinUrl(Astro.url.origin, detail.checkinCode) : ""
         <p class="m-0 mt-2 text-2xs text-admin-mute">
           the link works from <LocalTime at={e.startsAt} class="text-admin-dim" /> to{" "}
           <LocalTime at={e.endsAt} class="text-admin-dim" /> while the event is published.
-          one check-in per player, 100 cycles.
+          one check-in per player
+          {pays === undefined ? "." : `, ${formatCycles(pays)} cycles.`}
         </p>
         <div class="mt-4 flex flex-wrap items-start gap-4">
           <img
