@@ -5,6 +5,7 @@ mod env;
 
 pub use app_config::{AppConfig, AppEnv, UnknownAppEnv, resolve_app_config};
 pub use env::{
-    DEV_JWT_SECRET, DbConfig, Env, EnvError, JWT_SECRET_MIN_LEN, JwtSecret, JwtSecretError, Lookup,
-    MaxConnections, MaxConnectionsError, NotUnicode, load_dotenv,
+    API_KEY_MIN_LEN, API_KEY_SYMBOLS, ApiKey, ApiKeyError, DEV_JWT_SECRET, DbConfig, Env, EnvError,
+    JWT_SECRET_MIN_LEN, JwtSecret, JwtSecretError, Lookup, MaxConnections, MaxConnectionsError,
+    NotUnicode, load_dotenv, read_app_env,
 };

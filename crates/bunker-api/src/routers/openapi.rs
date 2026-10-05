@@ -12,12 +12,17 @@ use bunker_models::{
     SkillLevel, Standing, StatusChange, TemporaryPassword, TierRule, TokenResponse, Tournament,
     TournamentDetail, TournamentId, TournamentName, TournamentStatus, TournamentUpdate,
 };
-use utoipa::openapi::security::{HttpAuthScheme, HttpBuilder, SecurityScheme};
+use utoipa::openapi::RefOr;
+use utoipa::openapi::path::Operation;
+use utoipa::openapi::security::{
+    ApiKey, ApiKeyValue, HttpAuthScheme, HttpBuilder, SecurityRequirement, SecurityScheme,
+};
 use utoipa::{Modify, OpenApi};
 
 use crate::internal::http::ApiErrorBody;
 use crate::services::ErrorCode;
 
+use super::responses::error_response;
 use super::{
     AppState, admin_event_router, admin_router, admin_tournament_router, auth_router, event_router,
     health_router, player_router, tournament_router,
@@ -161,7 +166,7 @@ use super::{
         TierRule,
         TokenResponse,
     )),
-    modifiers(&BearerAuth),
+    modifiers(&SecuritySchemes),
     tags(
         (name = "auth", description = "Signup and login"),
         (name = "players", description = "Public player data"),
@@ -174,11 +179,20 @@ use super::{
 #[derive(Debug)]
 pub struct ApiDoc;
 
-struct BearerAuth;
+/// Declares the two schemes, and puts the key on each operation under `/api`,
+/// because `server.rs` puts `require_api_key` on that whole tree.
+struct SecuritySchemes;
 
-impl Modify for BearerAuth {
+impl Modify for SecuritySchemes {
     fn modify(&self, openapi: &mut utoipa::openapi::OpenApi) {
         let components = openapi.components.get_or_insert_with(Default::default);
+        components.add_security_scheme(
+            "api_key",
+            SecurityScheme::ApiKey(ApiKey::Header(ApiKeyValue::with_description(
+                "X-Api-Key",
+                "Every route under `/api` needs the shared API key. `/health` does not.",
+            ))),
+        );
         components.add_security_scheme(
             "bearer",
             SecurityScheme::Http(
@@ -188,11 +202,59 @@ impl Modify for BearerAuth {
                     .build(),
             ),
         );
+
+        let api_paths = openapi
+            .paths
+            .paths
+            .iter_mut()
+            .filter(|(path, _)| path.starts_with("/api"));
+        for (_, item) in api_paths {
+            let operations = [
+                &mut item.get,
+                &mut item.put,
+                &mut item.post,
+                &mut item.delete,
+                &mut item.options,
+                &mut item.head,
+                &mut item.patch,
+                &mut item.trace,
+            ];
+            for operation in operations.into_iter().flatten() {
+                require_api_key(operation);
+            }
+        }
     }
 }
 
 pub fn openapi_router() -> Router<AppState> {
     Router::new().route("/api/openapi.json", get(document))
+}
+
+/// One requirement object lists the schemes that must all hold, and the list
+/// of objects offers alternatives. The key therefore joins each object: a
+/// bearer route needs the key and the token.
+fn require_api_key(operation: &mut Operation) {
+    let requirements = operation.security.take().unwrap_or_default();
+    operation.security = Some(if requirements.is_empty() {
+        vec![SecurityRequirement::new("api_key", Vec::<String>::new())]
+    } else {
+        requirements
+            .into_iter()
+            .map(|requirement| requirement.add("api_key", Vec::<String>::new()))
+            .collect()
+    });
+
+    let unauthorized = match operation.responses.responses.remove("401") {
+        Some(RefOr::T(response)) if !response.description.is_empty() => error_response(&format!(
+            "{}, or no valid `X-Api-Key` header",
+            response.description
+        )),
+        Some(_) | None => error_response("No valid `X-Api-Key` header"),
+    };
+    operation
+        .responses
+        .responses
+        .insert("401".to_owned(), RefOr::T(unauthorized));
 }
 
 async fn document() -> Json<utoipa::openapi::OpenApi> {

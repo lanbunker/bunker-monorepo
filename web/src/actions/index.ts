@@ -1,7 +1,7 @@
 import type { ActionAPIContext } from "astro:actions"
 import { defineAction } from "astro:actions"
 
-import { requireAdmin, requireToken, unwrap } from "../lib/action"
+import { requireAdmin, requireHuman, requireToken, unwrap } from "../lib/action"
 import { SESSION_COOKIE, call, callEmpty } from "../lib/api"
 import type { ApiResult, TokenResponse } from "../lib/api"
 import {
@@ -13,6 +13,7 @@ import {
     playerHandleInput,
     roleInput,
     signupInput,
+    TURNSTILE_FIELD,
 } from "../lib/schemas"
 import { eventActions } from "./events"
 import { tournamentActions } from "./tournaments"
@@ -52,8 +53,9 @@ export const server = {
     signup: defineAction({
         accept: "form",
         input: signupInput,
-        handler: async (input, context) =>
-            openSession(
+        handler: async (input, context) => {
+            await requireHuman(input[TURNSTILE_FIELD], context.request)
+            return openSession(
                 context,
                 input,
                 await call(client =>
@@ -61,7 +63,8 @@ export const server = {
                         body: { handle: input.handle, password: input.password },
                     }),
                 ),
-            ),
+            )
+        },
     }),
 
     login: defineAction({

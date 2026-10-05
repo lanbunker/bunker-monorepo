@@ -1,4 +1,4 @@
-import { API_URL } from "astro:env/server"
+import { API_KEY, API_URL } from "astro:env/server"
 import createClient from "openapi-fetch"
 
 import type { components, paths } from "./api-types"
@@ -49,7 +49,10 @@ type ApiClient = ReturnType<typeof createClient<paths>>
 const apiClient = (token?: string): ApiClient =>
     createClient<paths>({
         baseUrl: API_URL,
-        headers: token ? { authorization: `Bearer ${token}` } : undefined,
+        headers: {
+            ...(API_KEY ? { "x-api-key": API_KEY } : {}),
+            ...(token ? { authorization: `Bearer ${token}` } : {}),
+        },
         fetch: request => fetch(request, { signal: AbortSignal.timeout(TIMEOUT_MS) }),
     })
 
@@ -82,6 +85,7 @@ const ERROR_CODES = {
     Unauthorized: true,
     Forbidden: true,
     PasswordChangeRequired: true,
+    ApiKeyRequired: true,
     WrongPassword: true,
     RegistrationClosed: true,
     CheckinClosed: true,
@@ -130,10 +134,16 @@ const unreachable = (cause: unknown): ApiResult<never> => {
     return { ok: false, failure: { kind: "unreachable" } }
 }
 
-const refused = (response: Response, error: unknown): ApiResult<never> => ({
-    ok: false,
-    failure: { kind: "refused", status: response.status, body: errorBody(error) },
-})
+/**
+ * A refused API key is a fault of the site configuration and not of the visitor,
+ * so the page shows an outage and the log names the cause.
+ */
+const refused = (response: Response, error: unknown): ApiResult<never> => {
+    const body = errorBody(error)
+    return body?.code === "ApiKeyRequired"
+        ? unreachable("the API refused the API_KEY of the site")
+        : { ok: false, failure: { kind: "refused", status: response.status, body } }
+}
 
 /**
  * Runs one call and answers a value in every case. A refusal keeps its status

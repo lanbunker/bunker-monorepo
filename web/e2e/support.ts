@@ -16,8 +16,23 @@ export const PASSWORD = "correct-horse-battery"
 /** The API of the e2e servers. Setup goes straight there, because it is fast. */
 export const API = "http://127.0.0.1:3999"
 
+/**
+ * The key the e2e site and the tests send to the API. It must match `API_KEY`
+ * in the `e2e` environment of `wrangler.jsonc`.
+ */
+export const E2E_API_KEY = "e2e-api-key-not-for-production-use"
+
 /** The site under test. A cookie and an action post both need the origin. */
 export const SITE = "http://127.0.0.1:4399"
+
+/**
+ * The same build as `SITE`, served with Cloudflare's always-fail Turnstile
+ * secret, so a test can watch the server refuse a token.
+ */
+export const DENY_SITE = "http://127.0.0.1:4398"
+
+/** Cloudflare's published Turnstile secret that refuses every token. */
+export const TURNSTILE_DENY_SECRET = "2x0000000000000000000000000000000AA"
 
 /** Astro refuses an action post from another origin. */
 export const FROM_SITE = { origin: SITE }
@@ -80,7 +95,14 @@ export const jsonOf = async <T>(
     return schema.parse(body)
 }
 
-export const bearer = (token: string) => ({ authorization: `Bearer ${token}` })
+/**
+ * The headers of a direct call to the API. Only these calls carry the key: a
+ * header on the whole browser context goes to every host a page loads from.
+ */
+export const apiHeaders = (token?: string) => ({
+    "x-api-key": E2E_API_KEY,
+    ...(token ? { authorization: `Bearer ${token}` } : {}),
+})
 
 /** Signs a player up through the API. Answers the bearer token. */
 export const apiSignup = async (
@@ -89,6 +111,7 @@ export const apiSignup = async (
 ): Promise<string> => {
     const response = await request.post(`${API}/api/auth/signup`, {
         data: { handle: name, password: PASSWORD },
+        headers: apiHeaders(),
     })
     expect(response.status(), name).toBe(201)
     return (await jsonOf(response, tokenSchema)).token
@@ -102,6 +125,7 @@ export const apiLogin = async (
 ): Promise<string> => {
     const response = await request.post(`${API}/api/auth/login`, {
         data: { handle: name, password },
+        headers: apiHeaders(),
     })
     return (await jsonOf(response, tokenSchema)).token
 }
@@ -247,7 +271,7 @@ export const apiDraft = async (
             date: fields.date ?? "2030-01-01",
             registrationClosesAt: fields.registrationClosesAt ?? "2029-12-31T20:00:00Z",
         },
-        headers: bearer(token),
+        headers: apiHeaders(token),
     })
     expect(response.status()).toBe(201)
     return (await jsonOf(response, idSchema)).id
@@ -261,7 +285,7 @@ export const setTournamentStatus = async (
 ) => {
     const response = await request.post(`${API}/api/admin/tournaments/${id}/status`, {
         data: { status },
-        headers: bearer(token),
+        headers: apiHeaders(token),
     })
     expect(response.ok(), status).toBe(true)
 }
@@ -280,14 +304,16 @@ const addEntrants = async (
     Promise.all(
         names.map(async (name, index) => {
             const found = await jsonOf(
-                await request.get(`${API}/api/players/${name}`),
+                await request.get(`${API}/api/players/${name}`, {
+                    headers: apiHeaders(),
+                }),
                 idSchema,
             )
             const added = await request.post(
                 `${API}/api/admin/tournaments/${id}/entrants`,
                 {
                     data: { playerId: found.id, skill: levels[index] ?? null },
-                    headers: bearer(token),
+                    headers: apiHeaders(token),
                 },
             )
             expect(added.status(), name).toBe(201)
@@ -341,13 +367,13 @@ export const apiDuel = async (
 
     const generated = await request.post(`${API}/api/admin/tournaments/${id}/bracket`, {
         data: {},
-        headers: bearer(token),
+        headers: apiHeaders(token),
     })
     const bracket = await jsonOf(generated, bracketSchema)
     const match = bracket.rounds[0]?.[0]
     const detail = await jsonOf(
         await request.get(`${API}/api/admin/tournaments/${id}`, {
-            headers: bearer(token),
+            headers: apiHeaders(token),
         }),
         adminDetailSchema,
     )
@@ -356,7 +382,7 @@ export const apiDuel = async (
 
     const reported = await request.put(
         `${API}/api/admin/tournaments/${id}/matches/${match.id}/result`,
-        { data: { winner: side.id }, headers: bearer(token) },
+        { data: { winner: side.id }, headers: apiHeaders(token) },
     )
     expect(reported.ok(), `${winner} wins`).toBe(true)
 
@@ -365,7 +391,12 @@ export const apiDuel = async (
 
 /** The id of a player, read back by handle. */
 export const playerId = async (request: APIRequestContext, name: string) =>
-    (await jsonOf(await request.get(`${API}/api/players/${name}`), idSchema)).id
+    (
+        await jsonOf(
+            await request.get(`${API}/api/players/${name}`, { headers: apiHeaders() }),
+            idSchema,
+        )
+    ).id
 
 const resetSchema = z.object({ temporaryPassword: z.string() })
 
@@ -382,7 +413,7 @@ export const forcedPlayer = async (context: BrowserContext, prefix = "frc") => {
     const id = await playerId(context.request, name)
     const reset = await jsonOf(
         await context.request.post(`${API}/api/admin/players/${id}/password-reset`, {
-            headers: bearer(adminToken),
+            headers: apiHeaders(adminToken),
         }),
         resetSchema,
     )
@@ -400,7 +431,7 @@ export const adjustCycles = async (
 ) => {
     const response = await request.post(`${API}/api/admin/players/${id}/cycles`, {
         data: { amount, note },
-        headers: bearer(token),
+        headers: apiHeaders(token),
     })
     expect(response.status(), note).toBe(201)
 }
@@ -420,9 +451,16 @@ export const cyclesOf = (
 
 /** The rules of the ledger, read once per test that needs them. */
 export const cyclesRules = async (request: APIRequestContext) =>
-    jsonOf(await request.get(`${API}/api/cycles/rules`), rulesSchema)
+    jsonOf(
+        await request.get(`${API}/api/cycles/rules`, { headers: apiHeaders() }),
+        rulesSchema,
+    )
 
 /** The standing of a player, read back from the API. */
 export const standingOf = async (request: APIRequestContext, name: string) =>
-    (await jsonOf(await request.get(`${API}/api/players/${name}`), standingSchema))
-        .standing
+    (
+        await jsonOf(
+            await request.get(`${API}/api/players/${name}`, { headers: apiHeaders() }),
+            standingSchema,
+        )
+    ).standing

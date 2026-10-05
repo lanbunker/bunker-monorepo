@@ -1,5 +1,16 @@
 ---
 import { actions } from "astro:actions"
+// The Turnstile widget calls its callbacks by name, and it can finish before a
+// bundled module runs. So the callbacks are an inline script placed before the
+// widget script, and ENLIST stays disabled until the check passes. The row keeps
+// the 4.0625rem (65px) of the widget before it loads, so the form does not jump.
+// The widget sits inline in its shadow root, so a line height adds a gap under
+// it. `leading-0` reaches into the shadow root and holds the row at 65px. The
+// label sits at the top of the row, as the labels of the text fields do.
+// A blocked widget script calls nothing, so the inline script says so itself
+// after a wait.
+import { TURNSTILE_SITE_KEY } from "astro:env/server"
+
 import BootLog from "../components/BootLog.astro"
 import BunkernetFrame from "../components/BunkernetFrame.astro"
 import Alert from "../components/ui/Alert.astro"
@@ -7,7 +18,7 @@ import Button from "../components/ui/Button.astro"
 import Panel from "../components/ui/Panel.astro"
 import Prompt from "../components/ui/Prompt.astro"
 import Layout from "../layouts/Layout.astro"
-import { localPath } from "../lib/schemas"
+import { TURNSTILE_ACTION, localPath } from "../lib/schemas"
 import { SITE_FIELD } from "../lib/styles"
 import { sessionOf } from "../lib/session"
 
@@ -54,6 +65,7 @@ if (created) Astro.response.headers.set("Cache-Control", "no-store")
             action={actions.signup}
             class="flex flex-col gap-3 text-xs"
             autocomplete="on"
+            data-bot-check
           >
             {next && <input type="hidden" name="next" value={next} />}
             <label class="flex items-baseline gap-2">
@@ -100,9 +112,28 @@ if (created) Astro.response.headers.set("Cache-Control", "no-store")
                 class={SITE_FIELD}
               />
             </label>
+            <div class="flex flex-wrap items-start gap-2">
+              <span class="w-24 shrink-0 text-dim">human:</span>
+              <div
+                class="cf-turnstile min-h-[4.0625rem] min-w-0 leading-0 flex-1 max-[30rem]:basis-full"
+                data-sitekey={TURNSTILE_SITE_KEY}
+                data-action={TURNSTILE_ACTION}
+                data-theme="dark"
+                data-size="flexible"
+                data-callback="bunkerBotCheckPassed"
+                data-error-callback="bunkerBotCheckFailed"
+                data-expired-callback="bunkerBotCheckExpired"
+              ></div>
+            </div>
+            <p class="m-0 -mt-1 pl-26 text-2xs text-mute" role="status" data-bot-status>
+              waiting for the bot check…
+            </p>
+            <noscript>
+              <p class="text-2xs text-warn">the bot check needs JavaScript to enlist.</p>
+            </noscript>
             <Alert error={result?.error} />
             <div class="mt-2 flex items-center gap-4">
-              <Button>ENLIST</Button>
+              <Button disabled>ENLIST</Button>
               <a
                 href={next ? `/login?next=${encodeURIComponent(next)}` : "/login"}
                 class="text-2xs text-dim no-underline hover:text-accent"
@@ -112,6 +143,40 @@ if (created) Astro.response.headers.set("Cache-Control", "no-store")
             </div>
           </form>
         </Panel>
+        <script is:inline>
+          {
+            const forms = document.querySelectorAll("[data-bot-check]")
+            const show = (enabled, status) => {
+              for (const form of forms) {
+                for (const button of form.querySelectorAll("button[type=submit]")) {
+                  button.disabled = !enabled
+                }
+                for (const line of form.querySelectorAll("[data-bot-status]")) {
+                  line.textContent = status
+                }
+              }
+            }
+            window.bunkerBotCheckPassed = () => show(true, "")
+            window.bunkerBotCheckFailed = () =>
+              show(false, "the bot check failed. reload the page.")
+            window.bunkerBotCheckExpired = () =>
+              show(false, "the bot check expired. wait for a new one.")
+            setTimeout(() => {
+              if (!("turnstile" in window)) {
+                show(
+                  false,
+                  "the bot check did not load. check your connection or disable a blocker for challenges.cloudflare.com.",
+                )
+              }
+            }, 10000)
+          }
+        </script>
+        <script
+          is:inline
+          src="https://challenges.cloudflare.com/turnstile/v0/api.js"
+          async
+          defer
+        ></script>
       </div>
     )}
   </BunkernetFrame>

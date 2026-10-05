@@ -63,7 +63,7 @@
             }
           },
           "401": {
-            "description": "No valid bearer token",
+            "description": "No valid bearer token, or no valid `X-Api-Key` header",
             "content": {
               "application/json": {
                 "schema": {
@@ -85,6 +85,7 @@
         },
         "security": [
           {
+            "api_key": [],
             "bearer": []
           }
         ]
@@ -126,7 +127,7 @@
             }
           },
           "401": {
-            "description": "No valid bearer token",
+            "description": "No valid bearer token, or no valid `X-Api-Key` header",
             "content": {
               "application/json": {
                 "schema": {
@@ -178,6 +179,7 @@
         },
         "security": [
           {
+            "api_key": [],
             "bearer": []
           }
         ]
@@ -221,7 +223,7 @@
             }
           },
           "401": {
-            "description": "No valid bearer token",
+            "description": "No valid bearer token, or no valid `X-Api-Key` header",
             "content": {
               "application/json": {
                 "schema": {
@@ -253,6 +255,7 @@
         },
         "security": [
           {
+            "api_key": [],
             "bearer": []
           }
         ]
@@ -304,7 +307,7 @@
             }
           },
           "401": {
-            "description": "No valid bearer token",
+            "description": "No valid bearer token, or no valid `X-Api-Key` header",
             "content": {
               "application/json": {
                 "schema": {
@@ -366,6 +369,7 @@
         },
         "security": [
           {
+            "api_key": [],
             "bearer": []
           }
         ]
@@ -400,7 +404,7 @@
             }
           },
           "401": {
-            "description": "No valid bearer token",
+            "description": "No valid bearer token, or no valid `X-Api-Key` header",
             "content": {
               "application/json": {
                 "schema": {
@@ -422,6 +426,7 @@
         },
         "security": [
           {
+            "api_key": [],
             "bearer": []
           }
         ]
@@ -485,7 +490,7 @@
             }
           },
           "401": {
-            "description": "No valid bearer token",
+            "description": "No valid bearer token, or no valid `X-Api-Key` header",
             "content": {
               "application/json": {
                 "schema": {
@@ -547,6 +552,7 @@
         },
         "security": [
           {
+            "api_key": [],
             "bearer": []
           }
         ]
@@ -600,7 +606,7 @@
             }
           },
           "401": {
-            "description": "No valid bearer token",
+            "description": "No valid bearer token, or no valid `X-Api-Key` header",
             "content": {
               "application/json": {
                 "schema": {
@@ -662,6 +668,7 @@
         },
         "security": [
           {
+            "api_key": [],
             "bearer": []
           }
         ]
@@ -731,7 +738,7 @@
             }
           },
           "401": {
-            "description": "No valid bearer token",
+            "description": "No valid bearer token, or no valid `X-Api-Key` header",
             "content": {
               "application/json": {
                 "schema": {
@@ -753,6 +760,7 @@
         },
         "security": [
           {
+            "api_key": [],
             "bearer": []
           }
         ]
@@ -789,7 +797,7 @@
             }
           },
           "401": {
-            "description": "No valid bearer token",
+            "description": "No valid bearer token, or no valid `X-Api-Key` header",
             "content": {
               "application/json": {
                 "schema": {
@@ -821,6 +829,7 @@
         },
         "security": [
           {
+            "api_key": [],
             "bearer": []
           }
         ]
@@ -872,7 +881,7 @@
             }
           },
           "401": {
-            "description": "No valid bearer token",
+            "description": "No valid bearer token, or no valid `X-Api-Key` header",
             "content": {
               "application/json": {
                 "schema": {
@@ -944,6 +953,7 @@
         },
         "security": [
           {
+            "api_key": [],
             "bearer": []
           }
         ]
@@ -997,7 +1007,7 @@
             }
           },
           "401": {
-            "description": "No valid bearer token",
+            "description": "No valid bearer token, or no valid `X-Api-Key` header",
             "content": {
               "application/json": {
                 "schema": {
@@ -1059,6 +1069,7 @@
         },
         "security": [
           {
+            "api_key": [],
             "bearer": []
           }
         ]
@@ -1112,7 +1123,7 @@
             }
           },
           "401": {
-            "description": "No valid bearer token",
+            "description": "No valid bearer token, or no valid `X-Api-Key` header",
             "content": {
               "application/json": {
                 "schema": {
@@ -1184,6 +1195,7 @@
         },
         "security": [
           {
+            "api_key": [],
             "bearer": []
           }
         ]
@@ -1227,7 +1239,7 @@
             }
           },
           "401": {
-            "description": "No valid bearer token",
+            "description": "No valid bearer token, or no valid `X-Api-Key` header",
             "content": {
               "application/json": {
                 "schema": {
@@ -1259,6 +1271,7 @@
         },
         "security": [
           {
+            "api_key": [],
             "bearer": []
           }
         ]
@@ -1317,7 +1330,7 @@
             }
           },
           "401": {
-            "description": "No valid bearer token",
+            "description": "No valid bearer token, or no valid `X-Api-Key` header",
             "content": {
               "application/json": {
                 "schema": {
@@ -1339,6 +1352,7 @@
         },
         "security": [
           {
+            "api_key": [],
             "bearer": []
           }
         ]
@@ -1380,7 +1394,7 @@
             }
           },
           "401": {
-            "description": "No valid bearer token",
+            "description": "No valid bearer token, or no valid `X-Api-Key` header",
             "content": {
               "application/json": {
                 "schema": {
@@ -1432,6 +1446,7 @@
         },
         "security": [
           {
+            "api_key": [],
             "bearer": []
           }
         ]
@@ -1475,7 +1490,7 @@
             }
           },
           "401": {
-            "description": "No valid bearer token",
+            "description": "No valid bearer token, or no valid `X-Api-Key` header",
             "content": {
               "application/json": {
                 "schema": {
@@ -1507,6 +1522,7 @@
         },
         "security": [
           {
+            "api_key": [],
             "bearer": []
           }
         ]
@@ -1541,7 +1557,7 @@
             }
           },
           "401": {
-            "description": "No valid bearer token",
+            "description": "No valid bearer token, or no valid `X-Api-Key` header",
             "content": {
               "application/json": {
                 "schema": {
@@ -1563,6 +1579,7 @@
         },
         "security": [
           {
+            "api_key": [],
             "bearer": []
           }
         ]
@@ -1614,7 +1631,7 @@
             }
           },
           "401": {
-            "description": "No valid bearer token",
+            "description": "No valid bearer token, or no valid `X-Api-Key` header",
             "content": {
               "application/json": {
                 "schema": {
@@ -1686,6 +1703,7 @@
         },
         "security": [
           {
+            "api_key": [],
             "bearer": []
           }
         ]
@@ -1729,7 +1747,7 @@
             }
           },
           "401": {
-            "description": "No valid bearer token",
+            "description": "No valid bearer token, or no valid `X-Api-Key` header",
             "content": {
               "application/json": {
                 "schema": {
@@ -1771,6 +1789,7 @@
         },
         "security": [
           {
+            "api_key": [],
             "bearer": []
           }
         ]
@@ -1805,7 +1824,7 @@
             }
           },
           "401": {
-            "description": "No valid bearer token",
+            "description": "No valid bearer token, or no valid `X-Api-Key` header",
             "content": {
               "application/json": {
                 "schema": {
@@ -1847,6 +1866,7 @@
         },
         "security": [
           {
+            "api_key": [],
             "bearer": []
           }
         ]
@@ -1910,7 +1930,7 @@
             }
           },
           "401": {
-            "description": "No valid bearer token",
+            "description": "No valid bearer token, or no valid `X-Api-Key` header",
             "content": {
               "application/json": {
                 "schema": {
@@ -1982,6 +2002,7 @@
         },
         "security": [
           {
+            "api_key": [],
             "bearer": []
           }
         ]
@@ -2026,7 +2047,7 @@
             }
           },
           "401": {
-            "description": "No valid bearer token",
+            "description": "No valid bearer token, or no valid `X-Api-Key` header",
             "content": {
               "application/json": {
                 "schema": {
@@ -2068,6 +2089,7 @@
         },
         "security": [
           {
+            "api_key": [],
             "bearer": []
           }
         ]
@@ -2129,7 +2151,7 @@
             }
           },
           "401": {
-            "description": "No valid bearer token",
+            "description": "No valid bearer token, or no valid `X-Api-Key` header",
             "content": {
               "application/json": {
                 "schema": {
@@ -2201,6 +2223,7 @@
         },
         "security": [
           {
+            "api_key": [],
             "bearer": []
           }
         ]
@@ -2250,7 +2273,7 @@
             }
           },
           "401": {
-            "description": "No valid bearer token",
+            "description": "No valid bearer token, or no valid `X-Api-Key` header",
             "content": {
               "application/json": {
                 "schema": {
@@ -2292,6 +2315,7 @@
         },
         "security": [
           {
+            "api_key": [],
             "bearer": []
           }
         ]
@@ -2345,7 +2369,7 @@
             }
           },
           "401": {
-            "description": "No valid bearer token",
+            "description": "No valid bearer token, or no valid `X-Api-Key` header",
             "content": {
               "application/json": {
                 "schema": {
@@ -2417,6 +2441,7 @@
         },
         "security": [
           {
+            "api_key": [],
             "bearer": []
           }
         ]
@@ -2470,7 +2495,7 @@
             }
           },
           "401": {
-            "description": "No valid bearer token",
+            "description": "No valid bearer token, or no valid `X-Api-Key` header",
             "content": {
               "application/json": {
                 "schema": {
@@ -2542,6 +2567,7 @@
         },
         "security": [
           {
+            "api_key": [],
             "bearer": []
           }
         ]
@@ -2585,7 +2611,7 @@
             }
           },
           "401": {
-            "description": "",
+            "description": "`InvalidCredentials`: the handle or the password is wrong, or no valid `X-Api-Key` header",
             "content": {
               "application/json": {
                 "schema": {
@@ -2624,7 +2650,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "api_key": []
+          }
+        ]
       }
     },
     "/api/auth/signup": {
@@ -2656,6 +2687,16 @@
           },
           "400": {
             "description": "The body is not valid JSON, or a parameter is malformed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid `X-Api-Key` header",
             "content": {
               "application/json": {
                 "schema": {
@@ -2704,7 +2745,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "api_key": []
+          }
+        ]
       }
     },
     "/api/checkin/{code}": {
@@ -2744,6 +2790,16 @@
               }
             }
           },
+          "401": {
+            "description": "No valid `X-Api-Key` header",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
           "404": {
             "description": "Unknown code, or a draft",
             "content": {
@@ -2754,7 +2810,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "api_key": []
+          }
+        ]
       },
       "post": {
         "tags": [
@@ -2803,7 +2864,7 @@
             }
           },
           "401": {
-            "description": "No valid bearer token",
+            "description": "No valid bearer token, or no valid `X-Api-Key` header",
             "content": {
               "application/json": {
                 "schema": {
@@ -2845,6 +2906,7 @@
         },
         "security": [
           {
+            "api_key": [],
             "bearer": []
           }
         ]
@@ -2866,8 +2928,23 @@
                 }
               }
             }
+          },
+          "401": {
+            "description": "No valid `X-Api-Key` header",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
           }
-        }
+        },
+        "security": [
+          {
+            "api_key": []
+          }
+        ]
       }
     },
     "/api/events": {
@@ -2921,8 +2998,23 @@
                 }
               }
             }
+          },
+          "401": {
+            "description": "No valid `X-Api-Key` header",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
           }
-        }
+        },
+        "security": [
+          {
+            "api_key": []
+          }
+        ]
       }
     },
     "/api/me": {
@@ -2944,7 +3036,7 @@
             }
           },
           "401": {
-            "description": "No valid bearer token",
+            "description": "No valid bearer token, or no valid `X-Api-Key` header",
             "content": {
               "application/json": {
                 "schema": {
@@ -2956,6 +3048,7 @@
         },
         "security": [
           {
+            "api_key": [],
             "bearer": []
           }
         ]
@@ -2979,7 +3072,7 @@
             }
           },
           "401": {
-            "description": "No valid bearer token",
+            "description": "No valid bearer token, or no valid `X-Api-Key` header",
             "content": {
               "application/json": {
                 "schema": {
@@ -3001,6 +3094,7 @@
         },
         "security": [
           {
+            "api_key": [],
             "bearer": []
           }
         ]
@@ -3044,7 +3138,7 @@
             }
           },
           "401": {
-            "description": "No valid bearer token",
+            "description": "No valid bearer token, or no valid `X-Api-Key` header",
             "content": {
               "application/json": {
                 "schema": {
@@ -3106,6 +3200,7 @@
         },
         "security": [
           {
+            "api_key": [],
             "bearer": []
           }
         ]
@@ -3149,7 +3244,7 @@
             }
           },
           "401": {
-            "description": "No valid bearer token",
+            "description": "No valid bearer token, or no valid `X-Api-Key` header",
             "content": {
               "application/json": {
                 "schema": {
@@ -3191,6 +3286,7 @@
         },
         "security": [
           {
+            "api_key": [],
             "bearer": []
           }
         ]
@@ -3214,7 +3310,7 @@
             }
           },
           "401": {
-            "description": "No valid bearer token",
+            "description": "No valid bearer token, or no valid `X-Api-Key` header",
             "content": {
               "application/json": {
                 "schema": {
@@ -3236,6 +3332,7 @@
         },
         "security": [
           {
+            "api_key": [],
             "bearer": []
           }
         ]
@@ -3303,8 +3400,23 @@
                 }
               }
             }
+          },
+          "401": {
+            "description": "No valid `X-Api-Key` header",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
           }
-        }
+        },
+        "security": [
+          {
+            "api_key": []
+          }
+        ]
       }
     },
     "/api/players/{handle}": {
@@ -3344,6 +3456,16 @@
               }
             }
           },
+          "401": {
+            "description": "No valid `X-Api-Key` header",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
           "404": {
             "description": "",
             "content": {
@@ -3354,7 +3476,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "api_key": []
+          }
+        ]
       }
     },
     "/api/players/{handle}/cycles": {
@@ -3417,6 +3544,16 @@
               }
             }
           },
+          "401": {
+            "description": "No valid `X-Api-Key` header",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
           "404": {
             "description": "",
             "content": {
@@ -3427,7 +3564,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "api_key": []
+          }
+        ]
       }
     },
     "/api/players/{handle}/matches": {
@@ -3490,6 +3632,16 @@
               }
             }
           },
+          "401": {
+            "description": "No valid `X-Api-Key` header",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
           "404": {
             "description": "",
             "content": {
@@ -3500,7 +3652,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "api_key": []
+          }
+        ]
       }
     },
     "/api/tournaments": {
@@ -3554,8 +3711,23 @@
                 }
               }
             }
+          },
+          "401": {
+            "description": "No valid `X-Api-Key` header",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
           }
-        }
+        },
+        "security": [
+          {
+            "api_key": []
+          }
+        ]
       }
     },
     "/api/tournaments/{id}": {
@@ -3595,6 +3767,16 @@
               }
             }
           },
+          "401": {
+            "description": "No valid `X-Api-Key` header",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
           "404": {
             "description": "Unknown, or still a draft",
             "content": {
@@ -3605,7 +3787,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "api_key": []
+          }
+        ]
       }
     },
     "/api/tournaments/{id}/registration": {
@@ -3656,7 +3843,7 @@
             }
           },
           "401": {
-            "description": "No valid bearer token",
+            "description": "No valid bearer token, or no valid `X-Api-Key` header",
             "content": {
               "application/json": {
                 "schema": {
@@ -3728,6 +3915,7 @@
         },
         "security": [
           {
+            "api_key": [],
             "bearer": []
           }
         ]
@@ -3762,7 +3950,7 @@
             }
           },
           "401": {
-            "description": "No valid bearer token",
+            "description": "No valid bearer token, or no valid `X-Api-Key` header",
             "content": {
               "application/json": {
                 "schema": {
@@ -3804,6 +3992,7 @@
         },
         "security": [
           {
+            "api_key": [],
             "bearer": []
           }
         ]
@@ -4214,6 +4403,7 @@
           "HandleTaken",
           "InvalidCredentials",
           "Unauthorized",
+          "ApiKeyRequired",
           "Forbidden",
           "PasswordChangeRequired",
           "WrongPassword",
@@ -5854,6 +6044,12 @@
       }
     },
     "securitySchemes": {
+      "api_key": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-Api-Key",
+        "description": "Every route under `/api` needs the shared API key. `/health` does not."
+      },
       "bearer": {
         "type": "http",
         "scheme": "bearer",

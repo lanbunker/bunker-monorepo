@@ -14,11 +14,13 @@
 use std::collections::HashMap;
 
 use bunker_api::config::{
-    AppEnv, DEV_JWT_SECRET, Env, EnvError, JWT_SECRET_MIN_LEN, Lookup, MaxConnections, NotUnicode,
-    resolve_app_config,
+    API_KEY_MIN_LEN, API_KEY_SYMBOLS, AppEnv, DEV_JWT_SECRET, Env, EnvError, JWT_SECRET_MIN_LEN,
+    Lookup, MaxConnections, NotUnicode, read_app_env, resolve_app_config,
 };
 
 const LONG_SECRET: &str = "a-secret-that-is-long-enough-for-hs256-use";
+
+const API_KEY: &str = "an-api-key-that-is-long-enough-to-use";
 
 #[test]
 fn an_empty_environment_yields_working_defaults() {
@@ -34,7 +36,11 @@ fn an_empty_environment_yields_working_defaults() {
 #[test]
 fn every_app_env_spelling_parses() {
     for app_env in AppEnv::ALL {
-        let values = [("APP_ENV", app_env.as_str()), ("JWT_SECRET", LONG_SECRET)];
+        let values = [
+            ("APP_ENV", app_env.as_str()),
+            ("JWT_SECRET", LONG_SECRET),
+            ("API_KEY", API_KEY),
+        ];
         let env = Env::read_with(&lookup(&values)).unwrap();
 
         assert_eq!(env.app_env, app_env);
@@ -84,7 +90,12 @@ fn prod_refuses_the_development_secret() {
 
 #[test]
 fn prod_starts_with_a_jwt_secret() {
-    let env = Env::read_with(&lookup(&[("APP_ENV", "prod"), ("JWT_SECRET", LONG_SECRET)])).unwrap();
+    let env = Env::read_with(&lookup(&[
+        ("APP_ENV", "prod"),
+        ("JWT_SECRET", LONG_SECRET),
+        ("API_KEY", API_KEY),
+    ]))
+    .unwrap();
 
     assert_eq!(env.jwt_secret.as_ref(), LONG_SECRET);
     assert_eq!(env.bind_address, std::net::Ipv4Addr::LOCALHOST);
@@ -248,6 +259,114 @@ fn only_tests_use_the_fast_password_hash() {
         );
     }
     assert!(resolve_app_config(AppEnv::Test).fast_password_hash);
+}
+
+/// A deployed `/api` without a key is open to anyone who finds the address.
+#[test]
+fn every_environment_that_requires_a_key_refuses_to_start_without_one() {
+    let required: Vec<AppEnv> = AppEnv::ALL
+        .into_iter()
+        .filter(|app_env| resolve_app_config(*app_env).api_key_required)
+        .collect();
+    assert_eq!(required, [AppEnv::Test, AppEnv::Prod]);
+
+    for app_env in required {
+        let error = Env::read_with(&lookup(&[
+            ("APP_ENV", app_env.as_str()),
+            ("JWT_SECRET", LONG_SECRET),
+        ]))
+        .unwrap_err();
+
+        assert!(
+            matches!(&error, EnvError::Missing { name } if name == "API_KEY"),
+            "{app_env} started without a key: {error:?}"
+        );
+    }
+}
+
+#[test]
+fn only_local_work_runs_without_an_api_key() {
+    assert!(!resolve_app_config(AppEnv::Local).api_key_required);
+    assert!(resolve_app_config(AppEnv::Test).api_key_required);
+    assert!(resolve_app_config(AppEnv::Prod).api_key_required);
+}
+
+#[test]
+fn local_starts_without_an_api_key() {
+    let env = Env::read_with(&lookup(&[])).unwrap();
+
+    assert!(env.api_key.is_none());
+}
+
+#[test]
+fn a_short_api_key_is_refused() {
+    let short = "k".repeat(API_KEY_MIN_LEN - 1);
+    let error = Env::read_with(&lookup(&[("API_KEY", &short)])).unwrap_err();
+
+    assert!(
+        matches!(&error, EnvError::InvalidValue { name, .. } if name == "API_KEY"),
+        "got {error:?}"
+    );
+}
+
+/// The deploy script accepts the same characters, and a header carries them
+/// without encoding.
+#[test]
+fn an_api_key_with_a_space_or_a_non_ascii_character_is_refused() {
+    let padding = "k".repeat(API_KEY_MIN_LEN);
+    for refused in [
+        format!("{padding} space"),
+        format!("{padding}\ttab"),
+        format!("{padding}\u{e8}"),
+        format!("{padding}:colon"),
+    ] {
+        let error = Env::read_with(&lookup(&[("API_KEY", &refused)])).unwrap_err();
+
+        assert!(
+            matches!(&error, EnvError::InvalidValue { name, .. } if name == "API_KEY"),
+            "{refused:?} was accepted: {error:?}"
+        );
+    }
+
+    let symbols = format!("{padding}{API_KEY_SYMBOLS}");
+    let env = Env::read_with(&lookup(&[("API_KEY", &symbols)])).unwrap();
+    assert!(env.api_key.unwrap().matches(&symbols));
+}
+
+#[test]
+fn the_api_key_matches_only_itself_and_stays_out_of_debug() {
+    let env = Env::read_with(&lookup(&[("API_KEY", API_KEY)])).unwrap();
+    let key = env.api_key.as_ref().unwrap();
+
+    assert!(key.matches(API_KEY));
+    assert!(!key.matches("another-key-of-the-same-length-000000"));
+    assert!(!format!("{env:?}").contains(API_KEY));
+}
+
+/// A release binary without `APP_ENV` would run as `local`: `/api` open and the
+/// public development secret accepted.
+#[test]
+fn a_release_build_refuses_to_start_without_app_env() {
+    let error = read_app_env(&lookup(&[]), true).unwrap_err();
+    assert!(
+        matches!(&error, EnvError::Missing { name } if name == "APP_ENV"),
+        "got {error:?}"
+    );
+
+    let blank = read_app_env(&lookup(&[("APP_ENV", "")]), true).unwrap_err();
+    assert!(matches!(&blank, EnvError::Missing { name } if name == "APP_ENV"));
+
+    let prod = read_app_env(&lookup(&[("APP_ENV", "prod")]), true).unwrap();
+    assert_eq!(prod, AppEnv::Prod);
+}
+
+#[test]
+fn a_debug_build_defaults_to_local() {
+    assert_eq!(read_app_env(&lookup(&[]), false).unwrap(), AppEnv::Local);
+    assert_eq!(
+        read_app_env(&lookup(&[("APP_ENV", "test")]), false).unwrap(),
+        AppEnv::Test
+    );
 }
 
 fn lookup(values: &[(&str, &str)]) -> Box<Lookup<'static>> {

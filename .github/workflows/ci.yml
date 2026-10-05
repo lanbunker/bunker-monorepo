@@ -170,12 +170,19 @@ jobs:
             SSH_HOST: ${{ vars.SSH_HOST }}
         steps:
             # An empty value gives an opaque ssh error later. Stop here with the name.
+            # The site deploys after this job, so its secrets are checked here,
+            # before the API changes.
             - name: Check the configuration
               env:
                   DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+                  API_KEY: ${{ secrets.API_KEY }}
+                  TURNSTILE_SITE_KEY: ${{ secrets.TURNSTILE_SITE_KEY }}
+                  TURNSTILE_SECRET_KEY: ${{ secrets.TURNSTILE_SECRET_KEY }}
+                  CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+                  CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
               run: |
                   missing=0
-                  for name in DEPLOY_SSH_KEY API_HOST SSH_HOST; do
+                  for name in DEPLOY_SSH_KEY API_HOST SSH_HOST API_KEY TURNSTILE_SITE_KEY TURNSTILE_SECRET_KEY CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID; do
                     if [ -z "${!name}" ]; then echo "missing $name" >&2; missing=1; fi
                   done
                   exit $missing
@@ -238,8 +245,11 @@ jobs:
             - name: Upload the binary
               run: scp "target/$TARGET/release/bunker-api" bunker:bunker-api.new
 
+            # The key goes over stdin, so it is in no command line and no log.
             - name: Install and restart
-              run: ssh bunker sudo /usr/local/sbin/bunker-deploy
+              env:
+                  API_KEY: ${{ secrets.API_KEY }}
+              run: printf '%s\n' "$API_KEY" | ssh bunker sudo /usr/local/sbin/bunker-deploy
 
             - name: Check the public endpoint
               run: curl -fsS "https://$API_HOST/health/ready"
@@ -285,7 +295,15 @@ jobs:
             - run: pnpm build
 
             - uses: cloudflare/wrangler-action@v3
+              env:
+                  API_KEY: ${{ secrets.API_KEY }}
+                  TURNSTILE_SITE_KEY: ${{ secrets.TURNSTILE_SITE_KEY }}
+                  TURNSTILE_SECRET_KEY: ${{ secrets.TURNSTILE_SECRET_KEY }}
               with:
                   apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
                   accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
                   workingDirectory: web
+                  secrets: |
+                      API_KEY
+                      TURNSTILE_SITE_KEY
+                      TURNSTILE_SECRET_KEY

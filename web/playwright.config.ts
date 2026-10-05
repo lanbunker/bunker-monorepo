@@ -1,12 +1,18 @@
 import { defineConfig } from "@playwright/test"
 
+import { DENY_SITE, E2E_API_KEY, TURNSTILE_DENY_SECRET } from "./e2e/support"
+
 // Both servers start from scratch: the API on its own database file under
 // `.dev/`, so a run never touches the development data, and the site pointed at
 // that API. The API compiles its queries against the `.env` database and then
 // runs on `.dev/e2e.db`. The API port must match `env.e2e.vars.API_URL` in
 // `web/wrangler.jsonc`.
+//
+// The signup tests need the public internet: the widget loads from
+// challenges.cloudflare.com, and the site asks Cloudflare's siteverify.
 const API_PORT = 3999
 const WEB_PORT = 4399
+const DENY_PORT = new URL(DENY_SITE).port
 
 export default defineConfig({
     testDir: "./e2e",
@@ -28,7 +34,7 @@ export default defineConfig({
     },
     webServer: [
         {
-            command: `cd .. && rm -f .dev/e2e.db .dev/e2e.db-wal .dev/e2e.db-shm && cargo build -q -p bunker-api && APP_ENV=test PORT=${API_PORT} DATABASE_URL='sqlite://.dev/e2e.db?mode=rwc' ./target/debug/bunker-api`,
+            command: `cd .. && rm -f .dev/e2e.db .dev/e2e.db-wal .dev/e2e.db-shm && cargo build -q -p bunker-api && APP_ENV=test API_KEY=${E2E_API_KEY} PORT=${API_PORT} DATABASE_URL='sqlite://.dev/e2e.db?mode=rwc' ./target/debug/bunker-api`,
             url: `http://127.0.0.1:${API_PORT}/health/ready`,
             reuseExistingServer: false,
             timeout: 180_000,
@@ -50,6 +56,21 @@ export default defineConfig({
             url: `http://127.0.0.1:${WEB_PORT}/`,
             reuseExistingServer: false,
             timeout: 240_000,
+            stdout: "pipe",
+            stderr: "pipe",
+        },
+        {
+            // The build above, served again with the always-fail Turnstile
+            // secret. Playwright starts the servers in order and waits for each,
+            // so the build is complete before this one starts. A second build
+            // cannot run beside it: preview finds its build through the one
+            // `.wrangler/deploy/config.json`. CLOUDFLARE_INCLUDE_PROCESS_ENV lets
+            // the shell beat the Worker var for this server only, and
+            // `--ignore-lock` lets a second preview of one project start.
+            command: `CLOUDFLARE_INCLUDE_PROCESS_ENV=true TURNSTILE_SECRET_KEY=${TURNSTILE_DENY_SECRET} ASTRO_PREVIEW_BACKGROUND=0 pnpm exec astro preview --ignore-lock --host 127.0.0.1 --port ${DENY_PORT}`,
+            url: `${DENY_SITE}/`,
+            reuseExistingServer: false,
+            timeout: 60_000,
             stdout: "pipe",
             stderr: "pipe",
         },

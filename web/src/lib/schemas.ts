@@ -47,8 +47,25 @@ export const localPath = z
 
 export const credentials = z.object({ handle, password, next: localPath })
 
+const BOT_CHECK_RULE = "Wait for the bot check, then enlist again."
+
+/** The form field that the Turnstile widget fills with its token. */
+export const TURNSTILE_FIELD = "cf-turnstile-response"
+
+/**
+ * The action the signup widget stamps on its token. The server refuses a token
+ * stamped for another form.
+ */
+export const TURNSTILE_ACTION = "signup"
+
 export const signupInput = credentials
-    .extend({ confirmPassword: password })
+    .extend({
+        confirmPassword: password,
+        [TURNSTILE_FIELD]: z
+            .string({ error: BOT_CHECK_RULE })
+            .min(1, BOT_CHECK_RULE)
+            .max(2048, BOT_CHECK_RULE),
+    })
     .refine(input => input.password === input.confirmPassword, {
         message: "The two passwords differ.",
         path: ["confirmPassword"],

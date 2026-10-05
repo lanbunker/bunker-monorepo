@@ -72,19 +72,21 @@ impl IntoResponses for AdminErrors {
     }
 }
 
+/// A failure with an `ApiErrorBody`.
+pub(super) fn error_response(description: &str) -> Response {
+    ResponseBuilder::new()
+        .description(description)
+        .content(
+            "application/json",
+            ContentBuilder::new()
+                .schema(Some(Ref::from_schema_name("ApiErrorBody")))
+                .build(),
+        )
+        .build()
+}
+
 fn responses(list: &[(&str, &str)]) -> BTreeMap<String, RefOr<Response>> {
     list.iter()
-        .map(|(status, description)| {
-            let response = ResponseBuilder::new()
-                .description(*description)
-                .content(
-                    "application/json",
-                    ContentBuilder::new()
-                        .schema(Some(Ref::from_schema_name("ApiErrorBody")))
-                        .build(),
-                )
-                .build();
-            ((*status).to_owned(), RefOr::T(response))
-        })
+        .map(|(status, description)| ((*status).to_owned(), RefOr::T(error_response(description))))
         .collect()
 }

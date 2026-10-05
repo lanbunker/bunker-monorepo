@@ -42,6 +42,13 @@ mode, so a run picks a wrangler environment:
 | `e2e`       | `http://127.0.0.1:3999` | Playwright |
 | top level   | production              | the deploy |
 
+`API_KEY`, `TURNSTILE_SITE_KEY` and `TURNSTILE_SECRET_KEY` are Worker secrets in
+production. The deploy sets them from the GitHub secrets. `dev` and `e2e` set
+them in `wrangler.jsonc`, with Cloudflare's Turnstile test keys, which always
+pass. `dev` has no `API_KEY`, because the API in local mode asks for none.
+Playwright also serves the `e2e` build on a second port with the Turnstile secret
+that always fails, to test the refusal.
+
 The `e2e` port must match `API_PORT` in `playwright.config.ts`. There is no
 default, so a run without a value fails.
 

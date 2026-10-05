@@ -23,6 +23,8 @@ pub enum ErrorCode {
     InvalidCredentials,
     /// The request had no valid bearer token.
     Unauthorized,
+    /// The request had no valid `X-Api-Key`.
+    ApiKeyRequired,
     /// The caller is logged in and may not do this.
     Forbidden,
     /// The caller logged in with a temporary password and must choose a new

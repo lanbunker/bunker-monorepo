@@ -4,7 +4,7 @@ import {
     API,
     FROM_SITE,
     apiDraft,
-    bearer,
+    apiHeaders,
     detailSchema,
     handle,
     jsonOf,
@@ -152,7 +152,7 @@ test("a level outside 1 to 5 is refused with a sentence", async ({ page, context
     // too, and nobody is entered.
     const entered = await page.request.post(`${API}/api/tournaments/${id}/registration`, {
         data: { skill: 7 },
-        headers: bearer(admin.token),
+        headers: apiHeaders(admin.token),
     })
     expect(entered.status()).toBe(422)
     const detail = await jsonOf(

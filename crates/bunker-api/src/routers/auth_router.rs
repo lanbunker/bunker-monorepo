@@ -45,7 +45,7 @@ pub(super) async fn signup(
     responses(
         BodyErrors,
         (status = 200, body = TokenResponse, description = "Sent with `Cache-Control: no-store`"),
-        (status = 401, body = ApiErrorBody),
+        (status = 401, body = ApiErrorBody, description = "`InvalidCredentials`: the handle or the password is wrong"),
     )
 )]
 pub(super) async fn login(

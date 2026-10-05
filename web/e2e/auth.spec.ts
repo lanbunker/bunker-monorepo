@@ -1,8 +1,11 @@
 import { expect, test } from "@playwright/test"
 
 import {
+    API,
+    DENY_SITE,
     FROM_SITE,
     PASSWORD,
+    apiHeaders,
     clearSession,
     forcedPlayer,
     handle,
@@ -89,6 +92,46 @@ test("the server refuses a short password and a bad handle with its own sentence
     const body = await bad.text()
     expect(body).toContain("A handle is 3 to 20 characters")
     expect(body).not.toContain("Failed to validate")
+})
+
+test("a signup without the bot check is refused with a sentence", async ({ page }) => {
+    const refused = await page.request.post("/signup?_action=signup", {
+        form: { handle: handle("bot"), password: PASSWORD, confirmPassword: PASSWORD },
+        headers: FROM_SITE,
+    })
+
+    expect(refused.status()).toBe(400)
+    expect(await refused.text()).toContain("Wait for the bot check, then enlist again.")
+})
+
+test("the bot check says it waits, then clears its line and frees ENLIST", async ({
+    page,
+}) => {
+    await page.goto("/signup")
+    await expect(page.getByRole("status")).toHaveText("")
+    await expect(page.getByRole("button", { name: "ENLIST" })).toBeEnabled()
+})
+
+test("a token that Cloudflare refuses opens no account", async ({ request }) => {
+    const name = handle("dny")
+    const refused = await request.post(`${DENY_SITE}/signup?_action=signup`, {
+        form: {
+            handle: name,
+            password: PASSWORD,
+            confirmPassword: PASSWORD,
+            "cf-turnstile-response": "XXXX.DUMMY.TOKEN.XXXX",
+        },
+        headers: { origin: DENY_SITE },
+    })
+
+    expect(refused.status()).toBe(403)
+    expect(await refused.text()).toContain(
+        "The bot check failed. Wait for it to pass, then enlist again.",
+    )
+    const player = await request.get(`${API}/api/players/${name}`, {
+        headers: apiHeaders(),
+    })
+    expect(player.status()).toBe(404)
 })
 
 test("a login prints the boot sequence, then opens the profile", async ({

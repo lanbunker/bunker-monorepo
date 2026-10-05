@@ -5,6 +5,7 @@ use std::net::{IpAddr, Ipv4Addr};
 use std::str::FromStr;
 
 use nutype::nutype;
+use sha2::{Digest as _, Sha256};
 
 use super::app_config::{AppEnv, resolve_app_config};
 
@@ -16,9 +17,19 @@ pub const DEV_JWT_SECRET: &str = "dev-only-secret-change-me-not-for-prod";
 /// brute-forced offline from one token.
 pub const JWT_SECRET_MIN_LEN: usize = 32;
 
+/// Shortest accepted `API_KEY`, in characters, so the key cannot be guessed.
+pub const API_KEY_MIN_LEN: usize = 32;
+
+/// The characters `API_KEY` may hold besides ASCII letters and digits. The rule
+/// is the one `deploy/bunker-deploy.sh` checks, so a key the deploy accepts also
+/// starts the server, and a header can carry it without encoding.
+pub const API_KEY_SYMBOLS: &str = "._~+/=-";
+
 /// Where the database file lives when `DATABASE_URL` is absent. The directory
 /// is in the root `.gitignore`.
 const DEFAULT_DATABASE_URL: &str = "sqlite://.dev/bunker.db?mode=rwc";
+
+const RELEASE_BUILD: bool = !cfg!(debug_assertions);
 
 /// Each value the process reads from its environment. `clippy.toml` refuses
 /// `std::env::var` in every other file.
@@ -32,6 +43,8 @@ pub struct Env {
     pub port: u16,
     pub database: DbConfig,
     pub jwt_secret: JwtSecret,
+    /// The key every caller of `/api` sends. Without one, `/api` is open.
+    pub api_key: Option<ApiKey>,
     /// Replaces the log filter that `app_env` selects.
     pub rust_log: Option<String>,
 }
@@ -45,7 +58,7 @@ impl Env {
     /// then a pure function of the closure, which makes it testable. One test
     /// binary shares one environment, so `set_var` leaks between tests.
     pub fn read_with(lookup: &Lookup<'_>) -> Result<Self, EnvError> {
-        let app_env = parsed(lookup, "APP_ENV", AppEnv::Local)?;
+        let app_env = read_app_env(lookup, RELEASE_BUILD)?;
         let config = resolve_app_config(app_env);
 
         let jwt_secret = match optional(lookup, "JWT_SECRET")? {
@@ -74,15 +87,43 @@ impl Env {
             }
         };
 
+        let api_key = optional(lookup, "API_KEY")?
+            .map(ApiKey::try_new)
+            .transpose()
+            .map_err(|reason| EnvError::InvalidValue {
+                name: "API_KEY".to_owned(),
+                reason: reason.to_string(),
+            })?;
+        if config.api_key_required && api_key.is_none() {
+            return Err(EnvError::Missing {
+                name: "API_KEY".to_owned(),
+            });
+        }
+
         Ok(Self {
             app_env,
             bind_address: parsed(lookup, "BIND_ADDRESS", IpAddr::V4(Ipv4Addr::LOCALHOST))?,
             port: parsed(lookup, "PORT", 3000)?,
             database: DbConfig::read_with(lookup)?,
             jwt_secret,
+            api_key,
             rust_log: optional(lookup, "RUST_LOG")?,
         })
     }
+}
+
+/// Reads `APP_ENV`. A debug build falls back to `local`, so `make dev` and the
+/// tests need no variable. A `release` build has no fallback: a deployment
+/// that forgets the variable would otherwise run as `local`, with `/api` open
+/// and the public development secret accepted.
+pub fn read_app_env(lookup: &Lookup<'_>, release: bool) -> Result<AppEnv, EnvError> {
+    if release && optional(lookup, "APP_ENV")?.is_none() {
+        return Err(EnvError::Missing {
+            name: "APP_ENV".to_owned(),
+        });
+    }
+
+    parsed(lookup, "APP_ENV", AppEnv::Local)
 }
 
 /// Loads `.env` into the process environment, except when the process already
@@ -107,6 +148,7 @@ impl fmt::Debug for Env {
             .field("port", &self.port)
             .field("database", &self.database)
             .field("jwt_secret", &"<redacted>")
+            .field("api_key", &self.api_key.as_ref().map(|_| "<redacted>"))
             .field("rust_log", &self.rust_log)
             .finish()
     }
@@ -132,6 +174,25 @@ pub struct DbConfig {
     derive(Clone, PartialEq, Eq, AsRef)
 )]
 pub struct JwtSecret(String);
+
+/// The shared key of the API. No `Debug` and no `Display`: the value must never
+/// reach a log.
+#[nutype(
+    validate(
+        len_char_min = API_KEY_MIN_LEN,
+        predicate = |key| key.bytes().all(is_api_key_byte)
+    ),
+    derive(Clone, AsRef)
+)]
+pub struct ApiKey(String);
+
+impl ApiKey {
+    /// Compares hashes and not the strings, so the time a comparison takes says
+    /// nothing about how much of a guess was right.
+    pub fn matches(&self, candidate: &str) -> bool {
+        Sha256::digest(self.as_ref().as_bytes()) == Sha256::digest(candidate.as_bytes())
+    }
+}
 
 /// The size of the connection pool. SQLite serializes writers, so a large pool
 /// only adds waiting readers. The type holds the limits.
@@ -170,6 +231,10 @@ fn from_process(name: &str) -> Result<Option<String>, NotUnicode> {
         Err(VarError::NotPresent) => Ok(None),
         Err(VarError::NotUnicode(_)) => Err(NotUnicode),
     }
+}
+
+fn is_api_key_byte(byte: u8) -> bool {
+    byte.is_ascii_alphanumeric() || API_KEY_SYMBOLS.as_bytes().contains(&byte)
 }
 
 /// An empty value counts as absent. A blank variable in a `.env` file then gets

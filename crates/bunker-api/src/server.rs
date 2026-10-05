@@ -13,10 +13,12 @@ use tokio::signal::unix::{SignalKind, signal};
 use tokio::sync::oneshot;
 use tower_http::catch_panic::CatchPanicLayer;
 
-use crate::config::{AppConfig, Env, JwtSecret, resolve_app_config};
+use std::sync::Arc;
+
+use crate::config::{ApiKey, AppConfig, Env, JwtSecret, resolve_app_config};
 use crate::internal::http::{
     ApiError, drop_invalid_request_id, enforce_timeout, method_not_allowed, propagate_request_id,
-    render_errors, require_admin, route_not_found, set_request_id, trace_requests,
+    render_errors, require_admin, require_api_key, route_not_found, set_request_id, trace_requests,
 };
 use crate::internal::init_tracing;
 use crate::routers::{
@@ -49,6 +51,9 @@ const TOKEN_TTL: Duration = Duration::from_secs(30 * 24 * 60 * 60);
 #[derive(Clone)]
 pub struct Secrets {
     pub jwt_secret: JwtSecret,
+    /// Every caller of `/api` must send it. `None` leaves `/api` open, which
+    /// only local work allows.
+    pub api_key: Option<ApiKey>,
 }
 
 impl std::fmt::Debug for Secrets {
@@ -81,14 +86,25 @@ pub fn build_router(pool: DbPool, config: AppConfig, secrets: &Secrets) -> Route
             require_admin,
         ));
 
-    Router::new()
+    let api = Router::new()
         .merge(auth_router())
         .merge(player_router())
         .merge(tournament_router())
         .merge(event_router())
         .merge(admin)
+        .merge(openapi_router());
+    // `/health` stays open, so an uptime check and the deploy need no key.
+    let api = match &secrets.api_key {
+        Some(key) => api.route_layer(middleware::from_fn_with_state(
+            Arc::new(key.clone()),
+            require_api_key,
+        )),
+        None => api,
+    };
+
+    Router::new()
+        .merge(api)
         .merge(health_router())
-        .merge(openapi_router())
         .fallback(route_not_found)
         .method_not_allowed_fallback(method_not_allowed)
         // Innermost first. `propagate_request_id` is above the three layers that
@@ -121,7 +137,9 @@ impl From<ErrorCode> for StatusCode {
             | ErrorCode::CheckinClosed
             | ErrorCode::InvalidState => Self::CONFLICT,
             ErrorCode::NotAnEntrant => Self::UNPROCESSABLE_ENTITY,
-            ErrorCode::InvalidCredentials | ErrorCode::Unauthorized => Self::UNAUTHORIZED,
+            ErrorCode::InvalidCredentials | ErrorCode::Unauthorized | ErrorCode::ApiKeyRequired => {
+                Self::UNAUTHORIZED
+            }
             ErrorCode::Forbidden | ErrorCode::PasswordChangeRequired => Self::FORBIDDEN,
             ErrorCode::WrongPassword => Self::BAD_REQUEST,
             ErrorCode::InvalidRequest => Self::BAD_REQUEST,
@@ -175,6 +193,7 @@ pub async fn run() -> anyhow::Result<()> {
 
     let secrets = Secrets {
         jwt_secret: env.jwt_secret,
+        api_key: env.api_key,
     };
 
     let (draining, drain_started) = oneshot::channel();

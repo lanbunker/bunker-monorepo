@@ -6,19 +6,32 @@
     "observability": {
         "enabled": true,
     },
-    // Where the Rust API answers. The Worker is the only client of this name.
     // The deploy uses the top level. Local runs select an environment with
     // CLOUDFLARE_ENV, because a Worker var wins over the shell in local mode.
+    // Production keeps API_KEY, TURNSTILE_SITE_KEY and TURNSTILE_SECRET_KEY as
+    // Worker secrets, never in this file. The deploy sets them from the GitHub
+    // secrets.
     "vars": {
         "API_URL": "https://api.lanbunker.eu",
     },
 
+    // The Turnstile values below are Cloudflare's published test keys, which
+    // always pass. The e2e API key must match E2E_API_KEY in e2e/support.ts.
     "env": {
         "dev": {
-            "vars": { "API_URL": "http://127.0.0.1:3000" },
+            "vars": {
+                "API_URL": "http://127.0.0.1:3000",
+                "TURNSTILE_SITE_KEY": "1x00000000000000000000AA",
+                "TURNSTILE_SECRET_KEY": "1x0000000000000000000000000000000AA",
+            },
         },
         "e2e": {
-            "vars": { "API_URL": "http://127.0.0.1:3999" },
+            "vars": {
+                "API_URL": "http://127.0.0.1:3999",
+                "API_KEY": "e2e-api-key-not-for-production-use",
+                "TURNSTILE_SITE_KEY": "1x00000000000000000000AA",
+                "TURNSTILE_SECRET_KEY": "1x0000000000000000000000000000000AA",
+            },
         },
     },
 }

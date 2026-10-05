@@ -161,13 +161,14 @@ pub async fn method_not_allowed() -> ApiError {
     )
 }
 
-/// A refused login or a refused token. `Forbidden` is here too: a user who
-/// tries every admin route is worth a line.
+/// A refused login, token or API key. `Forbidden` is here too: a user who tries
+/// every admin route is worth a line.
 const fn is_access_refusal(code: ErrorCode) -> bool {
     matches!(
         code,
         ErrorCode::InvalidCredentials
             | ErrorCode::Unauthorized
+            | ErrorCode::ApiKeyRequired
             | ErrorCode::Forbidden
             | ErrorCode::PasswordChangeRequired
     )

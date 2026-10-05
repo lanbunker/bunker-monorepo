@@ -2,6 +2,7 @@
 //! traces requests.
 
 mod api_error;
+mod api_key;
 mod auth;
 mod cache;
 mod extract;
@@ -9,6 +10,7 @@ mod timeout;
 mod trace;
 
 pub use api_error::{ApiError, ApiErrorBody, method_not_allowed, render_errors, route_not_found};
+pub use api_key::{API_KEY, require_api_key};
 pub use auth::{AdminOnly, Authenticated, PendingPassword, require_admin};
 pub use cache::no_store;
 pub use extract::{ValidJson, ValidPath, ValidQuery};

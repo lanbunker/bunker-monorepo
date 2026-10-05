@@ -13,10 +13,11 @@ mod support;
 use axum::body::Body;
 use axum::http::{Method, Request, StatusCode, header};
 use bunker_api::config::AppEnv;
+use bunker_api::internal::http::API_KEY;
 use bunker_api::routers::ApiDoc;
 use http_body_util::BodyExt as _;
 use serde_json::{Value, json};
-use support::{PASSWORD, TestApi, assert_error, read_json};
+use support::{PASSWORD, TEST_API_KEY, TestApi, assert_error, read_json};
 use utoipa::OpenApi as _;
 
 /// The two routes a player with a temporary password can reach: they are how
@@ -428,9 +429,11 @@ async fn a_malformed_checkin_code_is_rejected_before_the_handler() {
 }
 
 /// Walks the documented contract. Every path and method is mounted, every
-/// route with `security` refuses a request without a token, every admin route
-/// refuses a user, and every bearer route but the two of a password change
-/// refuses a temporary password.
+/// operation under `/api` refuses a request without the API key, every route
+/// with a `bearer` requirement refuses a request without a token, every admin
+/// route refuses a user, and every bearer route but the two of a password
+/// change refuses a temporary password. A router merged outside the key layer
+/// fails the key assertion here.
 #[tokio::test]
 async fn every_documented_route_is_mounted_and_guarded() {
     let api = TestApi::with_database().await;
@@ -444,6 +447,12 @@ async fn every_documented_route_is_mounted_and_guarded() {
 
     for (template, item) in paths {
         let path = concrete(template);
+        let guarded = template.starts_with("/api/");
+        assert!(
+            guarded || template.starts_with("/health"),
+            "{template} is outside `/api` and is not a health route"
+        );
+
         for (method, operation) in item.as_object().unwrap() {
             let Ok(method) = Method::from_bytes(method.to_uppercase().as_bytes()) else {
                 continue;
@@ -459,7 +468,25 @@ async fn every_documented_route_is_mounted_and_guarded() {
                 "{route} is documented but not mounted: {status} {body}"
             );
 
-            if operation.get("security").is_some() {
+            let (status, body) = call_without_key(&api, &method, &path).await;
+            if guarded {
+                assert_eq!(
+                    status,
+                    StatusCode::UNAUTHORIZED,
+                    "{route} without the key: {body}"
+                );
+                assert_eq!(body["code"], "ApiKeyRequired", "{route}");
+            } else {
+                assert_ne!(body["code"], "ApiKeyRequired", "{route}");
+            }
+            assert_eq!(
+                requires(operation, "api_key"),
+                guarded,
+                "{route} documents the key wrongly: {operation}"
+            );
+
+            if requires(operation, "bearer") {
+                let (status, body) = call(&api, &method, &path, None).await;
                 assert_eq!(
                     status,
                     StatusCode::UNAUTHORIZED,
@@ -489,6 +516,106 @@ async fn every_documented_route_is_mounted_and_guarded() {
     }
 }
 
+#[tokio::test]
+async fn an_api_route_refuses_a_missing_or_wrong_key() {
+    let api = TestApi::without_database().await;
+
+    let missing = api
+        .send_without_api_key(Request::get("/api/players").body(Body::empty()).unwrap())
+        .await;
+    assert_error(missing, StatusCode::UNAUTHORIZED, "ApiKeyRequired").await;
+
+    let unknown = api
+        .send_without_api_key(
+            Request::get("/api/players")
+                .header(API_KEY, "not-a-key")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await;
+    assert_error(unknown, StatusCode::UNAUTHORIZED, "ApiKeyRequired").await;
+}
+
+/// The key check runs before the handler: the right key reaches the boundary,
+/// which then refuses the bad handle with its own code.
+#[tokio::test]
+async fn a_known_key_reaches_the_route() {
+    let response = TestApi::without_database()
+        .await
+        .send_without_api_key(
+            Request::get("/api/players/a%20b")
+                .header(API_KEY, TEST_API_KEY)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await;
+
+    assert_error(response, StatusCode::BAD_REQUEST, "InvalidRequest").await;
+}
+
+/// The key check runs before the admin check, so a caller without the key
+/// learns nothing about which routes need a token.
+#[tokio::test]
+async fn an_admin_route_without_the_key_answers_api_key_required() {
+    let response = TestApi::without_database()
+        .await
+        .send_without_api_key(
+            Request::get("/api/admin/players")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await;
+
+    assert_error(response, StatusCode::UNAUTHORIZED, "ApiKeyRequired").await;
+}
+
+/// The key check runs before the body is read.
+#[tokio::test]
+async fn a_bad_body_without_the_key_answers_api_key_required() {
+    let response = TestApi::without_database()
+        .await
+        .send_without_api_key(
+            Request::post("/api/auth/login")
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from("{"))
+                .unwrap(),
+        )
+        .await;
+
+    assert_error(response, StatusCode::UNAUTHORIZED, "ApiKeyRequired").await;
+}
+
+/// An uptime check and the deploy read the health routes with no key.
+#[tokio::test]
+async fn the_health_routes_need_no_key() {
+    let api = TestApi::without_database().await;
+
+    let live = api
+        .send_without_api_key(Request::get("/health/live").body(Body::empty()).unwrap())
+        .await;
+    assert_eq!(live.status(), StatusCode::OK);
+
+    let ready = api
+        .send_without_api_key(Request::get("/health/ready").body(Body::empty()).unwrap())
+        .await;
+    assert_error(ready, StatusCode::SERVICE_UNAVAILABLE, "ServiceUnavailable").await;
+}
+
+/// Local work runs without a key, so `curl` against `make dev` needs none.
+#[tokio::test]
+async fn an_api_without_a_configured_key_needs_none() {
+    let response = TestApi::without_database_or_api_key()
+        .await
+        .send_without_api_key(
+            Request::get("/api/players/a%20b")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await;
+
+    assert_error(response, StatusCode::BAD_REQUEST, "InvalidRequest").await;
+}
+
 /// A template with each parameter filled with a value of the right shape.
 fn concrete(template: &str) -> String {
     let id = uuid::Uuid::new_v4().to_string();
@@ -500,22 +627,44 @@ fn concrete(template: &str) -> String {
         .replace("{code}", "abcdefghij12")
 }
 
-/// Sends an empty JSON object and reads the answer as JSON, or as `null` for a
-/// body that is not JSON.
+/// Whether one requirement object of the operation names `scheme`.
+fn requires(operation: &Value, scheme: &str) -> bool {
+    operation["security"].as_array().is_some_and(|list| {
+        list.iter()
+            .any(|requirement| requirement.get(scheme).is_some())
+    })
+}
+
+/// Sends an empty JSON object with the API key and reads the answer.
 async fn call(
     api: &TestApi,
     method: &Method,
     path: &str,
     token: Option<&str>,
 ) -> (StatusCode, Value) {
-    let mut request = Request::builder()
-        .method(method.clone())
-        .uri(path)
-        .header(header::CONTENT_TYPE, "application/json");
+    let mut request = json_request(method, path);
     if let Some(token) = token {
         request = request.header(header::AUTHORIZATION, format!("Bearer {token}"));
     }
-    let response = api.send(request.body(Body::from("{}")).unwrap()).await;
+
+    read(api.send(request.body(Body::from("{}")).unwrap()).await).await
+}
+
+async fn call_without_key(api: &TestApi, method: &Method, path: &str) -> (StatusCode, Value) {
+    let request = json_request(method, path).body(Body::from("{}")).unwrap();
+
+    read(api.send_without_api_key(request).await).await
+}
+
+fn json_request(method: &Method, path: &str) -> axum::http::request::Builder {
+    Request::builder()
+        .method(method.clone())
+        .uri(path)
+        .header(header::CONTENT_TYPE, "application/json")
+}
+
+/// Reads the answer as JSON, or as `null` for a body that is not JSON.
+async fn read(response: axum::response::Response) -> (StatusCode, Value) {
     let status = response.status();
     let bytes = response.into_body().collect().await.unwrap().to_bytes();
 

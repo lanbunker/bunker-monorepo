@@ -74,6 +74,9 @@ In **Settings > Environments**, create `production` and allow only `main`. Add:
 | secret | `DEPLOY_SSH_KEY` | the content of `deploy_key` |
 | secret | `CLOUDFLARE_API_TOKEN` | a Cloudflare token that can edit Workers |
 | secret | `CLOUDFLARE_ACCOUNT_ID` | the Cloudflare account ID |
+| secret | `API_KEY` | the shared API key, made with `openssl rand -hex 32` |
+| secret | `TURNSTILE_SITE_KEY` | from the Turnstile widget, see below |
+| secret | `TURNSTILE_SECRET_KEY` | from the same widget |
 | variable | `API_HOST` | `api.lanbunker.eu` |
 | variable | `SSH_HOST` | `ssh.lanbunker.eu` |
 | variable | `SSH_KNOWN_HOSTS` | the output of the command below, run in the container |
@@ -82,18 +85,40 @@ In **Settings > Environments**, create `production` and allow only `main`. Add:
 printf 'ssh.lanbunker.eu %s\n' "$(cut -d' ' -f1,2 /etc/ssh/ssh_host_ed25519_key.pub)"
 ```
 
+Create the Turnstile widget in Cloudflare under **Turnstile > Add widget**, for
+the site's hostname, in managed mode.
+
+Each deploy carries `API_KEY` to the box, on stdin of `bunker-deploy`, and all
+three secrets to the Worker. GitHub is the one place to change them.
+
 Then delete `deploy_key` and `deploy_key.pub` from your Mac, and push to `main`.
+
+## Upgrade the box to the API key
+
+Do this one time, before the first push to `main` that adds `API_KEY`. The box
+keeps the old `bunker-deploy` until `bootstrap.sh` runs again. The old script
+ignores the key, and the new API refuses to start without it.
+
+```bash
+scp -r deploy root@<container-ip>:/root/
+ssh -t root@<container-ip> bash /root/deploy/bootstrap.sh
+```
+
+Then add the `API_KEY` and Turnstile secrets in GitHub, and push.
 
 ## How a deploy works
 
 `bunker-deploy` runs one deploy at a time:
 
 1. It refuses an upload that is a symlink, or that does not belong to `deploy`.
-2. It stops the API and copies the database to `/var/backups/bunker/pre-deploy.db`.
-3. It keeps the old binary as `/usr/local/bin/bunker-api.prev`, installs the new one, and starts it. Migrations run at startup.
-4. When `/health/ready` does not answer in 15 seconds, it puts back the old binary and the pre-deploy database. The job fails.
+2. It writes the API key from stdin into `/etc/bunker/api.env` when the key changed, and keeps the old file to roll back. An empty line or a terminal keeps the stored key.
+3. It stops the API and copies the database to `/var/backups/bunker/pre-deploy.db`.
+4. It keeps the old binary as `/usr/local/bin/bunker-api.prev`, installs the new one, and starts it. Migrations run at startup.
+5. When `/health/ready` does not answer in 15 seconds, it puts back the old binary, the pre-deploy database and the old API key. The job fails.
 
 Then CI checks that `https://api.lanbunker.eu/health/live` answers the commit it built.
+
+Do not run `wrangler deploy` by hand from a tree where `make web-e2e` ran. The e2e build writes test keys into `web/dist`. CI builds the site again for each deploy.
 
 ## Day to day
 
@@ -106,8 +131,14 @@ Run these in the container as root.
 | Update the scripts or units | copy `deploy/` again, then run `bootstrap.sh` again |
 | Rotate the deploy key | put the new public key in `/root/deploy_key.pub`, run `bootstrap.sh`, replace `DEPLOY_SSH_KEY` |
 | Rotate the B2 key | edit `/etc/bunker/litestream.env`, then `systemctl restart litestream` |
+| Rotate the API key | change `API_KEY` in GitHub, then run the last deploy again. Do this at a quiet time, see below |
 
 Run `sqlite3` as `bunker`. A WAL file that root creates blocks the API.
+
+A rotation of the API key stops the site for a few minutes. The API restarts
+with the new key in `deploy-api`, and the Worker sends the old key until
+`deploy-web` uploads the new secret. When `deploy-web` fails, the site stays
+down until a deploy succeeds.
 
 Once a month, restore the B2 copy to a scratch file. It must print a number:
 

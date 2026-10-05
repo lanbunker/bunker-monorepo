@@ -14,7 +14,8 @@ use axum::Router;
 use axum::body::Body;
 use axum::http::{Method, Request, StatusCode, header};
 use axum::response::Response;
-use bunker_api::config::{AppEnv, DbConfig, JwtSecret, MaxConnections, resolve_app_config};
+use bunker_api::config::{ApiKey, AppEnv, DbConfig, JwtSecret, MaxConnections, resolve_app_config};
+use bunker_api::internal::http::API_KEY;
 use bunker_api::server::{Secrets, build_router};
 use bunker_api::storage::{DbPool, connect, run_pending_migrations};
 use bunker_models::{
@@ -32,6 +33,10 @@ use tower::ServiceExt as _;
 /// The secret every test router signs with. A test that needs a token from
 /// another issuer builds a second [`Secrets`].
 pub const TEST_JWT_SECRET: &str = "test-secret-not-for-production-32-chars-long";
+
+/// The key every test router asks for. [`TestApi::send`] adds it to a request
+/// that carries none.
+pub const TEST_API_KEY: &str = "test-api-key-not-for-production-use";
 
 /// A password that passes validation. Tests that check the rules use their own.
 pub const PASSWORD: &str = "correct-horse-battery";
@@ -61,6 +66,22 @@ impl TestApi {
 
         Self {
             router: build_router(pool, config, &test_secrets()),
+            pool: None,
+            _dir: None,
+        }
+    }
+
+    /// The same as [`Self::without_database`], but with no API key configured,
+    /// as `make dev` runs.
+    pub async fn without_database_or_api_key() -> Self {
+        let pool = connect(&unreachable_database()).unwrap();
+        let secrets = Secrets {
+            api_key: None,
+            ..test_secrets()
+        };
+
+        Self {
+            router: build_router(pool, resolve_app_config(AppEnv::Local), &secrets),
             pool: None,
             _dir: None,
         }
@@ -432,7 +453,17 @@ impl TestApi {
 
     /// For a request that the typed helpers cannot make: a wrong method, an absent
     /// header or a bad body.
-    pub async fn send(&self, request: Request<Body>) -> Response {
+    pub async fn send(&self, mut request: Request<Body>) -> Response {
+        if !request.headers().contains_key(&API_KEY) {
+            request
+                .headers_mut()
+                .insert(API_KEY, TEST_API_KEY.parse().unwrap());
+        }
+        self.send_without_api_key(request).await
+    }
+
+    /// Sends the request as it is, for a test of the key check itself.
+    pub async fn send_without_api_key(&self, request: Request<Body>) -> Response {
         self.router.clone().oneshot(request).await.unwrap()
     }
 }
@@ -476,6 +507,7 @@ pub fn cause_chain(error: &dyn std::error::Error) -> String {
 pub fn test_secrets() -> Secrets {
     Secrets {
         jwt_secret: JwtSecret::try_new(TEST_JWT_SECRET).unwrap(),
+        api_key: Some(ApiKey::try_new(TEST_API_KEY).unwrap()),
     }
 }
 

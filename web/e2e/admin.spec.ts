@@ -5,7 +5,7 @@ import {
     API,
     apiDraft,
     apiSignup,
-    bearer,
+    apiHeaders,
     clearSession,
     createDraft,
     handle,
@@ -34,7 +34,7 @@ test("the backoffice is closed to a user and open to an admin", async ({
                 startsAt: "2030-01-01T18:00:00Z",
                 endsAt: "2030-01-02T02:00:00Z",
             },
-            headers: bearer(admin.token),
+            headers: apiHeaders(admin.token),
         }),
         z.object({ id: z.string() }),
     )
@@ -110,7 +110,7 @@ test("a player cannot promote themself through a hand-made post", async ({
     const id = await playerId(context.request, victim.name)
     const promotion = await page.request.patch(`${API}/api/admin/players/${id}`, {
         data: { role: "admin" },
-        headers: bearer(victim.token),
+        headers: apiHeaders(victim.token),
     })
     expect(promotion.status()).toBe(403)
     expect(await promotion.json()).toMatchObject({ code: "Forbidden" })
@@ -228,7 +228,13 @@ test("an entrant is added once however often, listed, and removed", async ({
     await expect(page.getByText("nobody yet.")).toBeVisible()
 
     // The same player is still in the roster: a removed entrant is not deleted.
-    expect((await page.request.get(`${API}/api/players/${player}`)).ok()).toBe(true)
+    expect(
+        (
+            await page.request.get(`${API}/api/players/${player}`, {
+                headers: apiHeaders(),
+            })
+        ).ok(),
+    ).toBe(true)
 })
 
 test("a concluded tournament takes no more changes", async ({ page, context }) => {

@@ -4,7 +4,9 @@ import { match } from "ts-pattern"
 
 import { call, codeOf, messageOf } from "./api"
 import type { ApiFailure, ApiResult, ErrorCode, Player } from "./api"
+import { TURNSTILE_ACTION } from "./schemas"
 import { adminSessionOf, sessionOf } from "./session"
+import { checkTurnstile } from "./turnstile"
 
 /**
  * The status a refusal with no body becomes. Something in front of the API
@@ -28,7 +30,7 @@ const codeForStatus = (status: number): ActionErrorCode =>
  */
 const codeFor = (code: ErrorCode | undefined, status: number): ActionErrorCode =>
     match(code)
-        .with("GenericError", () => "INTERNAL_SERVER_ERROR" as const)
+        .with("GenericError", "ApiKeyRequired", () => "INTERNAL_SERVER_ERROR" as const)
         .with("ServiceUnavailable", () => "SERVICE_UNAVAILABLE" as const)
         .with("ItemNotFound", "RouteNotFound", () => "NOT_FOUND" as const)
         .with(
@@ -90,6 +92,35 @@ export const requireAdmin = (locals: App.Locals): string => {
         throw new ActionError({ code: "FORBIDDEN", message: "Admins only." })
     }
     return session.token
+}
+
+/**
+ * Passes when Cloudflare confirms that a person filled the form. A check that
+ * cannot happen refuses too: a signup that nobody checked does not pass.
+ */
+export const requireHuman = async (token: string, request: Request): Promise<void> => {
+    const ip = request.headers.get("cf-connecting-ip")
+    const refusal = match(await checkTurnstile(token, ip, TURNSTILE_ACTION))
+        .with("passed", () => undefined)
+        .with(
+            "refused",
+            () =>
+                new ActionError({
+                    code: "FORBIDDEN",
+                    message:
+                        "The bot check failed. Wait for it to pass, then enlist again.",
+                }),
+        )
+        .with(
+            "unavailable",
+            () =>
+                new ActionError({
+                    code: "SERVICE_UNAVAILABLE",
+                    message: "The bot check is not answering. Try again in a moment.",
+                }),
+        )
+        .exhaustive()
+    if (refusal) throw refusal
 }
 
 /** The player behind a handle an admin typed. An unknown handle refuses the action. */

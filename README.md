@@ -70,6 +70,12 @@ Request
   player, a password change, a demotion and a password reset take effect at
   once. After a reset, the API answers every route except `/api/me` and
   `/api/me/password` with `403 PasswordChangeRequired`.
+- **Only our clients reach `/api`.** The site, and later the cabinets, send one
+  shared key in `X-Api-Key`. The key lives in GitHub, and each deploy carries it
+  to the box and to the Worker. `/health` needs no key. When `API_KEY` is not
+  set, as in local work, `/api` needs no key either.
+- **Signup has a bot check.** The site checks a Cloudflare Turnstile token
+  before it calls the API. The API does not check the token.
 - **Each test brings its own database.** No Docker and no shared state.
 
 The full contract is `crates/bunker-api/openapi.json`, also served at
@@ -127,15 +133,18 @@ The API reads its configuration from the environment. Locally it also reads
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
-| `APP_ENV` | `local` | `test`, `local` or `prod` |
+| `APP_ENV` | `local` in a debug build | `test`, `local` or `prod`. A release build refuses to start without it |
 | `BIND_ADDRESS` | `127.0.0.1` | Listen address |
 | `PORT` | `3000` | Listen port |
 | `DATABASE_URL` | `sqlite://.dev/bunker.db?mode=rwc` | `mode=rwc` creates the file. Production uses `mode=rw` |
 | `DB_MAX_CONNECTIONS` | `8` | Pool size |
 | `JWT_SECRET` | dev value | 32 characters or more. Required in `prod`, and the dev value is refused there |
+| `API_KEY` | none | The shared key every caller of `/api` sends in `X-Api-Key`. 32 characters or more. Required in `prod` and `test`. In `local`, `/api` is open without it |
 | `RUST_LOG` | from `APP_ENV` | Log filter. An invalid filter stops the start |
 
-The site reads `API_URL` from `web/wrangler.jsonc`. See `web/README.md`.
+The site reads `API_URL` from `web/wrangler.jsonc`. In production, `API_KEY`,
+`TURNSTILE_SITE_KEY` and `TURNSTILE_SECRET_KEY` are Worker secrets that CI
+uploads. See `web/README.md`.
 
 ## Deploy
 
@@ -145,6 +154,9 @@ and a pull request run CI only.
 - **API:** a static binary in a Debian container on the office Proxmox box,
   behind a Cloudflare Tunnel. The deploy rolls back when the new binary is not
   healthy. Litestream sends each database change to Backblaze B2.
-- **Site:** Cloudflare Workers, through wrangler.
+- **Site:** Cloudflare Workers, through wrangler. The deploy also sets the
+  Worker secrets from GitHub.
 
-`deploy/README.md` gives the setup and the day-to-day commands.
+`deploy/README.md` gives the setup and the day-to-day commands. Before the
+first push that adds `API_KEY`, upgrade the box one time, see "Upgrade the box
+to the API key" there.

@@ -68,6 +68,9 @@ pub struct AppConfig {
     /// Refuse to start without `JWT_SECRET`. A development default is convenient,
     /// and a deployment with the default secret is an open door.
     pub jwt_secret_required: bool,
+    /// Refuse to start without `API_KEY`. Off for local work, so `curl` against
+    /// `make dev` needs no key.
+    pub api_key_required: bool,
 }
 
 pub const fn resolve_app_config(app_env: AppEnv) -> AppConfig {
@@ -79,6 +82,7 @@ pub const fn resolve_app_config(app_env: AppEnv) -> AppConfig {
             json_logs: false,
             fast_password_hash: true,
             jwt_secret_required: false,
+            api_key_required: true,
         },
         AppEnv::Local => AppConfig {
             app_env,
@@ -87,6 +91,7 @@ pub const fn resolve_app_config(app_env: AppEnv) -> AppConfig {
             json_logs: false,
             fast_password_hash: false,
             jwt_secret_required: false,
+            api_key_required: false,
         },
         AppEnv::Prod => AppConfig {
             app_env,
@@ -95,6 +100,7 @@ pub const fn resolve_app_config(app_env: AppEnv) -> AppConfig {
             json_logs: true,
             fast_password_hash: false,
             jwt_secret_required: true,
+            api_key_required: true,
         },
     }
 }

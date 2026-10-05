@@ -6,7 +6,7 @@ import {
     API,
     PASSWORD,
     apiLogin,
-    bearer,
+    apiHeaders,
     clearSession,
     cyclesOf,
     cyclesRules,
@@ -36,7 +36,7 @@ const publishedEvent = async (
     opensIn: number,
     lasts: number,
 ) => {
-    const headers = bearer(token)
+    const headers = apiHeaders(token)
     const name = `Night ${handle("ev")}`
     const startsAt = new Date(Date.now() + opensIn)
     const endsAt = new Date(startsAt.getTime() + lasts)
@@ -202,7 +202,7 @@ test("a visitor at the door enlists, comes back, and checks in for the check-in 
     await expect(page.locator("[data-state=in]")).toContainText("already checked in")
     await expect(page.getByRole("button", { name: "CHECK IN" })).toHaveCount(0)
     const again = await page.request.post(`${API}/api/checkin/${code}`, {
-        headers: bearer(await apiLogin(context.request, player)),
+        headers: apiHeaders(await apiLogin(context.request, player)),
     })
     expect(again.status()).toBe(200)
     expect((await jsonOf(again, receiptSchema)).cycles).toBe(0)
@@ -307,7 +307,7 @@ test("the door is closed outside the window, and a bad code is a 404", async ({
 
     // The API refuses too, whatever the page shows.
     const refused = await page.request.post(`${API}/api/checkin/${early.code}`, {
-        headers: bearer(admin.token),
+        headers: apiHeaders(admin.token),
     })
     expect(refused.status()).toBe(409)
 

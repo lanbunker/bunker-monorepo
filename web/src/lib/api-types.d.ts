@@ -742,6 +742,7 @@ export interface components {
             | "HandleTaken"
             | "InvalidCredentials"
             | "Unauthorized"
+            | "ApiKeyRequired"
             | "Forbidden"
             | "PasswordChangeRequired"
             | "WrongPassword"
@@ -1393,7 +1394,7 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorBody"]
                 }
             }
-            /** @description No valid bearer token */
+            /** @description No valid bearer token, or no valid `X-Api-Key` header */
             401: {
                 headers: {
                     [name: string]: unknown
@@ -1444,7 +1445,7 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorBody"]
                 }
             }
-            /** @description No valid bearer token */
+            /** @description No valid bearer token, or no valid `X-Api-Key` header */
             401: {
                 headers: {
                     [name: string]: unknown
@@ -1520,7 +1521,7 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorBody"]
                 }
             }
-            /** @description No valid bearer token */
+            /** @description No valid bearer token, or no valid `X-Api-Key` header */
             401: {
                 headers: {
                     [name: string]: unknown
@@ -1581,7 +1582,7 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorBody"]
                 }
             }
-            /** @description No valid bearer token */
+            /** @description No valid bearer token, or no valid `X-Api-Key` header */
             401: {
                 headers: {
                     [name: string]: unknown
@@ -1663,7 +1664,7 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorBody"]
                 }
             }
-            /** @description No valid bearer token */
+            /** @description No valid bearer token, or no valid `X-Api-Key` header */
             401: {
                 headers: {
                     [name: string]: unknown
@@ -1725,7 +1726,7 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorBody"]
                 }
             }
-            /** @description No valid bearer token */
+            /** @description No valid bearer token, or no valid `X-Api-Key` header */
             401: {
                 headers: {
                     [name: string]: unknown
@@ -1814,7 +1815,7 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorBody"]
                 }
             }
-            /** @description No valid bearer token */
+            /** @description No valid bearer token, or no valid `X-Api-Key` header */
             401: {
                 headers: {
                     [name: string]: unknown
@@ -1901,7 +1902,7 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorBody"]
                 }
             }
-            /** @description No valid bearer token */
+            /** @description No valid bearer token, or no valid `X-Api-Key` header */
             401: {
                 headers: {
                     [name: string]: unknown
@@ -1947,7 +1948,7 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorBody"]
                 }
             }
-            /** @description No valid bearer token */
+            /** @description No valid bearer token, or no valid `X-Api-Key` header */
             401: {
                 headers: {
                     [name: string]: unknown
@@ -2008,7 +2009,7 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorBody"]
                 }
             }
-            /** @description No valid bearer token */
+            /** @description No valid bearer token, or no valid `X-Api-Key` header */
             401: {
                 headers: {
                     [name: string]: unknown
@@ -2105,7 +2106,7 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorBody"]
                 }
             }
-            /** @description No valid bearer token */
+            /** @description No valid bearer token, or no valid `X-Api-Key` header */
             401: {
                 headers: {
                     [name: string]: unknown
@@ -2192,7 +2193,7 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorBody"]
                 }
             }
-            /** @description No valid bearer token */
+            /** @description No valid bearer token, or no valid `X-Api-Key` header */
             401: {
                 headers: {
                     [name: string]: unknown
@@ -2284,7 +2285,7 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorBody"]
                 }
             }
-            /** @description No valid bearer token */
+            /** @description No valid bearer token, or no valid `X-Api-Key` header */
             401: {
                 headers: {
                     [name: string]: unknown
@@ -2342,7 +2343,7 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorBody"]
                 }
             }
-            /** @description No valid bearer token */
+            /** @description No valid bearer token, or no valid `X-Api-Key` header */
             401: {
                 headers: {
                     [name: string]: unknown
@@ -2393,7 +2394,7 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorBody"]
                 }
             }
-            /** @description No valid bearer token */
+            /** @description No valid bearer token, or no valid `X-Api-Key` header */
             401: {
                 headers: {
                     [name: string]: unknown
@@ -2468,7 +2469,7 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorBody"]
                 }
             }
-            /** @description No valid bearer token */
+            /** @description No valid bearer token, or no valid `X-Api-Key` header */
             401: {
                 headers: {
                     [name: string]: unknown
@@ -2523,7 +2524,7 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorBody"]
                 }
             }
-            /** @description No valid bearer token */
+            /** @description No valid bearer token, or no valid `X-Api-Key` header */
             401: {
                 headers: {
                     [name: string]: unknown
@@ -2575,7 +2576,7 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorBody"]
                 }
             }
-            /** @description No valid bearer token */
+            /** @description No valid bearer token, or no valid `X-Api-Key` header */
             401: {
                 headers: {
                     [name: string]: unknown
@@ -2668,7 +2669,7 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorBody"]
                 }
             }
-            /** @description No valid bearer token */
+            /** @description No valid bearer token, or no valid `X-Api-Key` header */
             401: {
                 headers: {
                     [name: string]: unknown
@@ -2732,7 +2733,7 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorBody"]
                 }
             }
-            /** @description No valid bearer token */
+            /** @description No valid bearer token, or no valid `X-Api-Key` header */
             401: {
                 headers: {
                     [name: string]: unknown
@@ -2810,7 +2811,7 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorBody"]
                 }
             }
-            /** @description No valid bearer token */
+            /** @description No valid bearer token, or no valid `X-Api-Key` header */
             401: {
                 headers: {
                     [name: string]: unknown
@@ -2903,7 +2904,7 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorBody"]
                 }
             }
-            /** @description No valid bearer token */
+            /** @description No valid bearer token, or no valid `X-Api-Key` header */
             401: {
                 headers: {
                     [name: string]: unknown
@@ -2974,7 +2975,7 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorBody"]
                 }
             }
-            /** @description No valid bearer token */
+            /** @description No valid bearer token, or no valid `X-Api-Key` header */
             401: {
                 headers: {
                     [name: string]: unknown
@@ -3068,7 +3069,7 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorBody"]
                 }
             }
-            /** @description No valid bearer token */
+            /** @description No valid bearer token, or no valid `X-Api-Key` header */
             401: {
                 headers: {
                     [name: string]: unknown
@@ -3138,7 +3139,7 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorBody"]
                 }
             }
-            /** @description No valid bearer token */
+            /** @description No valid bearer token, or no valid `X-Api-Key` header */
             401: {
                 headers: {
                     [name: string]: unknown
@@ -3235,7 +3236,7 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorBody"]
                 }
             }
-            /** @description No valid bearer token */
+            /** @description No valid bearer token, or no valid `X-Api-Key` header */
             401: {
                 headers: {
                     [name: string]: unknown
@@ -3330,6 +3331,7 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorBody"]
                 }
             }
+            /** @description `InvalidCredentials`: the handle or the password is wrong, or no valid `X-Api-Key` header */
             401: {
                 headers: {
                     [name: string]: unknown
@@ -3391,6 +3393,15 @@ export interface operations {
             }
             /** @description The body is not valid JSON, or a parameter is malformed */
             400: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            /** @description No valid `X-Api-Key` header */
+            401: {
                 headers: {
                     [name: string]: unknown
                 }
@@ -3464,6 +3475,15 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorBody"]
                 }
             }
+            /** @description No valid `X-Api-Key` header */
+            401: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
             /** @description Unknown code, or a draft */
             404: {
                 headers: {
@@ -3513,7 +3533,7 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorBody"]
                 }
             }
-            /** @description No valid bearer token */
+            /** @description No valid bearer token, or no valid `X-Api-Key` header */
             401: {
                 headers: {
                     [name: string]: unknown
@@ -3569,6 +3589,15 @@ export interface operations {
                     "application/json": components["schemas"]["CyclesRules"]
                 }
             }
+            /** @description No valid `X-Api-Key` header */
+            401: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
         }
     }
     list_events: {
@@ -3601,6 +3630,15 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorBody"]
                 }
             }
+            /** @description No valid `X-Api-Key` header */
+            401: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
         }
     }
     me: {
@@ -3621,7 +3659,7 @@ export interface operations {
                     "application/json": components["schemas"]["Account"]
                 }
             }
-            /** @description No valid bearer token */
+            /** @description No valid bearer token, or no valid `X-Api-Key` header */
             401: {
                 headers: {
                     [name: string]: unknown
@@ -3650,7 +3688,7 @@ export interface operations {
                     "application/json": components["schemas"]["Checkins"]
                 }
             }
-            /** @description No valid bearer token */
+            /** @description No valid bearer token, or no valid `X-Api-Key` header */
             401: {
                 headers: {
                     [name: string]: unknown
@@ -3701,7 +3739,7 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorBody"]
                 }
             }
-            /** @description No valid bearer token */
+            /** @description No valid bearer token, or no valid `X-Api-Key` header */
             401: {
                 headers: {
                     [name: string]: unknown
@@ -3787,7 +3825,7 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorBody"]
                 }
             }
-            /** @description No valid bearer token */
+            /** @description No valid bearer token, or no valid `X-Api-Key` header */
             401: {
                 headers: {
                     [name: string]: unknown
@@ -3843,7 +3881,7 @@ export interface operations {
                     "application/json": components["schemas"]["Registrations"]
                 }
             }
-            /** @description No valid bearer token */
+            /** @description No valid bearer token, or no valid `X-Api-Key` header */
             401: {
                 headers: {
                     [name: string]: unknown
@@ -3895,6 +3933,15 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorBody"]
                 }
             }
+            /** @description No valid `X-Api-Key` header */
+            401: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
         }
     }
     get_player: {
@@ -3918,6 +3965,15 @@ export interface operations {
             }
             /** @description A path parameter is malformed */
             400: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            /** @description No valid `X-Api-Key` header */
+            401: {
                 headers: {
                     [name: string]: unknown
                 }
@@ -3967,6 +4023,15 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorBody"]
                 }
             }
+            /** @description No valid `X-Api-Key` header */
+            401: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
             404: {
                 headers: {
                     [name: string]: unknown
@@ -4002,6 +4067,15 @@ export interface operations {
             }
             /** @description The handle or a query parameter is malformed */
             400: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            /** @description No valid `X-Api-Key` header */
+            401: {
                 headers: {
                     [name: string]: unknown
                 }
@@ -4049,6 +4123,15 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorBody"]
                 }
             }
+            /** @description No valid `X-Api-Key` header */
+            401: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
         }
     }
     get_tournament: {
@@ -4072,6 +4155,15 @@ export interface operations {
             }
             /** @description A path parameter is malformed */
             400: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            /** @description No valid `X-Api-Key` header */
+            401: {
                 headers: {
                     [name: string]: unknown
                 }
@@ -4123,7 +4215,7 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorBody"]
                 }
             }
-            /** @description No valid bearer token */
+            /** @description No valid bearer token, or no valid `X-Api-Key` header */
             401: {
                 headers: {
                     [name: string]: unknown
@@ -4214,7 +4306,7 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorBody"]
                 }
             }
-            /** @description No valid bearer token */
+            /** @description No valid bearer token, or no valid `X-Api-Key` header */
             401: {
                 headers: {
                     [name: string]: unknown
