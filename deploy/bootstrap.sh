@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Prepares a Debian 12 container for the API. Run it as root inside the
+# Prepares a Debian 13 container for the API. Run it as root inside the
 # container, from a terminal:
 #
 #   ssh -t root@<container-ip> bash /root/deploy/bootstrap.sh
@@ -61,6 +61,10 @@ collect_inputs() {
 
     if [ -z "${DEPLOY_PUBKEY:-}" ] && [ -f /root/deploy_key.pub ]; then
         DEPLOY_PUBKEY=$(cat /root/deploy_key.pub)
+    fi
+    # A rerun keeps the key that CI already uses.
+    if [ -z "${DEPLOY_PUBKEY:-}" ] && [ -s /home/deploy/.ssh/authorized_keys ]; then
+        DEPLOY_PUBKEY=$(sed -n 's/^restrict //; /^ssh-/p' /home/deploy/.ssh/authorized_keys | tail -n 1)
     fi
     [ -n "${DEPLOY_PUBKEY:-}" ] || ask "deploy public key" DEPLOY_PUBKEY
     case "$DEPLOY_PUBKEY" in

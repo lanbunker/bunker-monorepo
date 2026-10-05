@@ -64,9 +64,10 @@ pub(super) async fn begin_write(
         .map_err(StorageError::from_query)
 }
 
-/// Proves that the database opens and holds the migration table.
+/// Proves that the database opens and holds the schema. `select 1` alone reads
+/// no page of the file.
 pub(super) async fn check_reachable(pool: &DbPool) -> Result<(), StorageError> {
-    sqlx::query_scalar!("select count(*) from _sqlx_migrations")
+    sqlx::query_scalar!("select exists (select 1 from players)")
         .fetch_one(pool)
         .await
         .map_err(StorageError::from_query)?;

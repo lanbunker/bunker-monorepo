@@ -1,6 +1,6 @@
 # Deploy the API
 
-The API is one static binary in a Debian 12 LXC container on the office Proxmox
+The API is one static binary in a Debian 13 LXC container on the office Proxmox
 box. No port is open to the internet: `cloudflared` in the container dials out,
 and Cloudflare routes two names through the tunnel.
 
@@ -26,8 +26,8 @@ Do these steps one time, in this order.
 
 ### 1. Container
 
-1. In Proxmox, download the `debian-12-standard` template.
-2. **Create CT**: hostname `bunker-api`, unprivileged, nesting off, your SSH key, 8 GB disk, 1 core, 512 MB memory, 512 MB swap, bridge `vmbr0` with DHCP, start after creation.
+1. In Proxmox, download the `debian-13-standard` template.
+2. **Create CT**: hostname `bunker-api`, unprivileged, **nesting on** (systemd in Debian 13 needs it, or journald does not start), your SSH key, 8 GB disk, 1 core, 512 MB memory, 512 MB swap, bridge `vmbr0` with DHCP, start after creation.
 3. **Resources > Add > Mount Point**: 4 GB, path `/var/lib/bunker`, backup on. The database lives here, apart from the OS.
 4. **Options**: start at boot.
 5. Reboot the container so the mount point is active.
