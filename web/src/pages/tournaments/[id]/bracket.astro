@@ -22,7 +22,7 @@ const badge = t ? statusBadge(t) : undefined
 ---
 
 <Layout title={`${t?.name ?? "bracket"}//LAN_BUNKER`} active="tournaments">
-  <Prompt heading="p" command={`cat ./tournaments/${id.slice(0, 8)}/bracket`} />
+  <Prompt heading="div" command={`cat ./tournaments/${id.slice(0, 8)}/bracket`} />
 
   {detail && detail.bracket && t && badge ? (
     <>

@@ -1,0 +1,61 @@
+---
+interface Props {
+  /** Each line prints after an `[  OK ]` tag, one at a time. */
+  lines: string[]
+  greeting: string
+  /** Where the browser goes after the greeting. */
+  destination: string
+}
+
+const { lines, greeting, destination } = Astro.props
+// The lines are in the markup from the start, hidden, so the text never passes
+// through a script and a page without JavaScript still has the greeting.
+---
+
+<ol
+  class="boot-log m-0 list-none p-0 text-xs text-dim"
+  data-next={destination}
+  aria-live="polite"
+>
+  {lines.map(line => (
+    <li hidden>
+      <span class="text-accent">[ OK ]</span> {line}
+    </li>
+  ))}
+  <li hidden class="mt-2 text-bright">
+    {greeting}
+  </li>
+</ol>
+<noscript>
+  <meta http-equiv="refresh" content={`0;url=${destination}`} />
+  <p class="mt-2 text-xs text-bright">
+    {greeting}{" "}
+    <a href={destination} class="text-accent">
+      continue →
+    </a>
+  </p>
+</noscript>
+
+<script>
+  const STEP_MS = 140
+  const LINGER_MS = 600
+  const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches
+
+  for (const log of document.querySelectorAll<HTMLElement>(".boot-log")) {
+    const items = Array.from(log.querySelectorAll("li"))
+    const next = log.dataset.next || "/profile"
+    const step = reduced ? 0 : STEP_MS
+    for (const [index, item] of items.entries()) {
+      window.setTimeout(
+        () => {
+          item.hidden = false
+        },
+        step * (index + 1),
+      )
+    }
+    window.setTimeout(
+      () => window.location.replace(next),
+      step * items.length + (reduced ? 0 : LINGER_MS),
+    )
+  }
+</script>

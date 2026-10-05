@@ -1,6 +1,7 @@
 ---
 import CyclesPanel from "../../components/CyclesPanel.astro"
 import MatchPanel from "../../components/MatchPanel.astro"
+import MedalsPanel from "../../components/MedalsPanel.astro"
 import NemesisPanel from "../../components/NemesisPanel.astro"
 import PlayerCard from "../../components/PlayerCard.astro"
 import StandingPanels from "../../components/StandingPanels.astro"
@@ -36,12 +37,13 @@ const own = player !== undefined && sessionOf(Astro.locals)?.player.id === playe
 ---
 
 <Layout title={`${player?.handle ?? handle}//LAN_BUNKER`} active="players">
-  <Prompt heading="p" command={`cat /players/${handle}`} />
+  <Prompt heading="div" command={`cat /players/${handle}`} />
 
   {player ? (
     <>
       <PlayerCard player={player} own={own} />
       <StandingPanels standing={player.standing} totals={log?.totals} />
+      <MedalsPanel />
       {matches?.nemesis && (
         <NemesisPanel handle={handle} nemesis={matches.nemesis} own={own} />
       )}

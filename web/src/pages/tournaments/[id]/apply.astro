@@ -50,7 +50,7 @@ const level = skillLevel.safeParse(Astro.locals.submitted.skill).data ?? UNRATED
 
 <Layout title={`APPLY//${t?.name ?? "tournament"}`} active="tournaments" noindex>
   <Prompt
-    heading="p"
+    heading="div"
     command={`./apply --tournament ${id.slice(0, 8)}`}
     comment="an honest level makes a fun bracket"
   />

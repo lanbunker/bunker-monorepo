@@ -1,5 +1,6 @@
 ---
 import { actions } from "astro:actions"
+import BootLog from "../components/BootLog.astro"
 import BunkernetFrame from "../components/BunkernetFrame.astro"
 import Alert from "../components/ui/Alert.astro"
 import Button from "../components/ui/Button.astro"
@@ -15,60 +16,85 @@ import { sessionOf } from "../lib/session"
 const next = localPath.safeParse(Astro.url.searchParams.get("next")).data
 if (sessionOf(Astro.locals)) return Astro.redirect(next ?? "/profile")
 
+// A success renders the boot sequence on the POST itself, then moves to the
+// profile, or to `next`. The response belongs to one login, so no cache keeps it.
 const result = Astro.getActionResult(actions.login)
-if (result && !result.error) return Astro.redirect(result.data?.next ?? "/profile")
+const welcomed = result?.data?.handle
+const destination = result?.data?.next ?? "/profile"
+if (welcomed) Astro.response.headers.set("Cache-Control", "no-store")
 // A refused login keeps the handle. The password field starts empty again.
 const typed = Astro.locals.submitted.handle ?? ""
 ---
 
 <Layout title="LOGIN//BUNKERNET" bare>
-  <BunkernetFrame homeLink>
-    <Prompt heading="h1" host="bunkernet:~$" command="login" />
-    <Panel>
-      <form
-        method="POST"
-        action={actions.login}
-        class="flex flex-col gap-3 text-xs"
-        autocomplete="on"
-      >
-        {next && <input type="hidden" name="next" value={next} />}
-        <label class="flex items-baseline gap-2">
-          <span class="w-24 shrink-0 text-dim">handle:</span>
-          <input
-            name="handle"
-            type="text"
-            required
-            minlength="3"
-            maxlength="20"
-            autocomplete="username"
-            autofocus
-            value={typed}
-            class={SITE_FIELD}
-          />
-        </label>
-        <label class="flex items-baseline gap-2">
-          <span class="w-24 shrink-0 text-dim">password:</span>
-          <input
-            name="password"
-            type="password"
-            required
-            minlength="8"
-            maxlength="128"
-            autocomplete="current-password"
-            class={SITE_FIELD}
-          />
-        </label>
-        <Alert error={result?.error} />
-        <div class="mt-2 flex items-center gap-4">
-          <Button>LOGIN</Button>
-          <a
-            href={next ? `/signup?next=${encodeURIComponent(next)}` : "/signup"}
-            class="text-2xs text-dim no-underline hover:text-accent"
+  <BunkernetFrame
+    subtitle={welcomed ? "── welcome back ──" : "── player network ──"}
+    homeLink={!welcomed}
+  >
+    {welcomed ? (
+      <div>
+        <Prompt heading="h1" host="bunkernet:~$" command={`ssh ${welcomed}@bunkernet`} />
+        <BootLog
+          lines={[
+            `authenticating ${welcomed}`,
+            "verifying password",
+            "restoring session token",
+            `mounting /players/${welcomed}`,
+          ]}
+          greeting={`welcome back, ${welcomed}.`}
+          destination={destination}
+        />
+      </div>
+    ) : (
+      <div>
+        <Prompt heading="h1" host="bunkernet:~$" command="login" />
+        <Panel>
+          <form
+            method="POST"
+            action={actions.login}
+            class="flex flex-col gap-3 text-xs"
+            autocomplete="on"
           >
-            no account? enlist →
-          </a>
-        </div>
-      </form>
-    </Panel>
+            {next && <input type="hidden" name="next" value={next} />}
+            <label class="flex items-baseline gap-2">
+              <span class="w-24 shrink-0 text-dim">handle:</span>
+              <input
+                name="handle"
+                type="text"
+                required
+                minlength="3"
+                maxlength="20"
+                autocomplete="username"
+                autofocus
+                value={typed}
+                class={SITE_FIELD}
+              />
+            </label>
+            <label class="flex items-baseline gap-2">
+              <span class="w-24 shrink-0 text-dim">password:</span>
+              <input
+                name="password"
+                type="password"
+                required
+                minlength="8"
+                maxlength="128"
+                autocomplete="current-password"
+                class={SITE_FIELD}
+              />
+            </label>
+            <Alert error={result?.error} />
+            <div class="mt-2 flex items-center gap-4">
+              <Button>LOGIN</Button>
+              <a
+                href={next ? `/signup?next=${encodeURIComponent(next)}` : "/signup"}
+                class="text-2xs text-dim no-underline hover:text-accent"
+              >
+                no account? enlist →
+              </a>
+            </div>
+          </form>
+        </Panel>
+      </div>
+    )}
   </BunkernetFrame>
 </Layout>

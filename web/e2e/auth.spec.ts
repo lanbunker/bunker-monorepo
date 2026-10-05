@@ -91,6 +91,40 @@ test("the server refuses a short password and a bad handle with its own sentence
     expect(body).not.toContain("Failed to validate")
 })
 
+test("a login prints the boot sequence, then opens the profile", async ({
+    context,
+    page,
+}) => {
+    const player = await newPlayer(context, "boot")
+    await clearSession(context)
+
+    await page.goto("/login")
+    await page.getByLabel("handle:").fill(player.name)
+    await page.getByLabel("password:", { exact: true }).fill(PASSWORD)
+    await page.getByRole("button", { name: "LOGIN" }).click()
+
+    await expect(
+        page.getByRole("heading", { level: 1, name: `ssh ${player.name}@bunkernet` }),
+    ).toBeVisible()
+    await expect(page.getByText(`welcome back, ${player.name}.`)).toBeVisible()
+    await expect(page).toHaveURL(/\/profile$/)
+})
+
+test("the medals card is coming soon, on the profile and on the public page", async ({
+    context,
+    page,
+}) => {
+    const player = await newPlayer(context, "medal")
+    await page.goto("/profile")
+    const own = page.getByRole("region", { name: "medals" })
+    await expect(own).toBeVisible()
+    await expect(own.getByText("// coming soon")).toBeVisible()
+
+    await clearSession(context)
+    await page.goto(`/players/${player.name}`)
+    await expect(page.getByRole("region", { name: "medals" })).toBeVisible()
+})
+
 test("a wrong login reads as a sentence and stays on the page", async ({
     page,
     context,

@@ -1,5 +1,5 @@
 ---
-type Level = "h1" | "h2" | "p"
+type Level = "h1" | "h2" | "div"
 
 interface Props {
   command: string
@@ -8,7 +8,7 @@ interface Props {
   comment?: string | undefined
   /**
    * The first prompt of a page is its title, so it is an `h1`. A page whose
-   * title follows the prompt, such as the handle on a player card, uses `p`.
+   * title follows the prompt, such as the handle on a player card, uses `div`.
    */
   heading?: Level
   class?: string
@@ -26,7 +26,7 @@ const Heading = heading
 
 <Heading
   class:list={[
-    "mt-8 mb-4 flex flex-wrap items-baseline gap-x-2 text-sm font-normal",
+    "mt-8 mb-2 flex flex-wrap items-baseline gap-x-2 text-sm font-normal",
     className,
   ]}
 >

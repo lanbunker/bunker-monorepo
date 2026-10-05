@@ -2,6 +2,7 @@
 import { actions } from "astro:actions"
 import CyclesPanel from "../components/CyclesPanel.astro"
 import MatchPanel from "../components/MatchPanel.astro"
+import MedalsPanel from "../components/MedalsPanel.astro"
 import NemesisPanel from "../components/NemesisPanel.astro"
 import PlayerCard from "../components/PlayerCard.astro"
 import StandingPanels from "../components/StandingPanels.astro"
@@ -51,12 +52,13 @@ const notice = noticeFrom(Astro.url, {
 ---
 
 <Layout title={`${player.handle}//LAN_BUNKER`} noindex>
-  <Prompt heading="p" command="whoami" />
+  <Prompt heading="div" command="whoami" />
 
   <Alert message={notice} tone="notice" class="mb-4" />
 
   <PlayerCard player={player} own />
   <StandingPanels standing={player.standing} totals={log?.totals} />
+  <MedalsPanel />
   {matches?.nemesis && (
     <NemesisPanel handle={player.handle} nemesis={matches.nemesis} own />
   )}

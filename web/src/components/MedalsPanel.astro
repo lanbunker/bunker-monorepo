@@ -1,0 +1,24 @@
+---
+import Panel from "./ui/Panel.astro"
+
+/** Empty slots stand for the medals to come, so the card has its final shape. */
+const SLOTS = 6
+---
+
+<Panel class="mt-4">
+  <section aria-labelledby="medals-heading">
+    <div class="flex items-baseline justify-between gap-2">
+      <h2 id="medals-heading" class="m-0 text-sm font-normal tracking-wider text-dim">
+        medals
+      </h2>
+      <span class="text-2xs tracking-wider text-warn">{"// coming soon"}</span>
+    </div>
+    <ul class="m-0 mt-3 flex list-none flex-wrap gap-2 p-0" aria-hidden="true">
+      {Array.from({ length: SLOTS }, () => (
+        <li class="flex size-10 items-center justify-center border border-dashed border-faint text-mute">
+          ?
+        </li>
+      ))}
+    </ul>
+  </section>
+</Panel>

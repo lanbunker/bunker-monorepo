@@ -1,5 +1,6 @@
 ---
 import { actions } from "astro:actions"
+import BootLog from "../components/BootLog.astro"
 import BunkernetFrame from "../components/BunkernetFrame.astro"
 import Alert from "../components/ui/Alert.astro"
 import Button from "../components/ui/Button.astro"
@@ -15,9 +16,8 @@ import { sessionOf } from "../lib/session"
 const next = localPath.safeParse(Astro.url.searchParams.get("next")).data
 if (sessionOf(Astro.locals)) return Astro.redirect(next ?? "/profile")
 
-// A success renders the boot sequence on the POST itself, then a script moves to
-// the profile, or to `next`. The response must never be cached: it belongs to
-// one signup.
+// A success renders the boot sequence on the POST itself, then moves to the
+// profile, or to `next`. The response belongs to one signup, so no cache keeps it.
 const result = Astro.getActionResult(actions.signup)
 const created = result?.data?.handle
 const destination = result?.data?.next ?? "/profile"
@@ -34,22 +34,16 @@ if (created) Astro.response.headers.set("Cache-Control", "no-store")
     {created ? (
       <div>
         <Prompt heading="h1" host="bunkernet:~$" command={`useradd ${created}`} />
-        <ol
-          id="enlist-log"
-          data-handle={created}
-          data-next={destination}
-          class="m-0 list-none p-0 text-xs text-dim"
-          aria-live="polite"
+        <BootLog
+          lines={[
+            `creating home /players/${created}`,
+            "generating glyph",
+            "issuing session token",
+            "joining bunkernet",
+          ]}
+          greeting={`welcome, ${created}.`}
+          destination={destination}
         />
-        <noscript>
-          <meta http-equiv="refresh" content={`0;url=${destination}`} />
-          <p class="mt-2 text-xs text-bright">
-            welcome, {created}.{" "}
-            <a href={destination} class="text-accent">
-              continue →
-            </a>
-          </p>
-        </noscript>
       </div>
     ) : (
       <div>
@@ -121,45 +115,4 @@ if (created) Astro.response.headers.set("Cache-Control", "no-store")
       </div>
     )}
   </BunkernetFrame>
-
-  <script>
-    const log = document.getElementById("enlist-log")
-    const handle = log?.dataset.handle
-    const next = log?.dataset.next || "/profile"
-    if (log && handle) {
-      const LINES = [
-        `creating home /players/${handle}`,
-        "generating glyph",
-        "issuing session token",
-        "joining bunkernet",
-      ]
-      const STEP_MS = 140
-      const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches
-
-      const printLine = (text: string) => {
-        const li = document.createElement("li")
-        const tag = document.createElement("span")
-        tag.className = "text-accent"
-        tag.textContent = "[  OK ]"
-        li.append(tag, ` ${text}`)
-        log.append(li)
-      }
-      const finish = () => {
-        const li = document.createElement("li")
-        li.className = "mt-2 text-bright"
-        li.textContent = `welcome, ${handle}.`
-        log.append(li)
-        window.setTimeout(() => window.location.replace(next), reduced ? 0 : 600)
-      }
-
-      if (reduced) {
-        finish()
-      } else {
-        for (const [i, line] of LINES.entries()) {
-          window.setTimeout(() => printLine(line), STEP_MS * (i + 1))
-        }
-        window.setTimeout(finish, STEP_MS * (LINES.length + 1))
-      }
-    }
-  </script>
 </Layout>
