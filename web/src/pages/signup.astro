@@ -1,9 +1,10 @@
 ---
 import { actions } from "astro:actions"
-import AsciiBanner from "../components/AsciiBanner.astro"
+import BunkernetFrame from "../components/BunkernetFrame.astro"
 import Alert from "../components/ui/Alert.astro"
 import Button from "../components/ui/Button.astro"
 import Panel from "../components/ui/Panel.astro"
+import Prompt from "../components/ui/Prompt.astro"
 import Layout from "../layouts/Layout.astro"
 import { localPath } from "../lib/schemas"
 import { SITE_FIELD } from "../lib/styles"
@@ -26,23 +27,18 @@ if (created) Astro.response.headers.set("Cache-Control", "no-store")
 ---
 
 <Layout title="ENLIST//BUNKERNET" bare>
-  <div class="mx-auto w-full max-w-[34rem]">
-    <AsciiBanner text="BUNKERNET" hollow="NET" class="h-32 max-[30rem]:h-24" />
-    <div class="-mt-1 text-center text-2xs tracking-wider text-dim">
-      {created ? "── new player ──" : "── player network ──"}
-    </div>
-
+  <BunkernetFrame
+    subtitle={created ? "── new player ──" : "── player network ──"}
+    homeLink={!created}
+  >
     {created ? (
-      <div class="mt-8">
-        <div class="flex flex-wrap items-baseline gap-x-2 text-sm">
-          <span class="text-dim">bunkernet:~$</span>
-          <span class="text-accent-soft">useradd {created}</span>
-        </div>
+      <div>
+        <Prompt heading="h1" host="bunkernet:~$" command={`useradd ${created}`} />
         <ol
           id="enlist-log"
           data-handle={created}
           data-next={destination}
-          class="m-0 mt-2 list-none p-0 text-xs text-dim"
+          class="m-0 list-none p-0 text-xs text-dim"
           aria-live="polite"
         />
         <noscript>
@@ -56,11 +52,8 @@ if (created) Astro.response.headers.set("Cache-Control", "no-store")
         </noscript>
       </div>
     ) : (
-      <div class="mt-8">
-        <div class="mb-4 flex flex-wrap items-baseline gap-x-2 text-sm">
-          <span class="text-dim">bunkernet:~$</span>
-          <span class="text-accent-soft">useradd --create-home</span>
-        </div>
+      <div>
+        <Prompt heading="h1" host="bunkernet:~$" command="useradd --create-home" />
         <Panel>
           <form
             method="POST"
@@ -125,14 +118,9 @@ if (created) Astro.response.headers.set("Cache-Control", "no-store")
             </div>
           </form>
         </Panel>
-        <div class="mt-6 text-center">
-          <a href="/" class="text-2xs text-mute no-underline hover:text-accent">
-            ← back to the bunker
-          </a>
-        </div>
       </div>
     )}
-  </div>
+  </BunkernetFrame>
 
   <script>
     const log = document.getElementById("enlist-log")

@@ -99,36 +99,12 @@ test("a wrong login reads as a sentence and stays on the page", async ({
     await clearSession(context)
 
     await page.goto("/login")
-    await page.getByLabel("login:").fill(player.name)
+    await page.getByLabel("handle:").fill(player.name)
     await page.getByLabel("password:").fill("not-the-password")
     await page.getByRole("button", { name: "LOGIN" }).click()
 
     await expect(page).toHaveURL(/\/login(\?|$)/)
     await readableFailure(page, /handle or the password is wrong/)
-})
-
-test("typing a digit in a field does not switch section", async ({ page }) => {
-    await page.goto("/login")
-    await page.getByLabel("login:").click()
-    await page.keyboard.type("dave2")
-    await expect(page).toHaveURL(/\/login$/)
-    await expect(page.getByLabel("login:")).toHaveValue("dave2")
-
-    await page.getByLabel("password:").click()
-    await page.keyboard.type("1234567")
-    await expect(page).toHaveURL(/\/login$/)
-    await expect(page.getByLabel("password:")).toHaveValue("1234567")
-
-    await page.getByRole("button", { name: "LOGIN" }).focus()
-    await page.keyboard.press("3")
-    await expect(page).toHaveURL(/\/login$/)
-
-    await page.evaluate(() => {
-        const focused = document.activeElement
-        if (focused instanceof HTMLElement) focused.blur()
-    })
-    await page.keyboard.press("2")
-    await expect(page).toHaveURL(/\/events$/)
 })
 
 test("a player changes their password, and a wrong or mismatched one is refused", async ({
@@ -184,7 +160,7 @@ test("an admin reset forces the player to set a new password before anything els
 
     await clearSession(context)
     await page.goto("/login")
-    await page.getByLabel("login:").fill(user.name)
+    await page.getByLabel("handle:").fill(user.name)
     await page.getByLabel("password:").fill(temporary)
     await page.getByRole("button", { name: "LOGIN" }).click()
     await expect(page).toHaveURL(/\/password$/)

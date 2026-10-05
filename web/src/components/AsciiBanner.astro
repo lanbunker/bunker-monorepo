@@ -69,7 +69,8 @@ if (hollow && !text.toUpperCase().endsWith(hollow.toUpperCase())) {
   const GAP = 1
   const LETTER_RAMP = ["░", "▒", "▓", "█"]
   const NOISE_CHARS = [".", ":", "·", "'", "`"]
-  const FPS = 30
+  // A phone pays for every cell of every frame in battery, so it draws half as often.
+  const FPS = window.matchMedia("(pointer: coarse)").matches ? 15 : 30
   const MIN_FONT_PX = 8
 
   // Deterministic per-cell noise so the background does not flicker at random.

@@ -168,7 +168,7 @@ export const signup = async (page: Page, name: string) => {
 
 export const login = async (page: Page, name: string, password = PASSWORD) => {
     await page.goto("/login")
-    await page.getByLabel("login:").fill(name)
+    await page.getByLabel("handle:").fill(name)
     await page.getByLabel("password:", { exact: true }).fill(password)
     await page.getByRole("button", { name: "LOGIN" }).click()
     await expect(page).toHaveURL(/\/profile(\?|$)/)

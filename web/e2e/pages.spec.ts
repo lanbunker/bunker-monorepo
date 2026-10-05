@@ -136,3 +136,23 @@ test("a bare page carries no nav, and a private page stays out of search", async
         "noindex, nofollow",
     )
 })
+
+test("typing a digit in a field does not switch section", async ({ page }) => {
+    await page.goto("/players")
+    const search = page.getByRole("textbox", { name: "search players by name" })
+    await search.click()
+    await page.keyboard.type("dave2")
+    await expect(page).toHaveURL(/\/players$/)
+    await expect(search).toHaveValue("dave2")
+
+    await page.getByRole("button", { name: "SEARCH" }).focus()
+    await page.keyboard.press("3")
+    await expect(page).toHaveURL(/\/players$/)
+
+    await page.evaluate(() => {
+        const focused = document.activeElement
+        if (focused instanceof HTMLElement) focused.blur()
+    })
+    await page.keyboard.press("2")
+    await expect(page).toHaveURL(/\/events$/)
+})

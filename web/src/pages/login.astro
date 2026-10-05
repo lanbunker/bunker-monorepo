@@ -1,5 +1,6 @@
 ---
 import { actions } from "astro:actions"
+import BunkernetFrame from "../components/BunkernetFrame.astro"
 import Alert from "../components/ui/Alert.astro"
 import Button from "../components/ui/Button.astro"
 import Panel from "../components/ui/Panel.astro"
@@ -20,58 +21,54 @@ if (result && !result.error) return Astro.redirect(result.data?.next ?? "/profil
 const typed = Astro.locals.submitted.handle ?? ""
 ---
 
-<Layout title="LOGIN//LAN_BUNKER">
-  <Prompt heading="h1" command="ssh bunkernet" />
-
-  <Panel class="max-w-[28rem]">
-    <form
-      method="POST"
-      action={actions.login}
-      class="flex flex-col gap-3 text-xs"
-      autocomplete="on"
-    >
-      {next && <input type="hidden" name="next" value={next} />}
-      <label class="flex items-baseline gap-2">
-        <span class="w-24 shrink-0 text-dim">login:</span>
-        <input
-          name="handle"
-          type="text"
-          required
-          minlength="3"
-          maxlength="20"
-          autocomplete="username"
-          value={typed}
-          class={SITE_FIELD}
-        />
-      </label>
-      <label class="flex items-baseline gap-2">
-        <span class="w-24 shrink-0 text-dim">password:</span>
-        <input
-          name="password"
-          type="password"
-          required
-          minlength="8"
-          maxlength="128"
-          autocomplete="current-password"
-          class={SITE_FIELD}
-        />
-      </label>
-      <Alert error={result?.error} />
-      <div class="mt-2 flex items-center gap-4">
-        <Button>LOGIN</Button>
-        <a
-          href={next ? `/signup?next=${encodeURIComponent(next)}` : "/signup"}
-          class="text-2xs text-dim no-underline hover:text-accent"
-        >
-          no account? enlist →
-        </a>
-      </div>
-    </form>
-  </Panel>
-
-  <div class="mt-8">
-    <Button href="/" variant="ghost" size="sm">
-      ← HOME
-    </Button>
-  </div>
+<Layout title="LOGIN//BUNKERNET" bare>
+  <BunkernetFrame homeLink>
+    <Prompt heading="h1" host="bunkernet:~$" command="login" />
+    <Panel>
+      <form
+        method="POST"
+        action={actions.login}
+        class="flex flex-col gap-3 text-xs"
+        autocomplete="on"
+      >
+        {next && <input type="hidden" name="next" value={next} />}
+        <label class="flex items-baseline gap-2">
+          <span class="w-24 shrink-0 text-dim">handle:</span>
+          <input
+            name="handle"
+            type="text"
+            required
+            minlength="3"
+            maxlength="20"
+            autocomplete="username"
+            autofocus
+            value={typed}
+            class={SITE_FIELD}
+          />
+        </label>
+        <label class="flex items-baseline gap-2">
+          <span class="w-24 shrink-0 text-dim">password:</span>
+          <input
+            name="password"
+            type="password"
+            required
+            minlength="8"
+            maxlength="128"
+            autocomplete="current-password"
+            class={SITE_FIELD}
+          />
+        </label>
+        <Alert error={result?.error} />
+        <div class="mt-2 flex items-center gap-4">
+          <Button>LOGIN</Button>
+          <a
+            href={next ? `/signup?next=${encodeURIComponent(next)}` : "/signup"}
+            class="text-2xs text-dim no-underline hover:text-accent"
+          >
+            no account? enlist →
+          </a>
+        </div>
+      </form>
+    </Panel>
+  </BunkernetFrame>
 </Layout>

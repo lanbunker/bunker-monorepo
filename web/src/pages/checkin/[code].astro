@@ -1,6 +1,6 @@
 ---
 import { actions } from "astro:actions"
-import AsciiBanner from "../../components/AsciiBanner.astro"
+import BunkernetFrame from "../../components/BunkernetFrame.astro"
 import Alert from "../../components/ui/Alert.astro"
 import Button from "../../components/ui/Button.astro"
 import Countdown from "../../components/ui/Countdown.astro"
@@ -55,11 +55,7 @@ const pays = checkinCycles(dataOf(rules))
 ---
 
 <Layout title={`CHECK-IN//${event?.name ?? "LAN_BUNKER"}`} bare noindex>
-  <div class="mx-auto w-full max-w-[34rem]">
-    <AsciiBanner text="BUNKERNET" hollow="NET" class="h-32 max-[30rem]:h-24" />
-    <div class="-mt-1 text-center text-2xs tracking-wider text-dim">
-      ── player network ──
-    </div>
+  <BunkernetFrame homeLink>
     <h1 class="m-0 mt-6 text-center text-[2rem] leading-none font-bold tracking-[0.2em] text-bright max-[30rem]:text-2xl">
       CHECK-IN
     </h1>
@@ -209,11 +205,5 @@ const pays = checkinCycles(dataOf(rules))
         <form id="switch-account" method="POST" action={actions.logout}></form>
       )}
     </div>
-
-    <div class="mt-6 text-center">
-      <a href="/" class="text-2xs text-mute no-underline hover:text-accent">
-        ← back to the bunker
-      </a>
-    </div>
-  </div>
+  </BunkernetFrame>
 </Layout>

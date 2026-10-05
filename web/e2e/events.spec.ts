@@ -213,7 +213,7 @@ test("a visitor at the door enlists, comes back, and checks in for the check-in 
     await page.goto(`/checkin/${code}`)
     await page.getByRole("link", { name: "LOGIN" }).click()
     await expect(page).toHaveURL(`/login?next=%2Fcheckin%2F${code}`)
-    await page.getByLabel("login:").fill(player)
+    await page.getByLabel("handle:").fill(player)
     await page.getByLabel("password:", { exact: true }).fill(PASSWORD)
     await page.getByRole("button", { name: "LOGIN" }).click()
     await expect(page).toHaveURL(`/checkin/${code}`)

@@ -3,6 +3,8 @@ type Level = "h1" | "h2" | "p"
 
 interface Props {
   command: string
+  /** The shell prompt before the command. */
+  host?: string
   comment?: string | undefined
   /**
    * The first prompt of a page is its title, so it is an `h1`. A page whose
@@ -12,7 +14,13 @@ interface Props {
   class?: string
 }
 
-const { command, comment, heading = "h2", class: className } = Astro.props
+const {
+  command,
+  comment,
+  host = "bunker@office:~$",
+  heading = "h2",
+  class: className,
+} = Astro.props
 const Heading = heading
 ---
 
@@ -22,7 +30,7 @@ const Heading = heading
     className,
   ]}
 >
-  <span class="text-dim">bunker@office:~$</span>
+  <span class="text-dim">{host}</span>
   <span class="text-accent-soft">{command}</span>
   {comment && <span class="text-mute"># {comment}</span>}
 </Heading>

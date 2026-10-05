@@ -1,0 +1,24 @@
+---
+import AsciiBanner from "./AsciiBanner.astro"
+
+interface Props {
+  subtitle?: string
+  /** A link back to the home page under the content. */
+  homeLink?: boolean
+}
+
+const { subtitle = "── player network ──", homeLink = false } = Astro.props
+---
+
+<div class="mx-auto w-full max-w-[34rem]">
+  <AsciiBanner text="BUNKERNET" hollow="NET" class="h-32 max-[30rem]:h-24" />
+  <div class="-mt-1 text-center text-2xs tracking-wider text-dim">{subtitle}</div>
+  <slot />
+  {homeLink && (
+    <div class="mt-6 text-center">
+      <a href="/" class="text-2xs text-mute no-underline hover:text-accent">
+        ← back to the bunker
+      </a>
+    </div>
+  )}
+</div>
