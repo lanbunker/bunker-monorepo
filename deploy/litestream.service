@@ -1,0 +1,26 @@
+[Unit]
+Description=LAN BUNKER database replication to Backblaze B2
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=0
+
+[Service]
+User=bunker
+Group=bunker
+EnvironmentFile=/etc/bunker/litestream.env
+ExecStart=/usr/local/bin/litestream replicate -config /etc/bunker/litestream.yml
+Restart=always
+RestartSec=5
+UMask=0077
+MemoryMax=96M
+
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictSUIDSGID=yes
+LockPersonality=yes
+RestrictRealtime=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+
+[Install]
+WantedBy=multi-user.target

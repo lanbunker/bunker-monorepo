@@ -1,370 +1,150 @@
 # lanbunker
 
-This monorepo contains all software for LAN BUNKER live multiplayer events.
-
-- Main website (Astro)
-- Backend API (Rust)
-- Arcade cabinet software (Rust)
+All the software for LAN BUNKER, a recurring LAN party: the website, the API
+and the arcade cabinet daemon.
 
 ```
-web/                   Astro site, server rendered on Cloudflare Workers
+web/                   Astro site on Cloudflare Workers. See web/README.md
 crates/bunker-models   Domain types shared by every Rust crate
-crates/bunker-api      axum + sqlx + SQLite backend
+crates/bunker-api      axum + sqlx + SQLite API
 crates/bunker-cabd     Cabinet daemon for RetroPie boxes (prints a glyph, nothing more yet)
-deploy/                Container bootstrap, systemd units, one-time setup guide
+deploy/                The API box: bootstrap, systemd units, backups. See deploy/README.md
 ```
 
-The site has signup and login, a public roster and player pages, a profile page,
-and a hidden `/admin` backoffice for admins. Players get a generated glyph and a
-color from their handle, stored at signup.
+The site calls the API on the server side. The browser never talks to the API.
+The session is an HttpOnly cookie that holds the API bearer token.
 
-The Rust side is one Cargo workspace. The site is a pnpm project inside `web/`
-with its own README. They meet over HTTP: the site calls the API server side, and
-the browser never talks to the API.
+## Run it locally
 
-## Try it
-
-You need Rust, `sqlite3` and the sqlx CLI. The CLI is necessary only to create
-the database and run migrations.
+You need Rust, `sqlite3`, pnpm and the sqlx CLI.
 
 ```bash
 cp .env.template .env
-make install-cli
-make db
-make dev          # the API on :3000, restarts on save
-make web-dev      # the site on :4321, talks to :3000
-make admin handle=dave   # promote a player after signup
+make install-cli         # the sqlx CLI, one time
+make db                  # .dev/bunker.db, migrated
+make dev                 # the API on :3000, restarts on save
+make web-dev             # the site on :4321
+make seed                # 30 players, a tournament, an event with open doors
+make admin handle=dave   # promote a player
 ```
 
-An admin can reset a password from the backoffice. The player logs in with the
-temporary password and must choose a new one before any other page opens. Until
-then, the API answers every route except `/api/me` and `/api/me/password` with
-`403 PasswordChangeRequired`, so the rule holds for every client and not only
-the site.
+`make db-reset` deletes the local database and creates it again.
 
-The database is `.dev/bunker.db`, ignored by git and kept between runs. Delete it
-with `make db-reset`.
+## Checks
 
-```bash
-curl -s localhost:3000/api/auth/signup -H 'content-type: application/json' \
-  -d '{"handle":"dave","password":"correct-horse-battery"}'
-```
+| Command | What it does |
+| --- | --- |
+| `make checklist` | Rust: format, clippy with warnings as errors, every test |
+| `make web-check` | Site: format, both type checkers, lint, build |
+| `make web-e2e` | Playwright against a fresh API and the production build of the site |
+| `make api-types` | Writes `openapi.json` and `web/src/lib/api-types.d.ts` from the route annotations |
 
-```bash
-curl -s localhost:3000/api/players/dave
-```
+CI runs all of them. A test fails when `openapi.json` or `schema.sql` is stale.
+`CLAUDE.md` holds the rules for the code.
 
-`make dev` rebuilds and restarts the API after each save. `make web-dev` starts
-the site. `make checklist` formats the code, then runs clippy and every test. CI runs the
-same clippy and the same tests, and fails when the format is not current.
-
-## Why the backend is built this way
-
-- **An invalid value cannot exist.** `nutype` declares each constraint in
-  `bunker-models` and makes the constructor, the error type and the serde code.
-  No code can build a `Handle` that skips validation, and a request body cannot
-  do it either.
-- **An error is a value.** Each layer owns its error enum. Two exhaustive matches
-  make the responses. A new variant does not compile until you classify it.
-- **The compiler checks each query.** `sqlx::query!` compares each query with the
-  local database at build time. CI builds that database from the migrations with
-  `sqlite3` in milliseconds.
-- **The structure is readable in one file.** `crates/bunker-api/schema.sql` is
-  generated from the migrated database and a test keeps it in step. Read it, not
-  the migrations, to learn the current shape.
-- **The tests bring their own database.** Each test creates a SQLite file in a
-  temporary directory and migrates it. No Docker, no setup, no shared state.
-- **Passwords never travel.** Argon2id hashes on the blocking pool, at most four
-  at once, so a burst of logins fits in memory. The type redacts itself, and
-  login answers the same for an unknown handle and a wrong password.
-- **A token is a signed claim.** HS256 with one secret from the environment. The
-  check reads one row of `players`, so a deleted player, a changed password, a
-  demotion and a pending password change take effect at once. Production
-  refuses to start without a real secret, and refuses the development one.
-- **A concurrent change never lands half.** A write carries the state that its
-  request read, and storage checks that state in the statement that writes. A
-  lost race answers `409 InvalidState`. Every write transaction starts with
-  `BEGIN IMMEDIATE`.
-
-## Data flow
+## How the API is built
 
 ```
 Request
-  -> ValidJson / ValidQuery / ValidPath
-     Authenticated / AdminOnly               (rejected at the boundary)
-    -> routers/    handler
-      -> services/ business rules, ServiceError
-        -> storage/ typed queries, StorageError
+  -> ValidJson / ValidQuery / ValidPath / Authenticated / AdminOnly   (the boundary)
+    -> routers/   handler
+      -> services/  business rules, ServiceError
+        -> storage/   sqlx queries, StorageError
           -> SQLite
 ```
 
-A failure goes up as a typed error and becomes an `ApiError` one time:
+- **An invalid value cannot exist.** Each field with rules is a `nutype` type in
+  `bunker-models`. No code and no request body can build one that skips the
+  check.
+- **The compiler checks each query.** `sqlx::query!` compiles against the
+  migrated local database. `schema.sql` shows the current shape in one file.
+- **An error is a value.** Each layer owns its error enum, and exhaustive
+  matches give the code and the status. A client sees one fixed sentence, for
+  example `{ "code": "HandleTaken", "message": "That handle is already taken", "status": 409 }`.
+  The cause chain shows only when `APP_ENV` is `local` or `test`.
+- **A concurrent change never lands half.** A write carries the state that its
+  request read, and storage checks that state in the same statement. A lost
+  race answers `409`. Every write transaction starts with `BEGIN IMMEDIATE`.
+- **Passwords and tokens.** Argon2id, at most four hashes at once. A token is
+  HS256 with one secret. Each request reads one row of `players`, so a deleted
+  player, a password change, a demotion and a password reset take effect at
+  once. After a reset, the API answers every route except `/api/me` and
+  `/api/me/password` with `403 PasswordChangeRequired`.
+- **Each test brings its own database.** No Docker and no shared state.
 
-```json
-{ "code": "HandleTaken", "message": "That handle is already taken", "status": 409 }
-```
+The full contract is `crates/bunker-api/openapi.json`, also served at
+`/api/openapi.json`. The routes, by area:
 
-The message is a fixed sentence for the client. The internal text, with ids and
-handles, is the first link of the `cause` chain and of the log.
+| Area | Routes |
+| --- | --- |
+| Account | `/api/auth/signup`, `/api/auth/login`, `/api/me`, `/api/me/password`, `/api/me/handle`, `/api/me/registrations`, `/api/me/checkins` |
+| Players | `/api/players`, `/api/players/{handle}`, `.../cycles`, `.../matches`, `/api/cycles/rules` |
+| Tournaments | `/api/tournaments`, `/api/tournaments/{id}`, `.../registration` |
+| Events | `/api/events`, `/api/checkin/{code}` |
+| Backoffice | everything under `/api/admin/`: players, cycles, tournaments, brackets, results, events, manual check-ins |
+| Health | `/health/live` (version and commit), `/health/ready` (the database answers) |
 
-A `cause` field with the chain of causes appears only when `APP_ENV` is `local`
-or `test`.
+## The rules of the game
 
-## Routes
+**Events.** An event is one night with a window from the doors to the last
+game. A draft is visible to admins only. Each event has a secret check-in code
+of 12 characters, printed as a QR poster from the backoffice. A player scans
+it at the door and gets 100 cycles, one time per event. The server decides the
+window. An admin can check a player in by hand at any time. Event covers are
+files under `web/src/assets/images/events`.
 
-| Method | Path | Auth | Answer |
-| --- | --- | --- | --- |
-| POST | `/api/auth/signup` | none | 201, token |
-| POST | `/api/auth/login` | none | 200, token |
-| GET | `/api/me` | bearer | the caller and whether a password change is due. A temporary password opens it |
-| POST | `/api/me/password` | bearer | change the password, current one required. Answers a fresh token, every older token dies. A temporary password opens it |
-| PUT | `/api/me/handle` | bearer | change the handle. The glyph stays |
-| GET | `/api/players` | none | the leaderboard, first place first. `?page=1&pageSize=20`, pageSize up to 100 |
-| GET | `/api/players/{handle}` | none | one player, with cycles, rank and place |
-| GET | `/api/players/{handle}/cycles` | none | the cycles log, newest first, with the totals by kind |
-| GET | `/api/players/{handle}/matches` | none | the match log, newest first, with the record and the nemesis |
-| GET | `/api/cycles/rules` | none | how cycles are earned, and the ladder |
-| GET | `/api/admin/players` | admin | every player, newest first, same paging as `/api/players` |
-| POST | `/api/admin/players/{id}/cycles` | admin | add or take cycles, with a note |
-| PATCH | `/api/admin/players/{id}` | admin | set the role. The last admin stays an admin |
-| PUT | `/api/admin/players/{id}/handle` | admin | rename a player |
-| POST | `/api/admin/players/{id}/password-reset` | admin | temporary password, forces a change at login |
-| DELETE | `/api/admin/players/{id}` | admin | remove a player. Never the last admin |
-| GET | `/api/tournaments` | none | tournaments, newest event first, drafts hidden. Same paging |
-| GET | `/api/tournaments/{id}` | none | one tournament with entrants and bracket |
-| GET | `/api/me/registrations` | bearer | the tournaments the caller entered |
-| POST | `/api/tournaments/{id}/registration` | bearer | apply with a level from 1 to 5. A second call changes the level |
-| DELETE | `/api/tournaments/{id}/registration` | bearer | retire. Idempotent |
-| GET, POST | `/api/admin/tournaments` | admin | every tournament, create a draft |
-| GET, PATCH, DELETE | `/api/admin/tournaments/{id}` | admin | detail, edit fields until concluded, delete with entrants and matches |
-| POST | `/api/admin/tournaments/{id}/status` | admin | move the status, name the winner. A repeat, also two at once, answers the same and pays one time |
-| POST | `/api/admin/tournaments/{id}/entrants` | admin | add a player, with an optional level. Refused after the conclusion, or when 256 entrants are in |
-| DELETE | `/api/admin/tournaments/{id}/entrants/{entrantId}` | admin | remove an entrant |
-| POST, DELETE | `/api/admin/tournaments/{id}/bracket` | admin | generate a bracket seeded by level, remove it |
-| PUT | `/api/admin/tournaments/{id}/seeds` | admin | rebuild the bracket in a given seed order |
-| PUT, DELETE | `/api/admin/tournaments/{id}/matches/{matchId}/result` | admin | enter a result, clear it |
-| GET | `/api/events` | none | published events, the latest night first. Same paging |
-| GET | `/api/checkin/{code}` | none | the event behind a check-in code, and whether its doors are open |
-| POST | `/api/checkin/{code}` | bearer | check in. 201 pays the cycles, 200 on a repeat, which pays nothing |
-| GET | `/api/me/checkins` | bearer | the events the caller checked in to |
-| GET, POST | `/api/admin/events` | admin | every event, create a draft |
-| GET, PUT, DELETE | `/api/admin/events/{id}` | admin | detail with the code and the check-ins, replace the fields, delete with check-ins and cycles |
-| POST | `/api/admin/events/{id}/status` | admin | publish, or back to draft |
-| POST | `/api/admin/events/{id}/checkins` | admin | check a player in by hand, any status, any time. Pays like a scan |
-| GET | `/api/openapi.json` | none | the contract |
-| GET | `/health/live` | none | process is up, version and commit |
-| GET | `/health/ready` | none | database answers |
-
-## Events
-
-An event is one night: a name, a place, the games, a cover and a window from
-the doors to the last game. A new event is a draft that only admins see. A
-published event is on the site, the latest night first, and past nights stay
-as the archive.
-
-Every event has a check-in code, twelve lowercase letters and digits, made when
-the event is created and never sent to the public. The backoffice shows the
-link, `/checkin/{code}` on the site, and renders it as a QR poster at
-`/admin/events/{id}/qr.svg`: black on white, with CHECK-IN and the name of the
-night under the code, as an SVG to print or as a PNG the browser draws from
-it. The link carries the code and not the id, so a guess opens no door. A
-draft answers a 404 to its own code, so a leaked link says nothing before the
-night is announced.
-
-A player scans the code, and the page shows the event and one of three states:
-the doors are not open yet, the night is over, or the door is open. At an open
-door a visitor without a session gets two buttons, enlist and login, and both
-carry the door in `?next=` so the player lands back on it, logged in. A signup
-logs the player in at once. A logged-in player sees their glyph and handle over
-one button, and a second link logs them out for a friend's turn on the same
-phone. The check-in is one row per player per event, the primary key of
-`event_checkins`, and it pays 100 cycles in the same transaction. A second
-scan pays nothing and answers the first receipt. The server decides the
-window, so no page reads a clock to open the door. An admin can check a player
-in by hand from the backoffice, at any time and in any status, for a phone that
-did not scan or for a night from before the door existed. It pays the same, one
-time per player.
-
-The nights that happened before the events table existed are not in a
-migration. An admin creates them in the backoffice, and `make seed` creates
-them for local work.
-
-The covers are files under `web/src/assets/images/events`. The API holds a file
-name, the backoffice offers the names it finds, and a name the site does not
-know renders no cover. A new cover is a commit and a deploy.
-
-## Tournaments
-
-A tournament moves through four statuses. `draft` is visible to admins only.
+**Tournaments.** The statuses are `draft`, `open`, `live` and `concluded`.
 `open` takes registrations until `registrationClosesAt`. `live` freezes the
-entrants and opens the bracket work. `concluded` is final: nothing changes after
-it, and the API refuses an entrant change or a field edit with 409. A
-tournament takes at most 256 entrants. A draft can go live at once, which is how an old tournament is backfilled.
-`live` can go back to `open` only while no bracket exists.
+entrants. `concluded` is final, and the API refuses each change after it. A
+player applies with a level from 1 to 5, and a second application changes the
+level. A tournament takes at most 256 entrants.
 
-A player applies with a level from 1 to 5: how good they say they are at the
-game. The site asks for it on its own page, with the player's glyph and handle
-above the confirm button. An admin can add a player with a level or without one. An admin add with
-a level corrects the level of a player who is already in.
+**Brackets.** Single elimination, and optional. Seeds follow the level, and
+entrants of one level are shuffled. Round one pairs neighbors in seed order,
+and the top seeds get the byes. The admin can move seeds and enters one result
+per match. A result can change until the next match is decided. Without a
+bracket, the admin names the winner. The rules are pure code in
+`crates/bunker-models/src/bracket.rs`. `/tournaments/{id}/kiosk` shows a live
+bracket for a screen at the event.
 
-The bracket is single elimination and optional. The admin generates it seeded by
-level: the strongest is seed 1, and entrants of one level are shuffled first, so
-a regeneration gives a new draw among them. An entrant without a level counts as
-a 3. Round one pairs neighbours in seed order, seed 1 against seed 2, seed 3
-against seed 4, and so on, so a beginner plays a beginner and a strong player
-plays a strong player. When the field is not a power of two, the top seeds get
-the byes, one per match at most. The two halves of the bracket meet only in the
-final. The admin moves seeds by hand, and enters one result per match. A winner
-moves into the next round. A result can change until the next match is decided.
-A bye is not a result. While no result exists, the bracket can be regenerated or
-removed, as long as the tournament is not concluded. With a bracket, the final
-decides the winner. Without one, the admin names the winner among the entrants,
-or nobody.
+**Cycles.** Cycles are the points. The ledger is one table, `point_entries`,
+with one signed row for each gain and each loss. No row is ever changed: a
+correction is a new row. The view `player_standings` computes the total, the
+rank and the place on each read. A check-in pays, and a concluded tournament
+pays the entry, each win and the top four places. A unique index stops a
+second payment. The amounts and the ranks live in
+`crates/bunker-models/src/points.rs`, and `GET /api/cycles/rules` serves them
+to the site.
 
-Matches point at entrants and not at players, so a team can enter one day.
-
-### Nemesis
-
-The public profile and the private profile show a match log, and name the
-opponent who beats the player the most. A view, `player_matches`, holds every
-played match two times, one row per side, with the day of its tournament. A bye
-is not a match, and only a `live` or a `concluded` tournament is in the view.
-Every read goes to the bracket rows, so a corrected result changes the answer at
-once.
-
-One opponent must win at least two matches against the player before the site
-names them. A tie on the count goes to the opponent whose last win is the more
-recent. Recency is the day of the tournament, and then its creation instant for
-two tournaments on one day. The handle breaks a full tie, so two reads answer
-the same name. An opponent who deleted their account stays in the log without a
-link, and never holds the title: the next opponent takes it.
-
-`player_matches` is the join point a casual match extends, with a table of its
-own and a `union all` branch in the view. The record and the nemesis read the
-view alone and need no other change. The log also joins `tournaments` for the
-name and the game, and counts the rounds of the bracket, so a match outside a
-tournament needs those two columns to come from the branch itself.
-
-## Cycles
-
-Cycles are the points. The ledger is one table, `point_entries`: every gain and
-every loss is a signed row with a kind, and nothing else is stored. The total
-of a player is a sum, the rank is a threshold on the total, and the place is the
-position among all players. A view, `player_standings`, computes the three on
-every read, so they are never stale. A row is never updated or deleted. A
-correction is a new row with the opposite sign and a note.
-
-Three sources write the ledger today. The door of an event pays 100 cycles to
-a player who checks in, one time per event, in the transaction that writes the
-check-in. A concluded tournament pays every entrant
-for the entry, every won match, and the placements: champion, finalist and the
-two semifinalists. The entry and a win pay the same in every field. A placement
-follows the size of the field, every entrant counted: small below 8, medium
-below 16, large from 16 on, and the large tier is a cap. Without a bracket only
-the entry and the named winner pay.
-The rows are written in the transaction that concludes the tournament. Every
-row names its source, the event, the tournament or the match, and a unique index on the
-kind, the player and the source makes a second payment a failure and not a
-duplicate. An admin adds or
-takes cycles by hand, with a note that everyone reads.
-A deleted tournament takes its cycles with it, and so do a deleted event and a
-deleted player.
-
-The amounts and the ladder live in one file, `crates/bunker-models/src/points.rs`.
-`GET /api/cycles/rules` serves them, and the site renders its legend from that
-call, so the page can never disagree with the ledger. The ranks, bottom first:
-zombie, guest at 80, user at 600, sudoer at 1500, daemon at 3000, kernel at 6000.
-
-A future source, such as an arcade score, is one variant in `PointKind` with its amount, one writer that names its source, and
-one migration that recreates the table with the new kind in the CHECK list,
-because SQLite cannot alter a CHECK in place.
-
-The bracket rules live in `crates/bunker-models/src/bracket.rs` as pure data with
-their own tests. The site shows a bracket on `/tournaments/{id}/bracket`, and
-`/tournaments/{id}/kiosk` is the same view in a bare layout that polls
-`/tournaments/{id}/detail.json` every three seconds for a screen at the event.
-
-## End to end types
-
-The API describes itself with utoipa. `make api-types` writes
-`crates/bunker-api/openapi.json` from the route annotations and generates
-`web/src/lib/api-types.d.ts` from it. The site calls the API through
-`openapi-fetch`, so every path, body and response is typed from the same source.
-A Rust test fails when the committed document is stale, and CI fails when the
-generated types are stale.
-
-## Tests
-
-`make checklist` runs the Rust suite. `make web-check` checks the format, runs
-both type checkers, lints and builds the site. `make web-e2e` runs Playwright
-against a fresh API on `.dev/e2e.db` and the production build of the site, served
-by the Workers runtime as on Cloudflare: signup, login, the roster,
-the profile, every public page, 404s, the backoffice, tournaments and brackets.
-It also asserts that every refusal reaches the page as one readable sentence.
-
-## Change the schema
-
-The migrations under `crates/bunker-api/migrations/` say how the database gets
-to its shape. `crates/bunker-api/schema.sql` says what the shape is, and a test
-keeps the two in step. `CLAUDE.md` gives the procedure and the rules.
+**Nemesis.** A profile names the opponent who beat the player most often, with
+at least two wins. A tie goes to the most recent win. The view `player_matches`
+holds each played match one time for each side.
 
 ## Configuration
 
+The API reads its configuration from the environment. Locally it also reads
+`.env`, except when `APP_ENV=prod`.
+
 | Variable | Default | Meaning |
 | --- | --- | --- |
-| `APP_ENV` | `local` | `test`, `local` or `prod`. Selects every capability. |
-| `BIND_ADDRESS` | `127.0.0.1` | Listen address. `0.0.0.0` when the LAN needs the API directly |
+| `APP_ENV` | `local` | `test`, `local` or `prod` |
+| `BIND_ADDRESS` | `127.0.0.1` | Listen address |
 | `PORT` | `3000` | Listen port |
-| `DATABASE_URL` | `sqlite://.dev/bunker.db?mode=rwc` | SQLite file. `mode=rwc` creates it. Production uses `mode=rw`, which never creates it |
+| `DATABASE_URL` | `sqlite://.dev/bunker.db?mode=rwc` | `mode=rwc` creates the file. Production uses `mode=rw` |
 | `DB_MAX_CONNECTIONS` | `8` | Pool size |
-| `JWT_SECRET` | dev value | 32 characters or more. Required when `APP_ENV=prod`, and the dev value is refused there |
-| `RUST_LOG` | from `APP_ENV` | Replaces the log filter. An invalid filter stops the start |
+| `JWT_SECRET` | dev value | 32 characters or more. Required in `prod`, and the dev value is refused there |
+| `RUST_LOG` | from `APP_ENV` | Log filter. An invalid filter stops the start |
 
-A process that runs with `APP_ENV=prod` does not read `.env`.
-
-Answers that carry a token, a temporary password or the caller's account have
-`Cache-Control: no-store`. The logs name the route template and not the path,
-so a check-in code never reaches the journal.
-
-The sqlx macros compile each query against `DATABASE_URL` from `.env`, which
-must point at the migrated local database from `make db`. A build against an
-empty or unmigrated file fails with `no such table`.
-
-The site names the API in `API_URL`, which lives in `web/wrangler.jsonc`. A
-Worker var beats the shell in local mode, so a local run selects an environment
-instead of exporting a variable: `CLOUDFLARE_ENV=dev` for `make web-dev` and
-`CLOUDFLARE_ENV=e2e` for Playwright. The top level is production. `web/README.md`
-gives the detail.
+The site reads `API_URL` from `web/wrangler.jsonc`. See `web/README.md`.
 
 ## Deploy
 
-One workflow, `.github/workflows/ci.yml`, runs CI on every push and every pull
-request. Only a push to `main` deploys. A push to `dev` and a pull request run
-CI and deploy nothing.
+A push to `main` runs CI, then deploys the API, then the site. A push to `dev`
+and a pull request run CI only.
 
-| What | Where it runs | How |
-| --- | --- | --- |
-| API | A Debian 12 LXC container on the Proxmox box in the office | `deploy-api` job, after `rust`, `web` and `e2e` are green |
-| Site | Cloudflare Workers | `deploy-web` job, after `deploy-api`: `pnpm build`, then wrangler. The Worker var `API_URL` points at the API name. |
+- **API:** a static binary in a Debian container on the office Proxmox box,
+  behind a Cloudflare Tunnel. The deploy rolls back when the new binary is not
+  healthy. Litestream sends each database change to Backblaze B2.
+- **Site:** Cloudflare Workers, through wrangler.
 
-The site ships after the API, so each route that the new site calls exists
-when the site goes live.
-
-The API job builds a static musl binary with the commit in it, opens SSH
-through a Cloudflare Tunnel with `cloudflared` and a key made for CI, uploads
-the binary, and runs the root script `bunker-deploy` on the box. The script
-stops the API, copies the database to `/var/backups/bunker/pre-deploy.db`, keeps
-the old binary as `bunker-api.prev`, and starts the new one. Migrations run at
-startup. When `/health/ready` does not answer in 15 seconds, the script puts
-back the old binary and the pre-deploy database, and the job fails. Then the
-job checks `/health/ready` on `api.lanbunker.eu`, and checks that
-`/health/live` answers the commit of the run. The box keeps no open port:
-`cloudflared` inside the container dials out, and Cloudflare routes
-`api.lanbunker.eu` to port 3000 and `ssh.lanbunker.eu` to port 22.
-
-Both deploy jobs use the GitHub environment `production`. They need three
-secrets, `DEPLOY_SSH_KEY`, `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`,
-and three variables, `API_HOST`, `SSH_HOST` and `SSH_KNOWN_HOSTS`.
-`deploy/README.md` holds the one-time setup of the container and the tunnel,
-the bootstrap script, and the day-to-day commands: logs, backups, making an
-admin, rotating the key.
+`deploy/README.md` gives the setup and the day-to-day commands.

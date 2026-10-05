@@ -1,0 +1,24 @@
+# The B2 values and the key come from /etc/bunker/litestream.env, which the
+# unit loads. Litestream reads LITESTREAM_ACCESS_KEY_ID and
+# LITESTREAM_SECRET_ACCESS_KEY from the environment on its own.
+dbs:
+  - path: /var/lib/bunker/bunker.db
+    replica:
+      type: s3
+      bucket: ${B2_BUCKET}
+      path: bunker
+      endpoint: ${B2_ENDPOINT}
+      region: ${B2_REGION}
+      # Writes come in bursts on event nights. One upload per 10 seconds keeps
+      # the request count low, and a stop of the unit uploads the rest first.
+      sync-interval: 10s
+
+# Fewer and larger files in B2 than the default of 30s, 5m and 1h.
+levels:
+  - interval: 5m
+  - interval: 1h
+
+# A daily full copy, kept a week. A restore can land on any point inside it.
+snapshot:
+  interval: 24h
+  retention: 168h

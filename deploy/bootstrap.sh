@@ -1,106 +1,150 @@
 #!/usr/bin/env bash
 # Prepares a Debian 12 container for the API. Run it as root inside the
-# container. A second run keeps the tunnel, the JWT secret and the database,
-# installs the units and the scripts again, and restarts a running API.
+# container, from a terminal:
 #
-#   bash bootstrap.sh
+#   ssh -t root@<container-ip> bash /root/deploy/bootstrap.sh
 #
-# It asks for what it cannot find. TUNNEL_TOKEN is the long string from the
-# tunnel page in the Cloudflare dashboard, needed only until cloudflared is
-# installed. DEPLOY_PUBKEY is the public half of the key GitHub Actions uses,
-# read from /root/deploy_key.pub when that file exists. Both can also come from
-# the environment.
+# It asks only for what the box does not hold yet: the tunnel token, the deploy
+# public key (read from /root/deploy_key.pub when present) and the Backblaze B2
+# values. Each can also come from the environment: TUNNEL_TOKEN, DEPLOY_PUBKEY,
+# B2_KEY_ID, B2_APP_KEY, B2_BUCKET, B2_ENDPOINT.
+#
+# A rerun keeps the tunnel, the secrets and the database, installs the units and
+# the scripts again, and restarts what runs.
 set -euo pipefail
 
-CLOUDFLARED_UNIT=/etc/systemd/system/cloudflared.service
-DB=/var/lib/bunker/bunker.db
+readonly HERE=$(cd "$(dirname "$0")" && pwd)
+readonly DATA=/var/lib/bunker
+readonly DB=$DATA/bunker.db
+readonly API_ENV=/etc/bunker/api.env
+readonly LITESTREAM_ENV=/etc/bunker/litestream.env
+readonly LITESTREAM_CONFIG=/etc/bunker/litestream.yml
+readonly CLOUDFLARED_UNIT=/etc/systemd/system/cloudflared.service
+readonly LITESTREAM_VERSION=0.5.17
+readonly LITESTREAM_SHA256=cfb371176d164437ae869f8351cfde49bd1804ae71c61923f75c9cba9c9c006d
+
+fail() {
+    echo "bootstrap: $*" >&2
+    exit 1
+}
 
 # `read -p` shows nothing without a terminal, so `ssh host cmd` would wait in
-# silence. Ask for `ssh -t` instead.
+# silence.
 ask() {
     local prompt=$1 var=$2 hidden=${3:-}
-    if [ ! -t 0 ]; then
-        echo "no terminal to ask for the $prompt." >&2
-        echo "run it as 'ssh -t root@<ip> bash /root/deploy/bootstrap.sh', or set $var" >&2
-        exit 1
-    fi
+    [ -t 0 ] || fail "no terminal to ask for the $prompt. Run it with 'ssh -t', or set $var."
     if [ -n "$hidden" ]; then
         read -r -s -p "$prompt: " "$var"
         echo
     else
         read -r -p "$prompt: " "$var"
     fi
+    [ -n "${!var}" ] || fail "the $prompt is empty"
 }
 
-# Without the volume, the API would write the database on the rootfs, and a new
-# container would lose it.
-if ! mountpoint -q /var/lib/bunker; then
-    echo "/var/lib/bunker is not a mount point. Add the mp0 volume first." >&2
-    exit 1
-fi
+as_bunker_with_b2() {
+    local env_file=$1
+    shift
+    runuser -u bunker -- sh -c 'set -a && . "$0" && exec "$@"' "$env_file" "$@"
+}
 
-if [ -z "${TUNNEL_TOKEN:-}" ] && [ ! -f "$CLOUDFLARED_UNIT" ]; then
-    ask "tunnel token (from the Cloudflare tunnel page)" TUNNEL_TOKEN hidden
-    [ -n "$TUNNEL_TOKEN" ] || { echo "the tunnel token is empty" >&2; exit 1; }
-fi
-if [ -z "${DEPLOY_PUBKEY:-}" ] && [ -f /root/deploy_key.pub ]; then
-    DEPLOY_PUBKEY=$(cat /root/deploy_key.pub)
-fi
-if [ -z "${DEPLOY_PUBKEY:-}" ]; then
-    ask "deploy public key (content of deploy_key.pub)" DEPLOY_PUBKEY
-fi
-case "$DEPLOY_PUBKEY" in
-    ssh-ed25519\ *|ssh-rsa\ *) ;;
-    *) echo "the public key must start with ssh-ed25519 or ssh-rsa" >&2; exit 1 ;;
-esac
+check_volume() {
+    # Without the volume, the database would sit on the rootfs, and a new
+    # container would lose it.
+    mountpoint -q "$DATA" || fail "$DATA is not a mount point. Add the mp0 volume first."
+}
 
-here=$(cd "$(dirname "$0")" && pwd)
-export DEBIAN_FRONTEND=noninteractive
+collect_inputs() {
+    if [ ! -f "$CLOUDFLARED_UNIT" ] && [ -z "${TUNNEL_TOKEN:-}" ]; then
+        ask "tunnel token" TUNNEL_TOKEN hidden
+    fi
 
-apt-get update -q
-apt-get install -y -q --no-install-recommends \
-    ca-certificates curl openssh-server openssl sqlite3 sudo unattended-upgrades
+    if [ -z "${DEPLOY_PUBKEY:-}" ] && [ -f /root/deploy_key.pub ]; then
+        DEPLOY_PUBKEY=$(cat /root/deploy_key.pub)
+    fi
+    [ -n "${DEPLOY_PUBKEY:-}" ] || ask "deploy public key" DEPLOY_PUBKEY
+    case "$DEPLOY_PUBKEY" in
+        ssh-ed25519\ * | ssh-rsa\ *) ;;
+        *) fail "the deploy public key must start with ssh-ed25519 or ssh-rsa" ;;
+    esac
 
-cat > /etc/apt/apt.conf.d/20auto-upgrades <<APT
+    if [ ! -f "$LITESTREAM_ENV" ]; then
+        [ -n "${B2_KEY_ID:-}" ] || ask "B2 keyID" B2_KEY_ID
+        [ -n "${B2_APP_KEY:-}" ] || ask "B2 applicationKey" B2_APP_KEY hidden
+        [ -n "${B2_BUCKET:-}" ] || ask "B2 bucket name" B2_BUCKET
+        [ -n "${B2_ENDPOINT:-}" ] || ask "B2 endpoint" B2_ENDPOINT
+        B2_ENDPOINT=${B2_ENDPOINT#https://}
+        case "$B2_ENDPOINT" in
+            s3.*.backblazeb2.com) ;;
+            *) fail "the B2 endpoint must look like s3.eu-central-003.backblazeb2.com" ;;
+        esac
+    fi
+}
+
+install_packages() {
+    export DEBIAN_FRONTEND=noninteractive
+    apt-get update -q
+    apt-get install -y -q --no-install-recommends \
+        ca-certificates curl openssh-server openssl sqlite3 sudo unattended-upgrades
+    cat > /etc/apt/apt.conf.d/20auto-upgrades <<'APT'
 APT::Periodic::Update-Package-Lists "1";
 APT::Periodic::Unattended-Upgrade "1";
 APT
+}
 
-if ! command -v cloudflared >/dev/null; then
-    install -d -m 755 /usr/share/keyrings
-    curl -fsSL https://pkg.cloudflare.com/cloudflare-main.gpg \
-        -o /usr/share/keyrings/cloudflare-main.gpg
-    echo "deb [signed-by=/usr/share/keyrings/cloudflare-main.gpg] https://pkg.cloudflare.com/cloudflared any main" \
-        > /etc/apt/sources.list.d/cloudflared.list
-    apt-get update -q
-    apt-get install -y -q cloudflared
-fi
-if [ ! -f "$CLOUDFLARED_UNIT" ]; then
-    cloudflared service install "$TUNNEL_TOKEN"
-fi
-# The token is a credential for the tunnel. Only root reads it.
-chmod 600 "$CLOUDFLARED_UNIT"
+install_cloudflared() {
+    if ! command -v cloudflared >/dev/null; then
+        install -d -m 755 /usr/share/keyrings
+        curl -fsSL https://pkg.cloudflare.com/cloudflare-main.gpg \
+            -o /usr/share/keyrings/cloudflare-main.gpg
+        echo "deb [signed-by=/usr/share/keyrings/cloudflare-main.gpg] https://pkg.cloudflare.com/cloudflared any main" \
+            > /etc/apt/sources.list.d/cloudflared.list
+        apt-get update -q
+        apt-get install -y -q cloudflared
+    fi
+    [ -f "$CLOUDFLARED_UNIT" ] || cloudflared service install "$TUNNEL_TOKEN"
+    # The unit file holds the tunnel token.
+    chmod 600 "$CLOUDFLARED_UNIT"
+}
 
-# `bunker` runs the API and owns the database. `deploy` is the only account
-# GitHub Actions can log into, and sudo lets it run one script.
-id -u bunker >/dev/null 2>&1 \
-    || useradd --system --home-dir /var/lib/bunker --shell /usr/sbin/nologin bunker
-id -u deploy >/dev/null 2>&1 \
-    || useradd --create-home --shell /bin/bash deploy
+install_litestream() {
+    local current
+    current=$(litestream version 2>/dev/null || true)
+    [ "${current#v}" = "$LITESTREAM_VERSION" ] && return
 
-install -d -m 700 -o deploy -g deploy /home/deploy/.ssh
-printf 'restrict %s\n' "$DEPLOY_PUBKEY" > /home/deploy/.ssh/authorized_keys
-chown deploy:deploy /home/deploy/.ssh/authorized_keys
-chmod 600 /home/deploy/.ssh/authorized_keys
+    local tarball
+    tarball=$(mktemp)
+    curl -fsSL -o "$tarball" \
+        "https://github.com/benbjohnson/litestream/releases/download/v$LITESTREAM_VERSION/litestream-$LITESTREAM_VERSION-linux-x86_64.tar.gz"
+    echo "$LITESTREAM_SHA256  $tarball" | sha256sum -c --quiet
+    tar -xzf "$tarball" -C /usr/local/bin --no-same-owner litestream
+    chmod 755 /usr/local/bin/litestream
+    rm -f "$tarball"
+}
 
-install -d -m 750 -o bunker -g bunker /var/lib/bunker /var/backups/bunker
-install -d -m 750 -o root -g bunker /etc/bunker
-install -d -m 700 -o root -g root /var/lib/bunker-deploy
+create_users() {
+    # `bunker` runs the API and owns the data. `deploy` is the account GitHub
+    # Actions logs into, and sudo lets it run one script.
+    id -u bunker >/dev/null 2>&1 \
+        || useradd --system --home-dir "$DATA" --shell /usr/sbin/nologin bunker
+    id -u deploy >/dev/null 2>&1 \
+        || useradd --create-home --shell /bin/bash deploy
 
-# The secret is born here and never leaves the box. A rerun keeps the file, so
-# every issued token stays valid.
-if [ ! -f /etc/bunker/api.env ]; then
-    cat > /etc/bunker/api.env <<ENV
+    install -d -m 700 -o deploy -g deploy /home/deploy/.ssh
+    install -m 600 -o deploy -g deploy /dev/null /home/deploy/.ssh/authorized_keys
+    printf 'restrict %s\n' "$DEPLOY_PUBKEY" > /home/deploy/.ssh/authorized_keys
+
+    install -d -m 750 -o bunker -g bunker "$DATA" /var/backups/bunker
+    install -d -m 750 -o root -g bunker /etc/bunker
+    install -d -m 700 -o root -g root /var/lib/bunker-deploy
+}
+
+write_api_env() {
+    # The JWT secret is made here and never leaves the box. A rerun keeps it,
+    # so every issued token stays valid.
+    if [ ! -f "$API_ENV" ]; then
+        install -m 640 -o root -g bunker /dev/null "$API_ENV"
+        cat > "$API_ENV" <<ENV
 APP_ENV=prod
 BIND_ADDRESS=127.0.0.1
 PORT=3000
@@ -108,32 +152,72 @@ DATABASE_URL=sqlite://$DB?mode=rw
 DB_MAX_CONNECTIONS=8
 JWT_SECRET=$(openssl rand -hex 32)
 ENV
-    chown root:bunker /etc/bunker/api.env
-    chmod 640 /etc/bunker/api.env
-fi
-# `mode=rw` never creates the file, so a missing volume stops the API and does
-# not start it on an empty database. The one creation happens here.
-sed -i 's|^\(DATABASE_URL=.*\)?mode=rwc$|\1?mode=rw|' /etc/bunker/api.env
-if [ ! -e "$DB" ]; then
-    install -m 600 -o bunker -g bunker /dev/null "$DB"
-fi
+    fi
+    # `mode=rw` never creates the file, so a missing volume stops the API
+    # instead of starting it on an empty database.
+    sed -i 's|^\(DATABASE_URL=.*\)?mode=rwc$|\1?mode=rw|' "$API_ENV"
+}
 
-install -m 644 "$here/bunker-api.service" /etc/systemd/system/bunker-api.service
-install -m 644 "$here/bunker-backup.service" /etc/systemd/system/bunker-backup.service
-install -m 644 "$here/bunker-backup.timer" /etc/systemd/system/bunker-backup.timer
-install -m 755 "$here/bunker-backup.sh" /usr/local/sbin/bunker-backup
-install -m 755 "$here/bunker-deploy.sh" /usr/local/sbin/bunker-deploy
+# A typo in a B2 value would break every backup without a sound, so the values
+# are saved only after B2 accepts them. On a new disk the database comes back
+# from B2 in the same step.
+setup_replica() {
+    install -m 644 "$HERE/litestream.yml" "$LITESTREAM_CONFIG"
 
-sudoers=$(mktemp)
-echo 'deploy ALL=(root) NOPASSWD: /usr/local/sbin/bunker-deploy ""' > "$sudoers"
-visudo -cf "$sudoers"
-install -m 440 -o root -g root "$sudoers" /etc/sudoers.d/deploy
-rm -f "$sudoers"
+    local env_file=$LITESTREAM_ENV
+    if [ ! -f "$LITESTREAM_ENV" ]; then
+        env_file=$LITESTREAM_ENV.new
+        install -m 640 -o root -g bunker /dev/null "$env_file"
+        cat > "$env_file" <<ENV
+LITESTREAM_ACCESS_KEY_ID=$B2_KEY_ID
+LITESTREAM_SECRET_ACCESS_KEY=$B2_APP_KEY
+B2_BUCKET=$B2_BUCKET
+B2_ENDPOINT=$B2_ENDPOINT
+B2_REGION=$(echo "$B2_ENDPOINT" | cut -d. -f2)
+ENV
+    fi
 
-sshd_conf=/etc/ssh/sshd_config.d/bunker.conf
-sshd_prev=$(mktemp)
-[ ! -f "$sshd_conf" ] || cp "$sshd_conf" "$sshd_prev"
-cat > "$sshd_conf" <<SSHD
+    if [ ! -e "$DB" ]; then
+        echo "no database on the volume. Restoring it from B2 when B2 holds one."
+        as_bunker_with_b2 "$env_file" litestream restore -config "$LITESTREAM_CONFIG" \
+            -if-replica-exists -integrity-check full "$DB" \
+            || fail "B2 refused the restore. Check the B2 values and run again."
+        [ -e "$DB" ] || install -m 600 -o bunker -g bunker /dev/null "$DB"
+        chmod 600 "$DB"
+    elif [ "$env_file" != "$LITESTREAM_ENV" ]; then
+        local check
+        check=$(runuser -u bunker -- mktemp -d)
+        as_bunker_with_b2 "$env_file" litestream restore -config "$LITESTREAM_CONFIG" \
+            -if-replica-exists -o "$check/bunker.db" "$DB" >/dev/null \
+            || { rm -rf "$check"; fail "B2 refused the values. Check them and run again."; }
+        rm -rf "$check"
+    fi
+
+    [ "$env_file" = "$LITESTREAM_ENV" ] || mv "$env_file" "$LITESTREAM_ENV"
+}
+
+install_units() {
+    install -m 644 "$HERE/bunker-api.service" "$HERE/bunker-backup.service" \
+        "$HERE/bunker-backup.timer" "$HERE/litestream.service" /etc/systemd/system/
+    install -m 755 "$HERE/bunker-backup.sh" /usr/local/sbin/bunker-backup
+    install -m 755 "$HERE/bunker-deploy.sh" /usr/local/sbin/bunker-deploy
+}
+
+configure_sudo() {
+    local sudoers
+    sudoers=$(mktemp)
+    echo 'deploy ALL=(root) NOPASSWD: /usr/local/sbin/bunker-deploy ""' > "$sudoers"
+    visudo -cf "$sudoers" >/dev/null
+    install -m 440 -o root -g root "$sudoers" /etc/sudoers.d/deploy
+    rm -f "$sudoers"
+}
+
+configure_sshd() {
+    local conf=/etc/ssh/sshd_config.d/bunker.conf
+    local prev
+    prev=$(mktemp)
+    [ ! -f "$conf" ] || cp "$conf" "$prev"
+    cat > "$conf" <<'SSHD'
 PasswordAuthentication no
 KbdInteractiveAuthentication no
 PermitRootLogin prohibit-password
@@ -144,21 +228,37 @@ Match User deploy
     X11Forwarding no
     PermitTTY no
 SSHD
-# A broken sshd config locks out every SSH login after the restart.
-if ! sshd -t; then
-    if [ -s "$sshd_prev" ]; then cp "$sshd_prev" "$sshd_conf"; else rm -f "$sshd_conf"; fi
-    rm -f "$sshd_prev"
-    echo "sshd -t refused the new config. The old config is back." >&2
-    exit 1
-fi
-rm -f "$sshd_prev"
-systemctl enable --now ssh
-systemctl restart ssh
+    # A broken config would lock every SSH login out after the restart.
+    if ! sshd -t; then
+        if [ -s "$prev" ]; then cp "$prev" "$conf"; else rm -f "$conf"; fi
+        rm -f "$prev"
+        fail "sshd refused the new config. The old one is back."
+    fi
+    rm -f "$prev"
+    systemctl enable ssh
+    systemctl restart ssh
+}
 
-systemctl daemon-reload
-systemctl enable --now bunker-backup.timer
-# The binary arrives with the first deploy, which also starts the unit.
-systemctl enable bunker-api
-systemctl try-restart bunker-api
+start_services() {
+    systemctl daemon-reload
+    systemctl enable --now bunker-backup.timer
+    systemctl enable litestream
+    systemctl restart litestream
+    # The first deploy brings the binary and starts the API.
+    systemctl enable bunker-api
+    systemctl try-restart bunker-api
+}
 
-echo "ready. a push to main ships the first binary."
+check_volume
+collect_inputs
+install_packages
+install_cloudflared
+install_litestream
+create_users
+write_api_env
+setup_replica
+install_units
+configure_sudo
+configure_sshd
+start_services
+echo "bootstrap: ready. A push to main ships the first binary."

@@ -1,76 +1,90 @@
 #!/usr/bin/env bash
-# sudo lets the deploy user run only this script.
+# Installs the binary that CI uploaded and restarts the API. When the new
+# binary is not ready, the old binary and the database from before the deploy
+# come back. sudo lets the deploy user run only this script.
 set -euo pipefail
 
-upload=/home/deploy/bunker-api.new
-staging=/var/lib/bunker-deploy
-bin=/usr/local/bin/bunker-api
-prev=/usr/local/bin/bunker-api.prev
-db=/var/lib/bunker/bunker.db
-snapshot=/var/backups/bunker/pre-deploy.db
+readonly UPLOAD=/home/deploy/bunker-api.new
+readonly STAGING=/var/lib/bunker-deploy
+readonly BIN=/usr/local/bin/bunker-api
+readonly PREV=/usr/local/bin/bunker-api.prev
+readonly DATA=/var/lib/bunker
+readonly DB=$DATA/bunker.db
+readonly SNAPSHOT=/var/backups/bunker/pre-deploy.db
 
 fail() {
-    echo "$*" >&2
+    echo "bunker-deploy: $*" >&2
     exit 1
 }
 
 wait_ready() {
-    local port=$1
     for _ in $(seq 1 30); do
-        if curl -fsS "http://127.0.0.1:${port}/health/ready" >/dev/null 2>&1; then
-            return 0
-        fi
+        curl -fsS "http://127.0.0.1:$PORT/health/ready" >/dev/null 2>&1 && return 0
         sleep 0.5
     done
     return 1
 }
 
-# One key only. Sourcing the file would put the JWT secret into this shell.
-port=$(sed -n 's/^PORT=//p' /etc/bunker/api.env)
-[ -n "$port" ] || fail "no PORT in /etc/bunker/api.env"
-[ -f "$db" ] || fail "no database at $db. Is the /var/lib/bunker mount missing?"
+start_api() {
+    systemctl reset-failed bunker-api
+    systemctl start bunker-api
+    wait_ready
+}
 
-# The deploy user controls its home, so the upload can be a symlink or a hard
-# link to a file that only root reads. The checks run again after the move,
+# The deploy user owns its home, so the upload can be a symlink or a hard link
+# to a file that only root can read. The checks run again after the move,
 # because only then can the deploy user no longer swap the file.
-[ ! -L "$upload" ] && [ -f "$upload" ] || fail "no regular file at $upload"
-install -d -m 700 -o root -g root "$staging"
-mv -T "$upload" "$staging/bunker-api"
-staged=$staging/bunker-api
-[ ! -L "$staged" ] && [ -f "$staged" ] || fail "the upload is not a regular file"
-[ "$(stat -c '%U %h' "$staged")" = "deploy 1" ] \
-    || fail "the upload must belong to deploy and have one link"
+stage_upload() {
+    [ ! -L "$UPLOAD" ] && [ -f "$UPLOAD" ] || fail "no regular file at $UPLOAD"
+    install -d -m 700 -o root -g root "$STAGING"
+    mv -T "$UPLOAD" "$STAGING/bunker-api"
+    [ ! -L "$STAGING/bunker-api" ] && [ -f "$STAGING/bunker-api" ] \
+        || fail "the upload is not a regular file"
+    [ "$(stat -c '%U %h' "$STAGING/bunker-api")" = "deploy 1" ] \
+        || fail "the upload must belong to deploy and have one link"
+}
 
-# The unit stops before the snapshot, so a rollback loses no write of the old
+# The API stops before the snapshot, so a rollback loses no write of the old
 # binary.
-systemctl stop bunker-api
-runuser -u bunker -- sqlite3 -cmd '.timeout 5000' "$db" ".backup '$snapshot'"
-if [ -f "$bin" ]; then
-    install -m 755 -o root -g root "$bin" "$prev"
-fi
-install -m 755 -o root -g root "$staged" "$bin"
-rm -f "$staged"
+swap_binary() {
+    systemctl stop bunker-api
+    runuser -u bunker -- sqlite3 -cmd '.timeout 5000' "$DB" ".backup '$SNAPSHOT'"
+    [ ! -f "$BIN" ] || install -m 755 -o root -g root "$BIN" "$PREV"
+    install -m 755 -o root -g root "$STAGING/bunker-api" "$BIN"
+    rm -f "$STAGING/bunker-api"
+}
 
-systemctl reset-failed bunker-api
-systemctl start bunker-api
-if wait_ready "$port"; then
-    echo "bunker-api is ready"
+# The new binary can apply a migration that the old one refuses, so the
+# database goes back with the binary. Litestream does not notice a replaced
+# file, so its local state goes too, and it starts a new generation in B2.
+roll_back() {
+    systemctl stop bunker-api litestream
+    install -m 755 -o root -g root "$PREV" "$BIN"
+    rm -rf "$DB-wal" "$DB-shm" "$DATA/.bunker.db-litestream"
+    install -m 600 -o bunker -g bunker "$SNAPSHOT" "$DB"
+    systemctl start litestream
+}
+
+# One deploy at a time. A second one waits for the first.
+exec 9>/run/bunker-deploy.lock
+flock 9
+
+# Only one key. Sourcing the file would put the JWT secret into this shell.
+PORT=$(sed -n 's/^PORT=//p' /etc/bunker/api.env)
+[ -n "$PORT" ] || fail "no PORT in /etc/bunker/api.env"
+[ -f "$DB" ] || fail "no database at $DB. Is the volume mounted?"
+
+stage_upload
+swap_binary
+if start_api; then
+    echo "bunker-deploy: the new binary is ready"
     exit 0
 fi
 
-echo "bunker-api did not answer /health/ready within 15 seconds" >&2
+echo "bunker-deploy: the new binary did not answer /health/ready in 15 seconds" >&2
 journalctl -u bunker-api -n 40 --no-pager >&2
-systemctl stop bunker-api
-[ -f "$prev" ] || fail "DEPLOY FAILED. No previous binary, so bunker-api stays stopped."
+[ -f "$PREV" ] || { systemctl stop bunker-api; fail "no previous binary. The API stays stopped."; }
 
-# The new binary can apply a migration at startup that the old binary refuses,
-# so the database goes back together with the binary.
-install -m 755 -o root -g root "$prev" "$bin"
-rm -f "$db-wal" "$db-shm"
-install -m 600 -o bunker -g bunker "$snapshot" "$db"
-systemctl reset-failed bunker-api
-systemctl start bunker-api
-if wait_ready "$port"; then
-    fail "DEPLOY FAILED. The previous binary and the pre-deploy database are back."
-fi
-fail "DEPLOY FAILED. The rollback did not answer /health/ready either. Read journalctl -u bunker-api."
+roll_back
+start_api || fail "the rollback did not answer /health/ready either. Read journalctl -u bunker-api."
+fail "the old binary and the database from before the deploy are back"
