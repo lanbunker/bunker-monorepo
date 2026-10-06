@@ -19,6 +19,7 @@ const GLYPH_SIZE = "7.5rem"
 
 const { player, own = false } = Astro.props
 const standing = player.standing
+const place = standing.place ?? undefined
 const rank = RANKS[standing.rank]
 // The rank cells are decoration, so the name under them is the one thing a
 // screen reader reads for the rank.
@@ -53,9 +54,15 @@ const rank = RANKS[standing.rank]
             "text-xs tracking-wider tabular-nums",
             isPodium(standing) ? "font-bold text-accent" : "text-dim",
           ]}
-          data-place={standing.place}
+          data-place={place}
         >
-          #{standing.place} <span class="text-mute">of {standing.players}</span>
+          {place === undefined ? (
+            "#--"
+          ) : (
+            <>
+              #{place} <span class="text-mute">of {standing.players}</span>
+            </>
+          )}
         </span>
         <div class="flex items-center gap-2">
           {player.role === "admin" && <Badge tone="warn">admin</Badge>}

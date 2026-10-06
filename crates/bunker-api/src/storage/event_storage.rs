@@ -39,7 +39,11 @@ pub struct StoredEvent {
 /// result, not a failure, and it carries the time of the first one.
 #[derive(Debug, Clone, Copy)]
 pub enum CheckedIn {
-    New(OffsetDateTime),
+    /// `was_active` is the flag of the player before this check-in.
+    New {
+        at: OffsetDateTime,
+        was_active: bool,
+    },
     Already(OffsetDateTime),
 }
 
@@ -241,7 +245,7 @@ impl EventStorage {
             CheckinRow,
             r#"select c.checked_in_at,
                       p.id, p.handle, p.glyph_bits, p.glyph_color, p.role, p.created_at,
-                      s.cycles as "cycles!: i64", s.place as "place!: i64", s.players as "players!: i64"
+                      s.cycles as "cycles!: i64", s.active as "active!: bool", s.place as "place?: i64", s.players as "players!: i64"
                from event_checkins c
                join players p on p.id = c.player_id
                join player_standings s on s.player_id = p.id
@@ -273,6 +277,19 @@ impl EventStorage {
         let checked_in_at = to_micros(CHECKINS, at)?;
 
         let mut tx = begin_write(&self.pool).await?;
+        // The rule of `active` in `player_standings`, for one row: the view
+        // ranks every player, and this read holds the write lock.
+        let was_active = sqlx::query_scalar!(
+            r#"select (role = 'admin'
+                       or exists (select 1 from event_checkins c where c.player_id = p.id))
+                      as "active!: bool"
+               from players p where p.id = ?1"#,
+            player_id,
+        )
+        .fetch_optional(&mut *tx)
+        .await
+        .map_err(StorageError::from_query)?
+        .unwrap_or(false);
         let inserted = sqlx::query!(
             "insert into event_checkins (event_id, player_id, checked_in_at) values (?1, ?2, ?3)",
             event_id,
@@ -311,7 +328,10 @@ impl EventStorage {
         .await?;
         tx.commit().await.map_err(StorageError::from_query)?;
 
-        Ok(CheckedIn::New(from_micros(CHECKINS, checked_in_at)?))
+        Ok(CheckedIn::New {
+            at: from_micros(CHECKINS, checked_in_at)?,
+            was_active,
+        })
     }
 
     /// The events the player checked in to, the latest check-in first, up to
@@ -400,7 +420,8 @@ struct CheckinRow {
     role: String,
     created_at: i64,
     cycles: i64,
-    place: i64,
+    active: bool,
+    place: Option<i64>,
     players: i64,
 }
 
@@ -418,6 +439,7 @@ impl TryFrom<CheckinRow> for Checkin {
                 role: row.role,
                 created_at: row.created_at,
                 cycles: row.cycles,
+                active: row.active,
                 place: row.place,
                 players: row.players,
             }

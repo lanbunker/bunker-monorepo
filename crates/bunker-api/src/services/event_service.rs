@@ -164,15 +164,18 @@ impl EventService {
             Err(error) => return Err(error.into()),
         };
         let event = self.load(id).await?.event;
-        let receipt = |checked_in_at, cycles| CheckinReceipt {
+        let receipt = |checked_in_at, cycles, activated| CheckinReceipt {
             event,
             checked_in_at,
             cycles,
+            activated,
         };
 
         Ok(match outcome {
-            CheckedIn::New(at) => Outcome::Created(receipt(at, CHECKIN_CYCLES)),
-            CheckedIn::Already(first) => Outcome::Existing(receipt(first, 0)),
+            CheckedIn::New { at, was_active } => {
+                Outcome::Created(receipt(at, CHECKIN_CYCLES, !was_active))
+            }
+            CheckedIn::Already(first) => Outcome::Existing(receipt(first, 0, false)),
         })
     }
 

@@ -2,10 +2,9 @@ use axum::extract::State;
 use axum::routing::{get, post, put};
 use axum::{Json, Router};
 use bunker_models::{
-    Account, CyclesLog, CyclesRules, Handle, HandleChange, MatchLog, PageQuery, Paginated,
-    PasswordChange, Player, RosterQuery, TokenResponse,
+    Account, CyclesLog, CyclesRules, HandleChange, MatchLog, PageQuery, Paginated, PasswordChange,
+    Player, RosterQuery, TokenResponse,
 };
-use serde::Deserialize;
 
 use crate::internal::http::{
     ApiError, ApiErrorBody, Authenticated, PendingPassword, ValidJson, ValidPath, ValidQuery,
@@ -13,8 +12,8 @@ use crate::internal::http::{
 };
 use crate::services::{AuthService, MatchService, PlayerService, PointsService};
 
-use super::AppState;
 use super::responses::{BearerErrors, BodyErrors, PathErrors, TokenErrors};
+use super::{AppState, HandlePath};
 
 pub fn player_router() -> Router<AppState> {
     Router::new()
@@ -26,11 +25,6 @@ pub fn player_router() -> Router<AppState> {
         .route("/api/players/{handle}/cycles", get(cycles_history))
         .route("/api/players/{handle}/matches", get(match_log))
         .route("/api/cycles/rules", get(cycles_rules))
-}
-
-#[derive(Debug, Deserialize, utoipa::IntoParams)]
-pub(super) struct PlayerPath {
-    handle: Handle,
 }
 
 /// Takes a temporary password too, so the site can see that a change is due.
@@ -114,7 +108,7 @@ pub(super) async fn list_players(
     get,
     path = "/api/players/{handle}/cycles",
     tag = "players",
-    params(PlayerPath, PageQuery),
+    params(HandlePath, PageQuery),
     responses(
         (status = 200, body = CyclesLog, description = "Newest first, with the totals by kind"),
         (status = 400, body = ApiErrorBody, description = "The handle or a query parameter is malformed"),
@@ -123,7 +117,7 @@ pub(super) async fn list_players(
 )]
 pub(super) async fn cycles_history(
     State(points): State<PointsService>,
-    ValidPath(path): ValidPath<PlayerPath>,
+    ValidPath(path): ValidPath<HandlePath>,
     ValidQuery(query): ValidQuery<PageQuery>,
 ) -> Result<Json<CyclesLog>, ApiError> {
     Ok(Json(points.history(&path.handle, query).await?))
@@ -133,7 +127,7 @@ pub(super) async fn cycles_history(
     get,
     path = "/api/players/{handle}/matches",
     tag = "players",
-    params(PlayerPath, PageQuery),
+    params(HandlePath, PageQuery),
     responses(
         (status = 200, body = MatchLog, description = "Newest first, with the record and the nemesis"),
         (status = 400, body = ApiErrorBody, description = "The handle or a query parameter is malformed"),
@@ -142,7 +136,7 @@ pub(super) async fn cycles_history(
 )]
 pub(super) async fn match_log(
     State(matches): State<MatchService>,
-    ValidPath(path): ValidPath<PlayerPath>,
+    ValidPath(path): ValidPath<HandlePath>,
     ValidQuery(query): ValidQuery<PageQuery>,
 ) -> Result<Json<MatchLog>, ApiError> {
     Ok(Json(matches.log(&path.handle, query).await?))
@@ -152,7 +146,7 @@ pub(super) async fn match_log(
     get,
     path = "/api/players/{handle}",
     tag = "players",
-    params(PlayerPath),
+    params(HandlePath),
     responses(
         PathErrors,
         (status = 200, body = Player),
@@ -161,7 +155,7 @@ pub(super) async fn match_log(
 )]
 pub(super) async fn get_player(
     State(players): State<PlayerService>,
-    ValidPath(path): ValidPath<PlayerPath>,
+    ValidPath(path): ValidPath<HandlePath>,
 ) -> Result<Json<Player>, ApiError> {
     Ok(Json(players.get_by_handle(&path.handle).await?))
 }

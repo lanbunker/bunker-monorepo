@@ -1,4 +1,5 @@
 import { execFileSync } from "node:child_process"
+import { randomUUID } from "node:crypto"
 import { join } from "node:path"
 
 import { expect } from "@playwright/test"
@@ -137,10 +138,18 @@ export const setSession = (context: BrowserContext, token: string) =>
 /** Drops the session. The next page load is anonymous. */
 export const clearSession = (context: BrowserContext) => context.clearCookies()
 
-/** A new player, already logged in, and not one page load spent on it. */
-export const newPlayer = async (context: BrowserContext, prefix = "ply") => {
+/**
+ * A new player, already logged in, and not one page load spent on it. The
+ * player is active, so the public pages show them, unless `active` is false.
+ */
+export const newPlayer = async (
+    context: BrowserContext,
+    prefix = "ply",
+    { active = true } = {},
+) => {
     const name = handle(prefix)
     const token = await apiSignup(context.request, name)
+    if (active) activate(name)
     await setSession(context, token)
     return { name, token }
 }
@@ -177,6 +186,25 @@ export const promote = (name: string) => {
         ".timeout 5000",
         E2E_DB,
         `update players set role = 'admin' where handle = '${name}' collate nocase`,
+    ])
+}
+
+/**
+ * Makes a player active with SQL: a check-in at a past night, which pays no
+ * cycles, so the standing stays as it was. Each call adds its own night.
+ */
+export const activate = (name: string) => {
+    if (!HANDLE.test(name)) throw new Error(`not a handle: ${name}`)
+    const event = randomUUID()
+    const code = event.replaceAll("-", "").slice(0, 12)
+    execFileSync("sqlite3", [
+        "-cmd",
+        ".timeout 5000",
+        E2E_DB,
+        `insert into events (id, name, location, games, description, starts_at, ends_at, status, checkin_code, created_at)
+         values ('${event}', 'past night', '', '', '', 1, 2, 'draft', '${code}', 1);
+         insert into event_checkins (event_id, player_id, checked_in_at)
+         select '${event}', id, 1 from players where handle = '${name}' collate nocase;`,
     ])
 }
 
@@ -218,12 +246,17 @@ export const readableFailure = async (page: Page, contains: RegExp | string) => 
     expect(text.length).toBeLessThan(200)
 }
 
-/** Signs up `count` players named `prefix0`, `prefix1`, ... at the same time. */
+/**
+ * Signs up `count` active players named `prefix0`, `prefix1`, ... at the same
+ * time. Answers their tokens.
+ */
 export const signupMany = (request: APIRequestContext, prefix: string, count: number) =>
     Promise.all(
-        Array.from({ length: count }, (_, index) =>
-            apiSignup(request, `${prefix}${index}`),
-        ),
+        Array.from({ length: count }, async (_, index) => {
+            const token = await apiSignup(request, `${prefix}${index}`)
+            activate(`${prefix}${index}`)
+            return token
+        }),
     )
 
 const pad = (n: number) => String(n).padStart(2, "0")
@@ -304,8 +337,8 @@ const addEntrants = async (
     Promise.all(
         names.map(async (name, index) => {
             const found = await jsonOf(
-                await request.get(`${API}/api/players/${name}`, {
-                    headers: apiHeaders(),
+                await request.get(`${API}/api/admin/players/by-handle/${name}`, {
+                    headers: apiHeaders(token),
                 }),
                 idSchema,
             )
@@ -321,8 +354,9 @@ const addEntrants = async (
     )
 
 /**
- * Signs the players up and adds them as entrants, all at the same time. A tie
- * on level is drawn at random, so the order of the adds decides nothing.
+ * Signs the players up as active players and adds them as entrants, all at the
+ * same time. A tie on level is drawn at random, so the order of the adds
+ * decides nothing.
  * `levels` is as for `addEntrants`.
  */
 export const enrol = async (
@@ -333,6 +367,7 @@ export const enrol = async (
     levels: (number | undefined)[] = [],
 ) => {
     await Promise.all(names.map(name => apiSignup(request, name)))
+    for (const name of names) activate(name)
     await addEntrants(request, token, id, names, levels)
 }
 
@@ -407,6 +442,7 @@ const resetSchema = z.object({ temporaryPassword: z.string() })
 export const forcedPlayer = async (context: BrowserContext, prefix = "frc") => {
     const name = handle(prefix)
     await apiSignup(context.request, name)
+    activate(name)
     const admin = handle("adm")
     const adminToken = await apiSignup(context.request, admin)
     promote(admin)

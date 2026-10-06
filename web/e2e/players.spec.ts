@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test"
 
 import {
+    activate,
     adjustCycles,
     adminNamed,
     apiDuel,
@@ -140,6 +141,7 @@ test("an admin adjusts cycles, and the rank, the bar and the log follow", async 
     const admin = await adminNamed(context, `${base}a`)
     const name = `${base}b`
     await apiSignup(context.request, name)
+    activate(name)
     const roster = `/admin/players?q=${name}`
 
     await page.goto(roster)
@@ -317,6 +319,8 @@ test("a match log names the opponent, and a second loss names the nemesis", asyn
     const loser = handle("los")
     await apiSignup(context.request, winner)
     const loserToken = await apiSignup(context.request, loser)
+    activate(winner)
+    activate(loser)
 
     await apiDuel(context.request, admin.token, winner, loser, "2026-03-01")
 
@@ -358,4 +362,35 @@ test("a match log names the opponent, and a second loss names the nemesis", asyn
     await expect(all.first()).toContainText("02 MAR 2026")
     await expect(all.last()).toContainText("01 MAR 2026")
     await expect(page.locator("[data-record]")).toHaveText("0-2")
+})
+
+test("a player who never checked in sees a notice and has no public page", async ({
+    page,
+    context,
+}) => {
+    const player = await newPlayer(context, "ina", { active: false })
+
+    await page.goto("/profile")
+    const notice = page.locator("[data-inactive]")
+    await expect(notice).toContainText("account not active")
+    await expect(notice).toContainText("check in at the door")
+    await expect(page.getByRole("heading", { name: "medals" })).toHaveCount(0)
+    await expect(page.locator("[data-cycles-log]")).toHaveCount(0)
+    await expect(page.getByRole("link", { name: "PUBLIC PAGE" })).toHaveCount(0)
+
+    // Their own public link leads back to the profile. A stranger gets a 404.
+    await page.goto(`/players/${player.name}`)
+    await expect(page).toHaveURL(/\/profile$/)
+    await clearSession(context)
+    expect((await page.goto(`/players/${player.name}`))?.status()).toBe(404)
+    await page.goto(`/players?q=${player.name}`)
+    await expect(page.getByRole("search")).toContainText("0 matches")
+
+    // A first night is the only difference.
+    activate(player.name)
+    await setSession(context, player.token)
+    await page.goto("/profile")
+    await expect(notice).toHaveCount(0)
+    await expect(page.getByRole("link", { name: "PUBLIC PAGE" })).toBeVisible()
+    expect((await page.goto(`/players/${player.name}`))?.status()).toBe(200)
 })

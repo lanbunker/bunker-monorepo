@@ -85,7 +85,7 @@ export const sourceTotals = (totals: readonly KindTotal[]): Record<Source, numbe
  * nobody has cycles yet has no podium at all.
  */
 export const isPodium = (standing: Standing): boolean =>
-    standing.place <= 3 && standing.cycles > 0
+    (standing.place ?? Number.POSITIVE_INFINITY) <= 3 && standing.cycles > 0
 
 /** `1,240` or `-80`: a comma every three digits, and the sign of a loss stays. */
 export const formatCycles = (cycles: number): string =>

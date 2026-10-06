@@ -1,6 +1,8 @@
 ---
 import { actions } from "astro:actions"
+import { match } from "ts-pattern"
 import Alert from "../../components/ui/Alert.astro"
+import Badge from "../../components/ui/Badge.astro"
 import Button from "../../components/ui/Button.astro"
 import Glyph from "../../components/ui/Glyph.astro"
 import Pager from "../../components/ui/Pager.astro"
@@ -77,18 +79,29 @@ const notice = noticeFrom(Astro.url, {
 })
 const temporaryPassword = resetResult?.data?.temporaryPassword
 
+const SHOWS = ["all", "active", "inactive"] as const
+type Show = (typeof SHOWS)[number]
+
+// Anything but a known filter lists everyone, like a bad page number.
+const show: Show = SHOWS.find(s => s === Astro.url.searchParams.get("show")) ?? "all"
+const filters = { show: show === "all" ? undefined : show }
 const page = pageFrom(Astro.url)
 const q = searchFrom(Astro.url)
+const active = match(show)
+  .with("all", () => undefined)
+  .with("active", () => true)
+  .with("inactive", () => false)
+  .exhaustive()
 const result = await call(
   client =>
     client.GET("/api/admin/players", {
-      params: { query: { page, pageSize: PAGE_SIZE, q } },
+      params: { query: { page, pageSize: PAGE_SIZE, q, active } },
     }),
   session.token,
 )
 const roster = dataOf(result)
 if (roster && page > roster.totalPages && roster.totalPages > 0) {
-  return Astro.redirect(listPath("/admin/players", q, roster.totalPages))
+  return Astro.redirect(listPath("/admin/players", q, roster.totalPages, filters))
 }
 ---
 
@@ -106,7 +119,30 @@ if (roster && page > roster.totalPages && roster.totalPages > 0) {
     }
     tone="admin"
     heading="h1"
-  />
+  >
+    {filters.show && <input type="hidden" name="show" value={filters.show} />}
+  </SearchBar>
+
+  <nav
+    aria-label="Filter players"
+    class="mt-2 flex flex-wrap gap-x-3 text-2xs tracking-wider"
+  >
+    <span class="text-admin-dim">show:</span>
+    {SHOWS.map(option => (
+      <a
+        href={listPath("/admin/players", q, 1, {
+          show: option === "all" ? undefined : option,
+        })}
+        aria-current={option === show ? "true" : undefined}
+        class:list={[
+          "no-underline",
+          option === show ? "font-bold text-warn" : "text-admin-dim hover:text-warn",
+        ]}
+      >
+        {option}
+      </a>
+    ))}
+  </nav>
 
   <Alert message={notice} tone="warn" class="mt-3" />
   {temporaryPassword && (
@@ -140,15 +176,29 @@ if (roster && page > roster.totalPages && roster.totalPages > 0) {
           {roster.items.map(player => (
             <tr class="border-t border-warn/20">
               <td class="px-3 py-2">
-                <a
-                  href={`/players/${player.handle}`}
-                  class="inline-flex items-center gap-2 no-underline text-admin-ink hover:text-warn"
-                >
-                  <Glyph glyph={player.glyph} size="1.1em" />
-                  <span class="handle" title={player.handle}>
-                    {player.handle}
-                  </span>
-                </a>
+                <span class="inline-flex flex-wrap items-center gap-2">
+                  {player.active ? (
+                    <a
+                      href={`/players/${player.handle}`}
+                      class="inline-flex items-center gap-2 no-underline text-admin-ink hover:text-warn"
+                    >
+                      <Glyph glyph={player.glyph} size="1.1em" />
+                      <span class="handle" title={player.handle}>
+                        {player.handle}
+                      </span>
+                    </a>
+                  ) : (
+                    <>
+                      <span class="inline-flex items-center gap-2 text-admin-dim">
+                        <Glyph glyph={player.glyph} size="1.1em" />
+                        <span class="handle" title={player.handle}>
+                          {player.handle}
+                        </span>
+                      </span>
+                      <Badge tone="muted">inactive</Badge>
+                    </>
+                  )}
+                </span>
               </td>
               <td
                 class:list={[
@@ -275,6 +325,7 @@ if (roster && page > roster.totalPages && roster.totalPages > 0) {
       total={roster.total}
       href="/admin/players"
       q={q}
+      filters={filters}
       noun="player"
     />
   )}

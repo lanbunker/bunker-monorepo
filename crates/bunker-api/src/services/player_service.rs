@@ -1,4 +1,6 @@
-use bunker_models::{Account, Handle, Paginated, Player, PlayerId, Role, RosterQuery};
+use bunker_models::{
+    Account, AdminRosterQuery, Handle, Paginated, Player, PlayerId, Role, RosterQuery,
+};
 
 use crate::storage::{ListOrder, PlayerStorage, Removal, Renamed, RoleChanged};
 
@@ -14,7 +16,13 @@ impl PlayerService {
         Self { storage }
     }
 
+    /// The public page of a player.
     pub async fn get_by_handle(&self, handle: &Handle) -> Result<Player, ServiceError> {
+        public_by_handle(&self.storage, handle).await
+    }
+
+    /// What an admin finds behind a handle they typed, active or not.
+    pub async fn lookup(&self, handle: &Handle) -> Result<Player, ServiceError> {
         self.storage
             .get_by_handle(handle)
             .await?
@@ -29,22 +37,25 @@ impl PlayerService {
             .ok_or(ServiceError::PlayerIdNotFound(id))
     }
 
-    /// The public leaderboard: first place first.
+    /// The public leaderboard: active players only, first place first.
     pub async fn leaderboard(
         &self,
         query: &RosterQuery,
     ) -> Result<Paginated<Player>, ServiceError> {
         Ok(self
             .storage
-            .list(query.page(), query.term(), ListOrder::Standing)
+            .list(query.page(), query.term(), Some(true), ListOrder::Standing)
             .await?)
     }
 
     /// The backoffice roster: the last signup first.
-    pub async fn roster(&self, query: &RosterQuery) -> Result<Paginated<Player>, ServiceError> {
+    pub async fn roster(
+        &self,
+        query: &AdminRosterQuery,
+    ) -> Result<Paginated<Player>, ServiceError> {
         Ok(self
             .storage
-            .list(query.page(), query.term(), ListOrder::Newest)
+            .list(query.page(), query.term(), query.active, ListOrder::Newest)
             .await?)
     }
 
@@ -91,4 +102,18 @@ impl PlayerService {
 
         Ok(())
     }
+}
+
+/// A player anyone may look up. An inactive player answers like an unknown
+/// handle, so a signup that never came to an event has no public page. The
+/// handle can still show where the player took part, such as an entrant list.
+pub(super) async fn public_by_handle(
+    storage: &PlayerStorage,
+    handle: &Handle,
+) -> Result<Player, ServiceError> {
+    storage
+        .get_by_handle(handle)
+        .await?
+        .filter(|player| player.active)
+        .ok_or_else(|| ServiceError::PlayerNotFound(handle.clone()))
 }

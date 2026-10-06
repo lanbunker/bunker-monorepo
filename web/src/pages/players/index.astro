@@ -85,7 +85,7 @@ const me = sessionOf(Astro.locals)?.player.id
                   isPodium(player.standing) ? "font-bold text-bright" : "text-mute",
                 ]}
               >
-                #{String(player.standing.place).padStart(2, "0")}
+                #{String(player.standing.place ?? "--").padStart(2, "0")}
               </td>
               <td class="nowrap py-2">
                 <span class="inline-flex items-center gap-2">

@@ -45,6 +45,7 @@ use super::{
         player_router::match_log,
         player_router::cycles_rules,
         admin_router::list_players,
+        admin_router::lookup_player,
         admin_router::set_role,
         admin_router::rename_player,
         admin_router::reset_password,

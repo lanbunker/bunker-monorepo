@@ -16,6 +16,8 @@ interface Props {
 }
 
 const { player, glyph, tone = "default", whole = false, class: className } = Astro.props
+// An inactive player has no public page, so the name is not a link.
+const Tag = player.active ? "a" : "span"
 
 // The two tones are mirrors, and both brighten on hover, so both read as links.
 // A name in a list or a log is a reference: it rests plain, and the hover says
@@ -27,12 +29,12 @@ const toneClass: Record<Tone, string> = {
 }
 ---
 
-<a
-  href={`/players/${player.handle}`}
+<Tag
+  href={player.active ? `/players/${player.handle}` : undefined}
   class:list={[
     "no-underline",
     glyph && "inline-flex items-center gap-2",
-    toneClass[tone],
+    player.active ? toneClass[tone] : "text-dim",
     className,
   ]}
   style={`--player:${player.glyph.color}`}
@@ -40,4 +42,4 @@ const toneClass: Record<Tone, string> = {
 >
   {glyph && <Glyph glyph={player.glyph} size={glyph} />}
   <span class:list={[!whole && "handle"]}>{player.handle}</span>
-</a>
+</Tag>

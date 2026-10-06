@@ -16,10 +16,18 @@ export const searchFrom = (url: URL): string | undefined => {
     return term === "" ? undefined : term
 }
 
-/** A list URL with its search and, past the first page, its page. */
-export const listPath = (href: string, q: string | undefined, page: number): string => {
+/** A list URL with its search, its filters and, past the first page, its page. */
+export const listPath = (
+    href: string,
+    q: string | undefined,
+    page: number,
+    filters: Readonly<Record<string, string | undefined>> = {},
+): string => {
     const params = new URLSearchParams([
         ...(q === undefined ? [] : [["q", q]]),
+        ...Object.entries(filters).flatMap(([key, value]) =>
+            value === undefined ? [] : [[key, value]],
+        ),
         ...(page > 1 ? [["page", String(page)]] : []),
     ])
     const query = params.toString()

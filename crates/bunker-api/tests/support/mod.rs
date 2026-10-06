@@ -135,6 +135,39 @@ impl TestApi {
         read_json::<Account>(response).await.player
     }
 
+    /// Signs a player up and makes them active, so the public routes show them.
+    pub async fn signup_active(&self, handle: &str) -> Player {
+        self.signup(handle).await;
+        self.activate(handle).await;
+
+        self.player(handle).await
+    }
+
+    /// Makes a player active with SQL: a check-in at a past event, which pays
+    /// no cycles, so the standing stays as it was.
+    pub async fn activate(&self, handle: &str) {
+        let event = EventId::generate().to_string();
+        sqlx::query(
+            "insert into events (id, name, location, games, description, starts_at, ends_at,
+                                 status, checkin_code, created_at)
+             values (?1, 'past night', '', '', '', 1, 2, 'draft',
+                     substr(replace(?1, '-', ''), 1, 12), 1)",
+        )
+        .bind(&event)
+        .execute(self.pool())
+        .await
+        .unwrap();
+        sqlx::query(
+            "insert into event_checkins (event_id, player_id, checked_in_at)
+             select ?1, id, 1 from players where handle = ?2 collate nocase",
+        )
+        .bind(&event)
+        .bind(handle)
+        .execute(self.pool())
+        .await
+        .unwrap();
+    }
+
     /// Signs a player up and promotes them with SQL, the way `make admin` does.
     /// Returns the bearer token.
     pub async fn signup_admin(&self, handle: &str) -> String {
@@ -184,6 +217,16 @@ impl TestApi {
     /// The public player behind a handle.
     pub async fn player(&self, handle: &str) -> Player {
         let response = self.get(&format!("/api/players/{handle}")).await;
+        assert_eq!(response.status(), StatusCode::OK, "no player {handle}");
+
+        read_json(response).await
+    }
+
+    /// The player behind a handle as an admin finds them, active or not.
+    pub async fn lookup(&self, admin: &str, handle: &str) -> Player {
+        let response = self
+            .get_as(&format!("/api/admin/players/by-handle/{handle}"), admin)
+            .await;
         assert_eq!(response.status(), StatusCode::OK, "no player {handle}");
 
         read_json(response).await
@@ -262,8 +305,8 @@ impl TestApi {
             .await
     }
 
-    /// Signs up a player and adds them as an entrant through the admin route,
-    /// with the given level.
+    /// Signs up an active player and adds them as an entrant through the admin
+    /// route, with the given level.
     pub async fn add_rated_entrant(
         &self,
         admin: &str,
@@ -271,7 +314,7 @@ impl TestApi {
         handle: &str,
         skill: Option<u8>,
     ) -> Entrant {
-        let player = self.signup_player(handle).await;
+        let player = self.signup_active(handle).await;
         let response = self
             .post_as(
                 &format!("/api/admin/tournaments/{tournament}/entrants"),

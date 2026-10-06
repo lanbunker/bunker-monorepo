@@ -714,6 +714,15 @@
               "maxLength": 20,
               "minLength": 1
             }
+          },
+          {
+            "name": "active",
+            "in": "query",
+            "description": "`true` lists only active players, `false` only inactive ones. Absent\nlists every player.",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
           }
         ],
         "responses": {
@@ -749,6 +758,83 @@
           },
           "403": {
             "description": "Not an admin, or `PasswordChangeRequired`: a new password first",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "api_key": [],
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/admin/players/by-handle/{handle}": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Finds an inactive player too, unlike `/api/players/{handle}`, so an admin\ncan check in or register a player who is not on the board yet.",
+        "operationId": "lookup_player",
+        "parameters": [
+          {
+            "name": "handle",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Handle"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Player"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "A path parameter is malformed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid bearer token, or no valid `X-Api-Key` header",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not an admin, or `PasswordChangeRequired`: a new password first",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
             "content": {
               "application/json": {
                 "schema": {
@@ -4216,9 +4302,14 @@
         "required": [
           "event",
           "checkedInAt",
-          "cycles"
+          "cycles",
+          "activated"
         ],
         "properties": {
+          "activated": {
+            "type": "boolean",
+            "description": "Set when this check-in made the account active, so the player is on\nthe board from now on."
+          },
           "checkedInAt": {
             "type": "string",
             "format": "date-time"
@@ -5123,10 +5214,15 @@
                 "handle",
                 "glyph",
                 "role",
+                "active",
                 "standing",
                 "createdAt"
               ],
               "properties": {
+                "active": {
+                  "type": "boolean",
+                  "description": "Set by a first check-in, and always set for an admin. Only an active\nplayer is on the board and has a public page."
+                },
                 "createdAt": {
                   "type": "string",
                   "format": "date-time"
@@ -5485,10 +5581,15 @@
           "handle",
           "glyph",
           "role",
+          "active",
           "standing",
           "createdAt"
         ],
         "properties": {
+          "active": {
+            "type": "boolean",
+            "description": "Set by a first check-in, and always set for an admin. Only an active\nplayer is on the board and has a public page."
+          },
           "createdAt": {
             "type": "string",
             "format": "date-time"
@@ -5753,7 +5854,6 @@
         "description": "Where a player stands: the total, the rank it gives, and the place in the\nleaderboard. `next` is absent at the top of the ladder.",
         "required": [
           "cycles",
-          "place",
           "players",
           "rank",
           "floor"
@@ -5779,15 +5879,18 @@
             ]
           },
           "place": {
-            "type": "integer",
+            "type": [
+              "integer",
+              "null"
+            ],
             "format": "int32",
-            "description": "1 is the top. Equal totals share a place.",
+            "description": "1 is the top. Equal totals share a place. Present exactly when the\nplayer is active, because only an active player is on the board.",
             "minimum": 0
           },
           "players": {
             "type": "integer",
             "format": "int32",
-            "description": "How many players the place is among.",
+            "description": "How many active players the place is among.",
             "minimum": 0
           },
           "rank": {

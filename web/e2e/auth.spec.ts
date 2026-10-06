@@ -128,10 +128,11 @@ test("a token that Cloudflare refuses opens no account", async ({ request }) => 
     expect(await refused.text()).toContain(
         "The bot check failed. Wait for it to pass, then enlist again.",
     )
-    const player = await request.get(`${API}/api/players/${name}`, {
+    const attempt = await request.post(`${API}/api/auth/login`, {
+        data: { handle: name, password: PASSWORD },
         headers: apiHeaders(),
     })
-    expect(player.status()).toBe(404)
+    expect(attempt.status(), "no account was made").toBe(401)
 })
 
 test("a login prints the boot sequence, then opens the profile", async ({

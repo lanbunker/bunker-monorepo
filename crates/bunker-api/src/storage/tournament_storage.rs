@@ -132,7 +132,7 @@ impl TournamentStorage {
                       p.id as "winner_player_id?", p.handle as "winner_handle?",
                       p.glyph_bits as "winner_glyph_bits?", p.glyph_color as "winner_glyph_color?",
                       p.role as "winner_role?", p.created_at as "winner_player_created_at?",
-                      s.cycles as "winner_cycles?: i64", s.place as "winner_place?: i64", s.players as "winner_players?: i64"
+                      s.cycles as "winner_cycles?: i64", s.active as "winner_active?: bool", s.place as "winner_place?: i64", s.players as "winner_players?: i64"
                from tournaments t
                left join tournament_entrants w on w.id = t.winner_entrant_id
                left join players p on p.id = w.player_id
@@ -179,7 +179,7 @@ impl TournamentStorage {
                       p.id as "winner_player_id?", p.handle as "winner_handle?",
                       p.glyph_bits as "winner_glyph_bits?", p.glyph_color as "winner_glyph_color?",
                       p.role as "winner_role?", p.created_at as "winner_player_created_at?",
-                      s.cycles as "winner_cycles?: i64", s.place as "winner_place?: i64", s.players as "winner_players?: i64"
+                      s.cycles as "winner_cycles?: i64", s.active as "winner_active?: bool", s.place as "winner_place?: i64", s.players as "winner_players?: i64"
                from tournaments t
                left join tournament_entrants w on w.id = t.winner_entrant_id
                left join players p on p.id = w.player_id
@@ -312,7 +312,7 @@ impl TournamentStorage {
             r#"select e.id, e.seed, e.skill, e.registered_at,
                       p.id as "player_id?", p.handle as "handle?", p.glyph_bits as "glyph_bits?",
                       p.glyph_color as "glyph_color?", p.role as "role?", p.created_at as "player_created_at?",
-                      s.cycles as "cycles?: i64", s.place as "place?: i64", s.players as "players?: i64"
+                      s.cycles as "cycles?: i64", s.active as "active?: bool", s.place as "place?: i64", s.players as "players?: i64"
                from tournament_entrants e
                left join players p on p.id = e.player_id
                left join player_standings s on s.player_id = p.id
@@ -341,7 +341,7 @@ impl TournamentStorage {
             r#"select e.id, e.seed, e.skill, e.registered_at,
                       p.id as "player_id?", p.handle as "handle?", p.glyph_bits as "glyph_bits?",
                       p.glyph_color as "glyph_color?", p.role as "role?", p.created_at as "player_created_at?",
-                      s.cycles as "cycles?: i64", s.place as "place?: i64", s.players as "players?: i64"
+                      s.cycles as "cycles?: i64", s.active as "active?: bool", s.place as "place?: i64", s.players as "players?: i64"
                from tournament_entrants e
                left join players p on p.id = e.player_id
                left join player_standings s on s.player_id = p.id
@@ -800,6 +800,7 @@ struct TournamentRow {
     winner_role: Option<String>,
     winner_player_created_at: Option<i64>,
     winner_cycles: Option<i64>,
+    winner_active: Option<bool>,
     winner_place: Option<i64>,
     winner_players: Option<i64>,
 }
@@ -822,6 +823,7 @@ impl TryFrom<TournamentRow> for Tournament {
                     role: row.winner_role,
                     player_created_at: row.winner_player_created_at,
                     cycles: row.winner_cycles,
+                    active: row.winner_active,
                     place: row.winner_place,
                     players: row.winner_players,
                 }
@@ -868,6 +870,7 @@ struct EntrantRow {
     role: Option<String>,
     player_created_at: Option<i64>,
     cycles: Option<i64>,
+    active: Option<bool>,
     place: Option<i64>,
     players: Option<i64>,
 }
@@ -884,6 +887,7 @@ impl TryFrom<EntrantRow> for Entrant {
             role: row.role,
             created_at: row.player_created_at,
             cycles: row.cycles,
+            active: row.active,
             place: row.place,
             players: row.players,
         }

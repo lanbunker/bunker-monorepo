@@ -123,12 +123,17 @@ export const requireHuman = async (token: string, request: Request): Promise<voi
     if (refusal) throw refusal
 }
 
-/** The player behind a handle an admin typed. An unknown handle refuses the action. */
+/**
+ * The player behind a handle an admin typed, active or not, so a player who
+ * never checked in can be checked in. An unknown handle refuses the action.
+ */
 export const playerByHandle = async (handle: string, token: string): Promise<Player> =>
     unwrap(
         await call(
             client =>
-                client.GET("/api/players/{handle}", { params: { path: { handle } } }),
+                client.GET("/api/admin/players/by-handle/{handle}", {
+                    params: { path: { handle } },
+                }),
             token,
         ),
     )

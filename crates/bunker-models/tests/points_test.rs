@@ -33,7 +33,8 @@ fn player(handle: &str) -> Player {
             color: GlyphColor::from_hex("#ffb000").unwrap(),
         },
         role: Role::User,
-        standing: Standing::new(0, 1, 1),
+        active: true,
+        standing: Standing::new(0, Some(1), 1),
         created_at: OffsetDateTime::UNIX_EPOCH,
     }
 }
@@ -81,15 +82,15 @@ fn the_ladder_is_a_threshold_on_the_total() {
 
 #[test]
 fn a_standing_carries_the_floor_and_the_next_rank() {
-    let standing = Standing::new(860, 3, 42);
+    let standing = Standing::new(860, Some(3), 42);
     assert_eq!(standing.rank, Rank::User);
     assert_eq!(standing.floor, 600);
     assert_eq!(standing.next.unwrap().rank, Rank::Sudoer);
     assert_eq!(standing.next.unwrap().floor, 1500);
-    assert_eq!(standing.place, 3);
+    assert_eq!(standing.place, Some(3));
     assert_eq!(standing.players, 42);
 
-    let top = Standing::new(7000, 1, 42);
+    let top = Standing::new(7000, Some(1), 42);
     assert_eq!(top.rank, Rank::Kernel);
     assert!(top.next.is_none());
 

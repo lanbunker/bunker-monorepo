@@ -71,13 +71,19 @@ join tournament_entrants b on b.tournament_id = m.tournament_id and b.id = m.ent
 where m.winner is not null and t.status in ('live', 'concluded');
 
 CREATE VIEW player_standings as
-select p.id as player_id,
-       coalesce(sum(e.amount), 0) as cycles,
-       rank() over (order by coalesce(sum(e.amount), 0) desc) as place,
-       count(*) over () as players
-from players p
-left join point_entries e on e.player_id = p.id
-group by p.id;
+select player_id,
+       cycles,
+       active,
+       case when active then rank() over (partition by active order by cycles desc) end as place,
+       sum(active) over () as players
+from (
+    select p.id as player_id,
+           coalesce((select sum(e.amount) from point_entries e where e.player_id = p.id), 0)
+               as cycles,
+           (p.role = 'admin'
+            or exists (select 1 from event_checkins c where c.player_id = p.id)) as active
+    from players p
+);
 
 CREATE TABLE players (
     id            text primary key

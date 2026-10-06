@@ -1,5 +1,6 @@
 ---
 import { actions } from "astro:actions"
+import { match } from "ts-pattern"
 import BunkernetFrame from "../../components/BunkernetFrame.astro"
 import Alert from "../../components/ui/Alert.astro"
 import Button from "../../components/ui/Button.astro"
@@ -25,17 +26,25 @@ const here = checkinPath(code)
 // player to the login and back here, for a shared phone.
 const checked = Astro.getActionResult(actions.checkIn)
 if (checked?.data) {
-  return Astro.redirect(`${here}?done=${checked.data.paid ? "checked" : "already"}`)
+  const done = match(checked.data)
+    .with({ activated: true }, () => "activated")
+    .with({ paid: true }, () => "checked")
+    .otherwise(() => "already")
+  return Astro.redirect(`${here}?done=${done}`)
 }
 const loggedOut = Astro.getActionResult(actions.logout)
 if (loggedOut && !loggedOut.error) {
   return Astro.redirect(`/login?next=${encodeURIComponent(here)}`)
 }
 // The confirmation shows on `?done=checked`, the redirect of the scan that
-// paid. A scan that found the player in redirects to `?done=already`, which
-// shows the quieter "already in". The query string is anyone's to write, so the
-// API must agree that the player is in before the page claims a payment.
-const justChecked = Astro.url.searchParams.get("done") === "checked"
+// paid, and on `?done=activated`, a first night that also put the player on
+// the board. A scan that found the player in redirects to `?done=already`,
+// which shows the quieter "already in". The query string is anyone's to write,
+// so the API must agree that the player is in before the page claims a
+// payment. "activated" needs an active player, so a forged link can only
+// repeat a true fact to someone already on the board.
+const done = Astro.url.searchParams.get("done")
+const justChecked = done === "checked" || done === "activated"
 
 const session = sessionOf(Astro.locals)
 const [gateResult, mine, rules] = await Promise.all([
@@ -52,6 +61,7 @@ const event = gate?.event
 const already = mine ? (dataOf(mine)?.events ?? []).includes(event?.id ?? "") : false
 const next = encodeURIComponent(here)
 const pays = checkinCycles(dataOf(rules))
+const justActivated = done === "activated" && session?.player.active === true
 ---
 
 <Layout title={`CHECK-IN//${event?.name ?? "LAN_BUNKER"}`} bare noindex>
@@ -103,6 +113,12 @@ const pays = checkinCycles(dataOf(rules))
                     )}
                   </div>
                 </div>
+                {justActivated && (
+                  <p class="m-0 mt-3 text-accent" data-activated>
+                    <span aria-hidden="true">[ OK ] </span>account activated. you are on
+                    the board.
+                  </p>
+                )}
                 <p class="m-0 mt-3 text-dim">welcome to the bunker. have a good night.</p>
                 <div class="mt-4 flex flex-wrap items-center gap-4">
                   <Button href="/profile">MY PROFILE</Button>

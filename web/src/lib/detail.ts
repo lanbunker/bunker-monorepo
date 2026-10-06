@@ -27,7 +27,7 @@ const rank = z.enum(["zombie", "guest", "user", "sudoer", "daemon", "kernel"])
 
 const standing = z.object({
     cycles: z.number(),
-    place: z.number(),
+    place: z.number().nullable().optional(),
     players: z.number(),
     rank,
     floor: z.number(),
@@ -38,6 +38,7 @@ const player = z.object({
     id: z.string(),
     handle: z.string(),
     role: z.enum(["user", "admin"]),
+    active: z.boolean(),
     createdAt: z.string(),
     glyph,
     standing,

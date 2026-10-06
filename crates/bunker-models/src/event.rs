@@ -384,6 +384,9 @@ pub struct CheckinReceipt {
     pub checked_in_at: OffsetDateTime,
     /// What this call paid: the check-in cycles the first time, zero after.
     pub cycles: i64,
+    /// Set when this check-in made the account active, so the player is on
+    /// the board from now on.
+    pub activated: bool,
 }
 
 /// Answer of `GET /api/me/checkins`: the events the caller checked in to.

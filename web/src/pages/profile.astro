@@ -1,6 +1,7 @@
 ---
 import { actions } from "astro:actions"
 import CyclesPanel from "../components/CyclesPanel.astro"
+import InactiveNotice from "../components/InactiveNotice.astro"
 import MatchPanel from "../components/MatchPanel.astro"
 import MedalsPanel from "../components/MedalsPanel.astro"
 import NemesisPanel from "../components/NemesisPanel.astro"
@@ -11,6 +12,7 @@ import Button from "../components/ui/Button.astro"
 import Prompt from "../components/ui/Prompt.astro"
 import Layout from "../layouts/Layout.astro"
 import { call, dataOf } from "../lib/api"
+import { nextEvent } from "../lib/events"
 import { noticeFrom } from "../lib/form"
 import { RECENT_ENTRIES } from "../lib/paging"
 import { sessionOf } from "../lib/session"
@@ -23,26 +25,39 @@ if (loggedOut && !loggedOut.error) return Astro.redirect("/login")
 const session = sessionOf(Astro.locals)
 if (!session) return Astro.redirect("/login")
 const player = session.player
-const [logResult, matchResult] = await Promise.all([
-  call(client =>
-    client.GET("/api/players/{handle}/cycles", {
-      params: {
-        path: { handle: player.handle },
-        query: { page: 1, pageSize: RECENT_ENTRIES },
-      },
-    }),
-  ),
-  call(client =>
-    client.GET("/api/players/{handle}/matches", {
-      params: {
-        path: { handle: player.handle },
-        query: { page: 1, pageSize: RECENT_ENTRIES },
-      },
-    }),
-  ),
+// The public routes do not show an inactive player, and the event list is
+// small, so the first page holds the next night.
+const [logResult, matchResult, eventResult] = await Promise.all([
+  player.active
+    ? call(client =>
+        client.GET("/api/players/{handle}/cycles", {
+          params: {
+            path: { handle: player.handle },
+            query: { page: 1, pageSize: RECENT_ENTRIES },
+          },
+        }),
+      )
+    : undefined,
+  player.active
+    ? call(client =>
+        client.GET("/api/players/{handle}/matches", {
+          params: {
+            path: { handle: player.handle },
+            query: { page: 1, pageSize: RECENT_ENTRIES },
+          },
+        }),
+      )
+    : undefined,
+  player.active
+    ? undefined
+    : call(client =>
+        client.GET("/api/events", { params: { query: { page: 1, pageSize: 100 } } }),
+      ),
 ])
-const log = dataOf(logResult)
-const matches = dataOf(matchResult)
+const log = logResult && dataOf(logResult)
+const matches = matchResult && dataOf(matchResult)
+const events = eventResult && dataOf(eventResult)
+const next = nextEvent(events?.items ?? [])
 
 // `/password` and `/handle` redirect here after a change.
 const notice = noticeFrom(Astro.url, {
@@ -56,20 +71,27 @@ const notice = noticeFrom(Astro.url, {
 
   <Alert message={notice} tone="notice" class="mb-4" />
 
+  {!player.active && <InactiveNotice next={next} known={events !== undefined} />}
   <PlayerCard player={player} own />
-  <StandingPanels standing={player.standing} totals={log?.totals} />
-  <MedalsPanel />
-  {matches?.nemesis && (
-    <NemesisPanel handle={player.handle} nemesis={matches.nemesis} own />
+  {player.active && (
+    <>
+      <StandingPanels standing={player.standing} totals={log?.totals} />
+      <MedalsPanel />
+      {matches?.nemesis && (
+        <NemesisPanel handle={player.handle} nemesis={matches.nemesis} own />
+      )}
+
+      <MatchPanel handle={player.handle} log={matches} own />
+      <CyclesPanel handle={player.handle} log={log} own />
+    </>
   )}
 
-  <MatchPanel handle={player.handle} log={matches} own />
-  <CyclesPanel handle={player.handle} log={log} own />
-
   <div class="mt-6 flex flex-wrap items-center gap-3">
-    <Button href={`/players/${player.handle}`} variant="ghost">
-      PUBLIC PAGE
-    </Button>
+    {player.active && (
+      <Button href={`/players/${player.handle}`} variant="ghost">
+        PUBLIC PAGE
+      </Button>
+    )}
     <Button href="/handle" variant="ghost">
       CHANGE HANDLE
     </Button>

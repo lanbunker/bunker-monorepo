@@ -13,6 +13,7 @@ use support::{PASSWORD, TestApi, assert_error, read_json};
 async fn a_player_renames_themself_and_keeps_the_glyph() {
     let api = TestApi::with_database().await;
     let token = api.signup("dave").await.token;
+    api.activate("dave").await;
     let before = read_json::<Account>(api.get_as("/api/me", &token).await)
         .await
         .player;
@@ -130,7 +131,7 @@ async fn an_admin_renames_a_player_and_a_user_cannot() {
     let api = TestApi::with_database().await;
     let admin = api.signup_admin("root").await;
     let user = api.signup("zio").await.token;
-    let target = api.signup_player("dave").await;
+    let target = api.signup_active("dave").await;
     let path = format!("/api/admin/players/{}/handle", target.id);
 
     let refused = api

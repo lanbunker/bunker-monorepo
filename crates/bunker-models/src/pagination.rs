@@ -87,6 +87,40 @@ impl RosterQuery {
     }
 }
 
+/// The query string of the backoffice roster: [`RosterQuery`] and a filter on
+/// whether the player is active. A separate type, so the public list refuses
+/// the filter instead of ignoring it.
+#[derive(Debug, Clone, Default, Deserialize, IntoParams)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+#[into_params(parameter_in = Query)]
+pub struct AdminRosterQuery {
+    #[serde(default)]
+    #[param(value_type = u32, minimum = 1, default = 1)]
+    pub page: PageNumber,
+    #[serde(default)]
+    #[param(value_type = u32, minimum = 1, maximum = 100, default = 20)]
+    pub page_size: PageSize,
+    /// A piece of a handle. The match ignores case.
+    #[param(value_type = Option<String>, min_length = 1, max_length = 20)]
+    pub q: Option<SearchTerm>,
+    /// `true` lists only active players, `false` only inactive ones. Absent
+    /// lists every player.
+    pub active: Option<bool>,
+}
+
+impl AdminRosterQuery {
+    pub fn page(&self) -> PageQuery {
+        PageQuery {
+            page: self.page,
+            page_size: self.page_size,
+        }
+    }
+
+    pub fn term(&self) -> Option<&str> {
+        self.q.as_ref().map(AsRef::as_ref)
+    }
+}
+
 /// One page of results, and the totals a client needs for a pager.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]

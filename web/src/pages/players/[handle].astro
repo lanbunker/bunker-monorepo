@@ -28,12 +28,19 @@ const [result, logResult, matchResult] = await Promise.all([
   ),
 ])
 const failure = failureOf(result)
-if (failure && isMissing(failure)) return Astro.rewrite("/404")
+// An inactive player has no public page. Their own link leads to the profile,
+// which says why.
+const session = sessionOf(Astro.locals)
+if (failure && isMissing(failure)) {
+  return session?.player.handle.toLowerCase() === handle.toLowerCase()
+    ? Astro.redirect("/profile")
+    : Astro.rewrite("/404")
+}
 
 const player = dataOf(result)
 const log = dataOf(logResult)
 const matches = dataOf(matchResult)
-const own = player !== undefined && sessionOf(Astro.locals)?.player.id === player.id
+const own = player !== undefined && session?.player.id === player.id
 ---
 
 <Layout title={`${player?.handle ?? handle}//LAN_BUNKER`} active="players">

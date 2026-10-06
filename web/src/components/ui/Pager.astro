@@ -10,14 +10,25 @@ interface Props {
   href: string
   /** The search the pages are of, so a page link keeps it. */
   q?: string | undefined
+  /** The filters the pages are of, so a page link keeps them too. */
+  filters?: Readonly<Record<string, string | undefined>>
   /** Singular noun for the count, such as "player". */
   noun: string
   /** The plural, when adding an `s` does not make it. */
   plural?: string
 }
 
-const { page, totalPages, total, href, q, noun, plural = `${noun}s` } = Astro.props
-const link = (to: number) => listPath(href, q, to)
+const {
+  page,
+  totalPages,
+  total,
+  href,
+  q,
+  filters,
+  noun,
+  plural = `${noun}s`,
+} = Astro.props
+const link = (to: number) => listPath(href, q, to, filters)
 ---
 
 {totalPages > 1 && (

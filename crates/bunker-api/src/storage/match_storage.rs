@@ -61,7 +61,7 @@ impl MatchStorage {
             r#"select p.id as "id!", p.handle as "handle!", p.glyph_bits as "glyph_bits!: i64",
                       p.glyph_color as "glyph_color!", p.role as "role!",
                       p.created_at as "created_at!: i64",
-                      s.cycles as "cycles!: i64", s.place as "place!: i64",
+                      s.cycles as "cycles!: i64", s.active as "active!: bool", s.place as "place?: i64",
                       s.players as "players!: i64",
                       sum(v.won = 1) as "wins!: i64",
                       sum(v.won = 0) as "losses!: i64"
@@ -121,7 +121,7 @@ impl MatchStorage {
                       p.glyph_color as "opponent_glyph_color?",
                       p.role as "opponent_role?",
                       p.created_at as "opponent_created_at?: i64",
-                      s.cycles as "opponent_cycles?: i64", s.place as "opponent_place?: i64",
+                      s.cycles as "opponent_cycles?: i64", s.active as "opponent_active?: bool", s.place as "opponent_place?: i64",
                       s.players as "opponent_players?: i64"
                from player_matches v
                join tournaments t on t.id = v.tournament_id
@@ -166,7 +166,8 @@ struct NemesisRow {
     role: String,
     created_at: i64,
     cycles: i64,
-    place: i64,
+    active: bool,
+    place: Option<i64>,
     players: i64,
     wins: i64,
     losses: i64,
@@ -185,6 +186,7 @@ impl TryFrom<NemesisRow> for Rivalry {
                 role: row.role,
                 created_at: row.created_at,
                 cycles: row.cycles,
+                active: row.active,
                 place: row.place,
                 players: row.players,
             }
@@ -212,6 +214,7 @@ struct MatchLogRow {
     opponent_role: Option<String>,
     opponent_created_at: Option<i64>,
     opponent_cycles: Option<i64>,
+    opponent_active: Option<bool>,
     opponent_place: Option<i64>,
     opponent_players: Option<i64>,
 }
@@ -228,6 +231,7 @@ impl TryFrom<MatchLogRow> for PlayedMatch {
             role: row.opponent_role,
             created_at: row.opponent_created_at,
             cycles: row.opponent_cycles,
+            active: row.opponent_active,
             place: row.opponent_place,
             players: row.opponent_players,
         }

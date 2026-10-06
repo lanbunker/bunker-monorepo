@@ -10,14 +10,14 @@
 mod support;
 
 use axum::http::StatusCode;
-use bunker_models::{Paginated, Player};
+use bunker_models::{Account, Paginated, Player};
 use serde_json::Value;
 use support::{TestApi, assert_error, read_json};
 
 #[tokio::test]
 async fn a_player_is_readable_by_handle_without_a_token() {
     let api = TestApi::with_database().await;
-    let created = api.signup_player("dave").await;
+    let created = api.signup_active("dave").await;
 
     let response = api.get("/api/players/dave").await;
 
@@ -28,7 +28,7 @@ async fn a_player_is_readable_by_handle_without_a_token() {
 #[tokio::test]
 async fn a_handle_lookup_ignores_case() {
     let api = TestApi::with_database().await;
-    let created = api.signup_player("Fede_88").await;
+    let created = api.signup_active("Fede_88").await;
 
     let response = api.get("/api/players/fede_88").await;
 
@@ -55,7 +55,7 @@ async fn the_leaderboard_breaks_a_shared_place_with_the_newest_signup() {
     let api = TestApi::with_database().await;
     let mut expected = Vec::new();
     for handle in ["dave", "ziopera", "ciccio"] {
-        expected.push(api.signup_player(handle).await.id);
+        expected.push(api.signup_active(handle).await.id);
     }
     expected.reverse();
 
@@ -93,7 +93,7 @@ async fn an_empty_roster_is_an_empty_list() {
 #[tokio::test]
 async fn a_player_has_the_documented_wire_shape() {
     let api = TestApi::with_database().await;
-    let _created = api.signup_player("dave").await;
+    let _created = api.signup_active("dave").await;
 
     let body: Value = read_json(api.get("/api/players/dave").await).await;
 
@@ -102,9 +102,18 @@ async fn a_player_has_the_documented_wire_shape() {
     keys.sort_unstable();
     assert_eq!(
         keys,
-        ["createdAt", "glyph", "handle", "id", "role", "standing"]
+        [
+            "active",
+            "createdAt",
+            "glyph",
+            "handle",
+            "id",
+            "role",
+            "standing"
+        ]
     );
     assert_eq!(body["role"], "user");
+    assert_eq!(body["active"], true);
     assert_eq!(body["standing"]["cycles"], 0);
     assert_eq!(body["standing"]["rank"], "zombie");
     assert_eq!(body["standing"]["place"], 1);
@@ -131,7 +140,7 @@ async fn readiness_passes_with_a_migrated_database() {
 async fn consecutive_pages_are_disjoint_and_report_the_total() {
     let api = TestApi::with_database().await;
     for index in 0..5_u8 {
-        let _player = api.signup_player(&format!("player{index}")).await;
+        let _player = api.signup_active(&format!("player{index}")).await;
     }
 
     let first: Paginated<Player> = read_json(api.get("/api/players?page=1&pageSize=2").await).await;
@@ -160,7 +169,7 @@ async fn consecutive_pages_are_disjoint_and_report_the_total() {
 #[tokio::test]
 async fn a_page_past_the_end_is_empty_but_keeps_the_total() {
     let api = TestApi::with_database().await;
-    let _player = api.signup_player("dave").await;
+    let _player = api.signup_active("dave").await;
 
     let page: Paginated<Player> = read_json(api.get("/api/players?page=50").await).await;
 
@@ -185,7 +194,7 @@ async fn the_default_window_is_page_one_of_twenty() {
 async fn the_roster_search_matches_part_of_a_handle_without_case() {
     let api = TestApi::with_database().await;
     for handle in ["dave", "BigDave", "ziopera"] {
-        api.signup_player(handle).await;
+        api.signup_active(handle).await;
     }
 
     let response = api.get("/api/players?q=DAV").await;
@@ -205,7 +214,7 @@ async fn the_roster_search_matches_part_of_a_handle_without_case() {
 async fn an_underscore_in_a_search_term_is_a_character() {
     let api = TestApi::with_database().await;
     for handle in ["z_opera", "ziopera"] {
-        api.signup_player(handle).await;
+        api.signup_active(handle).await;
     }
 
     let response = api.get("/api/players?q=z_o").await;
@@ -219,7 +228,7 @@ async fn an_underscore_in_a_search_term_is_a_character() {
 #[tokio::test]
 async fn a_search_with_no_match_is_an_empty_page() {
     let api = TestApi::with_database().await;
-    api.signup_player("dave").await;
+    api.signup_active("dave").await;
 
     let response = api.get("/api/players?q=nobody").await;
 
@@ -228,4 +237,66 @@ async fn a_search_with_no_match_is_an_empty_page() {
     assert!(page.items.is_empty());
     assert_eq!(page.total, 0);
     assert_eq!(page.total_pages, 0);
+}
+
+#[tokio::test]
+async fn a_player_who_never_checked_in_has_no_public_trace() {
+    let api = TestApi::with_database().await;
+    api.signup_active("erin").await;
+    let token = api.signup("dave").await.token;
+
+    for path in [
+        "/api/players/dave",
+        "/api/players/dave/cycles",
+        "/api/players/dave/matches",
+    ] {
+        assert_error(api.get(path).await, StatusCode::NOT_FOUND, "ItemNotFound").await;
+    }
+    let board: Paginated<Player> = read_json(api.get("/api/players").await).await;
+    let handles: Vec<&str> = board.items.iter().map(|p| p.handle.as_ref()).collect();
+    assert_eq!(handles, ["erin"]);
+    assert_eq!(board.total, 1);
+    assert_eq!(board.items[0].standing.players, 1, "dave is not counted");
+
+    let me: Account = read_json(api.get_as("/api/me", &token).await).await;
+    assert!(!me.player.active);
+    assert_eq!(me.player.standing.place, None);
+    assert_eq!(me.player.standing.players, 1);
+}
+
+#[tokio::test]
+async fn an_inactive_player_with_cycles_moves_nobody_on_the_board() {
+    let api = TestApi::with_database().await;
+    let admin = api.signup_admin("root").await;
+    let erin = api.signup_active("erin").await;
+    let dave = api.signup_player("dave").await;
+    for (id, amount) in [(erin.id, 50), (dave.id, 500)] {
+        let response = api
+            .post_as(
+                &format!("/api/admin/players/{id}/cycles"),
+                &serde_json::json!({ "amount": amount, "note": "x" }),
+                &admin,
+            )
+            .await;
+        assert_eq!(response.status(), StatusCode::CREATED);
+    }
+
+    let erin = api.player("erin").await;
+    assert_eq!(
+        erin.standing.place,
+        Some(1),
+        "dave has more, but is not on the board"
+    );
+    assert_eq!(erin.standing.players, 2, "erin and the admin");
+    let dave = api.lookup(&admin, "dave").await;
+    assert_eq!(dave.standing.cycles, 500);
+    assert_eq!(dave.standing.place, None);
+}
+
+#[tokio::test]
+async fn the_public_board_refuses_the_backoffice_filter() {
+    let api = TestApi::with_database().await;
+
+    let refused = api.get("/api/players?active=false").await;
+    assert_eq!(refused.status(), StatusCode::BAD_REQUEST);
 }

@@ -133,7 +133,7 @@ impl PlayerStorage {
         let row = sqlx::query_as!(
             PlayerRow,
             r#"select p.id, p.handle, p.glyph_bits, p.glyph_color, p.role, p.created_at,
-                    s.cycles as "cycles!: i64", s.place as "place!: i64", s.players as "players!: i64"
+                    s.cycles as "cycles!: i64", s.active as "active!: bool", s.place as "place?: i64", s.players as "players!: i64"
              from players p join player_standings s on s.player_id = p.id
              where p.handle = ?1 collate nocase"#,
             handle,
@@ -151,7 +151,7 @@ impl PlayerStorage {
         let row = sqlx::query_as!(
             AccountRow,
             r#"select p.id, p.handle, p.glyph_bits, p.glyph_color, p.role, p.created_at,
-                      s.cycles as "cycles!: i64", s.place as "place!: i64", s.players as "players!: i64",
+                      s.cycles as "cycles!: i64", s.active as "active!: bool", s.place as "place?: i64", s.players as "players!: i64",
                       p.must_change_password
                from players p join player_standings s on s.player_id = p.id
                where p.id = ?1"#,
@@ -273,10 +273,12 @@ impl PlayerStorage {
 
     /// The count and the page share one transaction. The id breaks every tie.
     /// `term` matches with `instr` and not `like`, so `_` is a literal.
+    /// `None` for `active` lists every player.
     pub async fn list(
         &self,
         query: PageQuery,
         term: Option<&str>,
+        active: Option<bool>,
         order: ListOrder,
     ) -> Result<Paginated<Player>, StorageError> {
         let limit = query.limit();
@@ -285,9 +287,11 @@ impl PlayerStorage {
 
         let mut tx = self.pool.begin().await.map_err(StorageError::from_query)?;
         let total = sqlx::query_scalar!(
-            "select count(*) from players
-             where ?1 is null or instr(lower(handle), lower(?1)) > 0",
+            "select count(*) from players p join player_standings s on s.player_id = p.id
+             where (?1 is null or instr(lower(p.handle), lower(?1)) > 0)
+               and (?2 is null or s.active = ?2)",
             term,
+            active,
         )
         .fetch_one(&mut *tx)
         .await
@@ -297,16 +301,19 @@ impl PlayerStorage {
         let rows = sqlx::query_as!(
             PlayerRow,
             r#"select p.id, p.handle, p.glyph_bits, p.glyph_color, p.role, p.created_at,
-                      s.cycles as "cycles!: i64", s.place as "place!: i64", s.players as "players!: i64"
+                      s.cycles as "cycles!: i64", s.active as "active!: bool", s.place as "place?: i64", s.players as "players!: i64"
                from players p join player_standings s on s.player_id = p.id
-               where ?4 is null or instr(lower(p.handle), lower(?4)) > 0
-               order by case when ?1 = 1 then s.place else 0 end asc,
+               where (?4 is null or instr(lower(p.handle), lower(?4)) > 0)
+                 and (?5 is null or s.active = ?5)
+               order by case when ?1 = 1 then s.place is null else 0 end asc,
+                        case when ?1 = 1 then s.place else 0 end asc,
                         p.created_at desc, p.id asc
                limit ?2 offset ?3"#,
             by_standing,
             limit,
             offset,
             term,
+            active,
         )
         .fetch_all(&mut *tx)
         .await
@@ -436,7 +443,8 @@ struct AccountRow {
     role: String,
     created_at: i64,
     cycles: i64,
-    place: i64,
+    active: bool,
+    place: Option<i64>,
     players: i64,
     must_change_password: i64,
 }
@@ -453,6 +461,7 @@ impl TryFrom<AccountRow> for Account {
             role: row.role,
             created_at: row.created_at,
             cycles: row.cycles,
+            active: row.active,
             place: row.place,
             players: row.players,
         }
@@ -475,7 +484,7 @@ async fn public_by_id(
     let row = sqlx::query_as!(
         PlayerRow,
         r#"select p.id, p.handle, p.glyph_bits, p.glyph_color, p.role, p.created_at,
-                  s.cycles as "cycles!: i64", s.place as "place!: i64", s.players as "players!: i64"
+                  s.cycles as "cycles!: i64", s.active as "active!: bool", s.place as "place?: i64", s.players as "players!: i64"
            from players p join player_standings s on s.player_id = p.id
            where p.id = ?1"#,
         id,

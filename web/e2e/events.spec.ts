@@ -183,8 +183,10 @@ test("a visitor at the door enlists, comes back, and checks in for the check-in 
     expect(await form.locator("svg rect").count()).toBeGreaterThan(0)
     await page.getByRole("button", { name: "CHECK IN" }).click()
 
-    await expect(page).toHaveURL(`/checkin/${code}?done=checked`)
+    // The first night of a new player also puts them on the board.
+    await expect(page).toHaveURL(`/checkin/${code}?done=activated`)
     await expect(page.getByRole("status")).toContainText("CHECKED IN")
+    await expect(page.locator("[data-activated]")).toContainText("account activated")
     await expect(page.locator("[data-state=confirmed]")).toContainText(player)
     await expect(page.locator("[data-state=confirmed]")).toContainText(`+${pays} cycles`)
 
@@ -238,7 +240,7 @@ test("an admin checks a player in by hand for a night that is over", async ({
         -30 * 24 * HOUR,
         5 * HOUR,
     )
-    const player = await newPlayer(context, "old")
+    const player = await newPlayer(context, "old", { active: false })
     const pays = cyclesOf(await cyclesRules(context.request), "checkin", 0)
     await setSession(context, admin.token)
 
@@ -250,6 +252,9 @@ test("an admin checks a player in by hand for a night that is over", async ({
         player.name,
     )
     expect((await standingOf(context.request, player.name)).cycles).toBe(pays)
+    // The player never scanned a door, and this check-in put them on the board.
+    await page.goto(`/admin/players?q=${player.name}&show=active`)
+    await expect(page.getByRole("link", { name: player.name })).toBeVisible()
 
     // This night is over, so the public page files it under the archive.
     await page.goto("/events")

@@ -75,7 +75,7 @@ async fn an_admin_searches_the_roster_by_handle() {
 async fn an_admin_promotes_and_demotes_a_player() {
     let api = TestApi::with_database().await;
     let admin = api.signup_admin("root").await;
-    let dave = api.signup_player("dave").await;
+    let dave = api.signup_active("dave").await;
     let path = format!("/api/admin/players/{}", dave.id);
 
     let promoted = api
@@ -272,10 +272,20 @@ async fn two_admins_who_demote_each_other_at_once_leave_one_admin() {
         one.status(),
         two.status()
     );
-    let admins = [api.player("root").await, api.player("second").await]
-        .iter()
-        .filter(|p| p.role == Role::Admin)
-        .count();
+    // The demoted one never checked in, so only the admin lookup finds them,
+    // and only the admin who is left can use it.
+    let survivor = if one.status() == StatusCode::OK {
+        &root_token
+    } else {
+        &second_token
+    };
+    let admins = [
+        api.lookup(survivor, "root").await,
+        api.lookup(survivor, "second").await,
+    ]
+    .iter()
+    .filter(|p| p.role == Role::Admin)
+    .count();
     assert_eq!(admins, 1);
 }
 
@@ -340,4 +350,57 @@ async fn every_answer_with_a_secret_or_the_account_is_not_stored() {
     }
     let public = api.get("/api/players/dave").await;
     assert!(public.headers().get("cache-control").is_none());
+}
+
+#[tokio::test]
+async fn the_roster_filters_on_whether_a_player_is_active() {
+    let api = TestApi::with_database().await;
+    let admin = api.signup_admin("root").await;
+    api.signup_active("erin").await;
+    api.signup_player("dave").await;
+
+    let handles = |query: &'static str| {
+        let api = &api;
+        let admin = &admin;
+        async move {
+            let page: Paginated<Player> = read_json(
+                api.get_as(&format!("/api/admin/players{query}"), admin)
+                    .await,
+            )
+            .await;
+            let mut handles: Vec<String> = page
+                .items
+                .iter()
+                .map(|p| p.handle.as_ref().to_owned())
+                .collect();
+            handles.sort_unstable();
+            assert_eq!(page.total, handles.len() as u64);
+            handles
+        }
+    };
+    assert_eq!(handles("").await, ["dave", "erin", "root"]);
+    assert_eq!(handles("?active=true").await, ["erin", "root"]);
+    assert_eq!(handles("?active=false").await, ["dave"]);
+    assert_eq!(handles("?active=false&q=ER").await, Vec::<String>::new());
+
+    let malformed = api.get_as("/api/admin/players?active=maybe", &admin).await;
+    assert_eq!(malformed.status(), StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+async fn an_admin_finds_an_inactive_player_by_handle() {
+    let api = TestApi::with_database().await;
+    let admin = api.signup_admin("root").await;
+    let user = api.signup("dave").await.token;
+
+    let found = api.lookup(&admin, "DAVE").await;
+    assert_eq!(found.handle.as_ref(), "dave");
+    assert!(!found.active);
+
+    let unknown = api
+        .get_as("/api/admin/players/by-handle/nobody", &admin)
+        .await;
+    assert_error(unknown, StatusCode::NOT_FOUND, "ItemNotFound").await;
+    let as_user = api.get_as("/api/admin/players/by-handle/dave", &user).await;
+    assert_error(as_user, StatusCode::FORBIDDEN, "Forbidden").await;
 }

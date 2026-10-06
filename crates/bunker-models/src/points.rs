@@ -144,9 +144,10 @@ impl Rank {
 #[serde(rename_all = "camelCase")]
 pub struct Standing {
     pub cycles: i64,
-    /// 1 is the top. Equal totals share a place.
-    pub place: u32,
-    /// How many players the place is among.
+    /// 1 is the top. Equal totals share a place. Present exactly when the
+    /// player is active, because only an active player is on the board.
+    pub place: Option<u32>,
+    /// How many active players the place is among.
     pub players: u32,
     pub rank: Rank,
     /// The cycles the current rank starts at.
@@ -162,7 +163,7 @@ pub struct NextRank {
 }
 
 impl Standing {
-    pub fn new(cycles: i64, place: u32, players: u32) -> Self {
+    pub fn new(cycles: i64, place: Option<u32>, players: u32) -> Self {
         let rank = Rank::for_cycles(cycles);
         Self {
             cycles,

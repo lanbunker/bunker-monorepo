@@ -28,6 +28,9 @@ pub struct Player {
     pub handle: Handle,
     pub glyph: Glyph,
     pub role: Role,
+    /// Set by a first check-in, and always set for an admin. Only an active
+    /// player is on the board and has a public page.
+    pub active: bool,
     /// Cycles, rank and place. Derived from the ledger on every read, so it is
     /// never stale.
     pub standing: Standing,

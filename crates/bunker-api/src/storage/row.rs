@@ -54,12 +54,13 @@ pub(super) struct PlayerRow {
     pub(super) role: String,
     pub(super) created_at: i64,
     pub(super) cycles: i64,
-    pub(super) place: i64,
+    pub(super) active: bool,
+    pub(super) place: Option<i64>,
     pub(super) players: i64,
 }
 
 /// The player columns of a left join, before they are a player. A query that
-/// reads an optional player selects the same nine columns as [`PlayerRow`],
+/// reads an optional player selects the same ten columns as [`PlayerRow`],
 /// each one nullable.
 #[derive(Debug)]
 pub(super) struct OptionalPlayerRow {
@@ -70,13 +71,15 @@ pub(super) struct OptionalPlayerRow {
     pub(super) role: Option<String>,
     pub(super) created_at: Option<i64>,
     pub(super) cycles: Option<i64>,
+    pub(super) active: Option<bool>,
     pub(super) place: Option<i64>,
     pub(super) players: Option<i64>,
 }
 
 impl OptionalPlayerRow {
     /// The columns are all present or all absent: they come from one left join.
-    /// A mix means the join broke, and that is a malformed row of `table`.
+    /// A mix means the join broke, and that is a malformed row of `table`. The
+    /// place is the exception: an inactive player has none.
     pub(super) fn into_player(self, table: &'static str) -> Result<Option<Player>, StorageError> {
         match (
             self.id,
@@ -86,7 +89,7 @@ impl OptionalPlayerRow {
             self.role,
             self.created_at,
             self.cycles,
-            self.place,
+            self.active,
             self.players,
         ) {
             (
@@ -97,7 +100,7 @@ impl OptionalPlayerRow {
                 Some(role),
                 Some(created_at),
                 Some(cycles),
-                Some(place),
+                Some(active),
                 Some(players),
             ) => Ok(Some(
                 PlayerRow {
@@ -108,7 +111,8 @@ impl OptionalPlayerRow {
                     role,
                     created_at,
                     cycles,
-                    place,
+                    active,
+                    place: self.place,
                     players,
                 }
                 .try_into()?,
@@ -130,8 +134,19 @@ impl TryFrom<PlayerRow> for Player {
         let color = GlyphColor::from_hex(&row.glyph_color)
             .ok_or_else(|| StorageError::malformed_row(PLAYERS, MalformedField("glyph_color")))?;
 
-        let place = u32::try_from(row.place)
-            .map_err(|error| StorageError::malformed_row(PLAYERS, error))?;
+        let place = match (row.active, row.place) {
+            (true, Some(place)) => Some(
+                u32::try_from(place)
+                    .map_err(|error| StorageError::malformed_row(PLAYERS, error))?,
+            ),
+            (false, None) => None,
+            _ => {
+                return Err(StorageError::malformed_row(
+                    PLAYERS,
+                    MalformedField("place"),
+                ));
+            }
+        };
         let players = u32::try_from(row.players)
             .map_err(|error| StorageError::malformed_row(PLAYERS, error))?;
 
@@ -144,6 +159,7 @@ impl TryFrom<PlayerRow> for Player {
                 .role
                 .parse()
                 .map_err(|error| StorageError::malformed_row(PLAYERS, error))?,
+            active: row.active,
             standing: Standing::new(row.cycles, place, players),
             created_at: from_micros(PLAYERS, row.created_at)?,
         })

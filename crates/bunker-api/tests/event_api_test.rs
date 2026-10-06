@@ -122,11 +122,14 @@ async fn a_player_checks_in_one_time_and_the_door_pays() {
 
     let gate: CheckinGate = read_json(api.get(&door).await).await;
     assert_eq!(gate.window, CheckinWindow::Open);
+    let hidden = api.get("/api/players/dave").await;
+    assert_error(hidden, StatusCode::NOT_FOUND, "ItemNotFound").await;
 
     let response = api.post_as(&door, &json!({}), &dave).await;
     assert_eq!(response.status(), StatusCode::CREATED);
     let receipt: CheckinReceipt = read_json(response).await;
     assert_eq!(receipt.cycles, CHECKIN_CYCLES);
+    assert!(receipt.activated);
     assert_eq!(receipt.event.checkin_count, 1);
 
     let standing = api.player("dave").await.standing;
@@ -151,6 +154,7 @@ async fn a_player_checks_in_one_time_and_the_door_pays() {
     let repeat: CheckinReceipt = read_json(again).await;
     assert_eq!(repeat.checked_in_at, receipt.checked_in_at);
     assert_eq!(repeat.cycles, 0, "a repeat pays nothing");
+    assert!(!repeat.activated);
     assert_eq!(repeat.event.checkin_count, 1);
     assert_eq!(api.player("dave").await.standing.cycles, CHECKIN_CYCLES);
 
@@ -172,6 +176,32 @@ async fn a_player_checks_in_one_time_and_the_door_pays() {
         .map(|c| c.player.handle.as_ref())
         .collect();
     assert_eq!(handles, ["dave", "erin"], "first at the door first");
+}
+
+#[tokio::test]
+async fn only_the_first_night_activates_and_an_admin_is_active_already() {
+    let api = TestApi::with_database().await;
+    let admin = api.signup_admin("root").await;
+    let dave = api.signup("dave").await.token;
+    let mut doors = Vec::new();
+    for _ in 0..2 {
+        let created = api.create_event(&admin, -HOUR, 6 * HOUR).await;
+        let detail = api.publish_event(&admin, created.id).await;
+        doors.push(format!("/api/checkin/{}", detail.checkin_code));
+    }
+
+    let first: CheckinReceipt = read_json(api.post_as(&doors[0], &json!({}), &dave).await).await;
+    let second: CheckinReceipt = read_json(api.post_as(&doors[1], &json!({}), &dave).await).await;
+    assert!(first.activated);
+    assert!(
+        !second.activated,
+        "a second night pays but activates nothing"
+    );
+    assert_eq!(second.cycles, CHECKIN_CYCLES);
+
+    let root: CheckinReceipt = read_json(api.post_as(&doors[0], &json!({}), &admin).await).await;
+    assert_eq!(root.cycles, CHECKIN_CYCLES);
+    assert!(!root.activated, "an admin is on the board from the start");
 }
 
 #[tokio::test]
@@ -213,7 +243,9 @@ async fn the_door_refuses_a_scan_outside_the_window() {
     let anonymous = api.post("/api/checkin/zzzzzzzzzzzz", &json!({})).await;
     assert_error(anonymous, StatusCode::UNAUTHORIZED, "Unauthorized").await;
 
-    assert_eq!(api.player("dave").await.standing.cycles, 0);
+    let dave = api.lookup(&admin, "dave").await;
+    assert_eq!(dave.standing.cycles, 0);
+    assert!(!dave.active, "a refused scan activates nobody");
 }
 
 #[tokio::test]
@@ -313,8 +345,12 @@ async fn deleting_an_event_takes_its_checkins_and_their_cycles() {
         .await;
     assert_eq!(deleted.status(), StatusCode::NO_CONTENT);
 
-    assert_eq!(api.player("dave").await.standing.cycles, 0);
-    assert_eq!(api.cycles_log("dave").await.entries.total, 0);
+    // The only check-in went with the event, so dave leaves the board too.
+    let after = api.lookup(&admin, "dave").await;
+    assert_eq!(after.standing.cycles, 0);
+    assert!(!after.active);
+    let hidden = api.get("/api/players/dave/cycles").await;
+    assert_error(hidden, StatusCode::NOT_FOUND, "ItemNotFound").await;
     let mine: Checkins = read_json(api.get_as("/api/me/checkins", &dave).await).await;
     assert!(mine.events.is_empty());
     let gone = api.get(&door).await;
@@ -331,7 +367,8 @@ async fn an_admin_checks_a_player_in_by_hand_for_any_night() {
     let api = TestApi::with_database().await;
     let admin = api.signup_admin("root").await;
     let user = api.signup("dave").await.token;
-    let dave = api.player("dave").await;
+    let dave = api.lookup(&admin, "dave").await;
+    assert!(!dave.active);
     // A night from long before the door existed, still a draft.
     let old = api.create_event(&admin, -400 * 24 * HOUR, 6 * HOUR).await;
     let path = format!("/api/admin/events/{}/checkins", old.id);
@@ -347,6 +384,7 @@ async fn an_admin_checks_a_player_in_by_hand_for_any_night() {
     assert_eq!(response.status(), StatusCode::CREATED);
     let receipt: CheckinReceipt = read_json(response).await;
     assert_eq!(receipt.cycles, CHECKIN_CYCLES);
+    assert!(receipt.activated);
     assert_eq!(receipt.event.checkin_count, 1);
     assert_eq!(api.player("dave").await.standing.cycles, CHECKIN_CYCLES);
     let line = &api.cycles_log("dave").await.entries.items[0];
@@ -359,6 +397,7 @@ async fn an_admin_checks_a_player_in_by_hand_for_any_night() {
     assert_eq!(again.status(), StatusCode::OK);
     let repeat: CheckinReceipt = read_json(again).await;
     assert_eq!(repeat.cycles, 0);
+    assert!(!repeat.activated);
     assert_eq!(api.player("dave").await.standing.cycles, CHECKIN_CYCLES);
 
     let detail: EventDetail = read_json(

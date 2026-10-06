@@ -6,6 +6,7 @@ use time::OffsetDateTime;
 use crate::storage::{NewAdjustment, PlayerStorage, PointStorage, StorageError};
 
 use super::error::ServiceError;
+use super::player_service::public_by_handle;
 
 /// The rules of the ledger: who may write to it by hand. The tournament awards
 /// live in `TournamentService`, because they are part of concluding a
@@ -64,11 +65,7 @@ impl PointsService {
         handle: &Handle,
         query: PageQuery,
     ) -> Result<CyclesLog, ServiceError> {
-        let player = self
-            .players
-            .get_by_handle(handle)
-            .await?
-            .ok_or_else(|| ServiceError::PlayerNotFound(handle.clone()))?;
+        let player = public_by_handle(&self.players, handle).await?;
         let entries = self.storage.history(player.id, query).await?;
         let mut totals = self.storage.totals(player.id).await?;
         // The legend lists the kinds in this order, so the breakdown does too.

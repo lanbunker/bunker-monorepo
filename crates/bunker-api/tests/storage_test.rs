@@ -47,7 +47,7 @@ async fn an_entrant_write_from_a_stale_status_writes_nothing() {
         open_at: Some(now),
     };
     let erin = api.signup_player("erin").await;
-    let dave = api.player("dave").await;
+    let dave = api.lookup(&admin, "dave").await;
 
     let added = storage
         .add_entrant(

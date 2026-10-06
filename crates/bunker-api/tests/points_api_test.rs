@@ -62,12 +62,12 @@ async fn log(api: &TestApi, handle: &str, token: Option<&str>) -> CyclesLog {
 #[tokio::test]
 async fn a_new_player_is_a_zombie_in_first_place_with_no_history() {
     let api = TestApi::with_database().await;
-    api.signup_player("dave").await;
+    api.signup_active("dave").await;
 
     let dave = api.player("dave").await;
     assert_eq!(dave.standing.cycles, 0);
     assert_eq!(dave.standing.rank, Rank::Zombie);
-    assert_eq!(dave.standing.place, 1);
+    assert_eq!(dave.standing.place, Some(1));
     assert_eq!(dave.standing.players, 1);
     assert_eq!(dave.standing.floor, 0);
     assert_eq!(dave.standing.next.unwrap().rank, Rank::Guest);
@@ -81,7 +81,7 @@ async fn a_new_player_is_a_zombie_in_first_place_with_no_history() {
 async fn an_admin_adjusts_cycles_and_the_standing_follows() {
     let api = TestApi::with_database().await;
     let admin = api.signup_admin("root").await;
-    let dave = api.signup_player("dave").await;
+    let dave = api.signup_active("dave").await;
 
     let entry = adjust(&api, &admin, dave.id, 120, "helped at the door").await;
     assert_eq!(entry.amount, 120);
@@ -92,7 +92,7 @@ async fn an_admin_adjusts_cycles_and_the_standing_follows() {
     let after = api.player("dave").await;
     assert_eq!(after.standing.cycles, 120);
     assert_eq!(after.standing.rank, Rank::Guest);
-    assert_eq!(after.standing.place, 1);
+    assert_eq!(after.standing.place, Some(1));
 
     adjust(&api, &admin, dave.id, -50, "took it back").await;
     let corrected = api.player("dave").await;
@@ -122,7 +122,7 @@ async fn an_admin_adjusts_cycles_and_the_standing_follows() {
 async fn an_adjustment_answers_the_line_as_the_ledger_holds_it() {
     let api = TestApi::with_database().await;
     let admin = api.signup_admin("root").await;
-    let dave = api.signup_player("dave").await;
+    let dave = api.signup_active("dave").await;
 
     let entry = adjust(&api, &admin, dave.id, 25, "fixed a cable").await;
 
@@ -134,7 +134,7 @@ async fn an_adjustment_answers_the_line_as_the_ledger_holds_it() {
 async fn an_adjustment_is_checked_at_the_boundary_and_by_the_rules() {
     let api = TestApi::with_database().await;
     let admin = api.signup_admin("root").await;
-    let dave = api.signup_player("dave").await;
+    let dave = api.signup_active("dave").await;
     let user = api.signup("erin").await.token;
     let path = format!("/api/admin/players/{}/cycles", dave.id);
 
@@ -195,6 +195,7 @@ async fn the_history_is_public_with_its_notes() {
     let api = TestApi::with_database().await;
     let admin = api.signup_admin("root").await;
     let dave = api.signup("dave").await.token;
+    api.activate("dave").await;
     let dave_id = api.player("dave").await.id;
     let erin = api.signup("erin").await.token;
     adjust(&api, &admin, dave_id, 100, "won the raffle").await;
@@ -226,7 +227,7 @@ async fn the_history_is_public_with_its_notes() {
 async fn the_history_paginates_like_every_list() {
     let api = TestApi::with_database().await;
     let admin = api.signup_admin("root").await;
-    let dave = api.signup_player("dave").await;
+    let dave = api.signup_active("dave").await;
     for amount in 1..=5 {
         adjust(&api, &admin, dave.id, amount, "one more").await;
     }
@@ -254,17 +255,17 @@ async fn the_history_paginates_like_every_list() {
 async fn the_leaderboard_sorts_by_cycles_and_equal_totals_share_a_place() {
     let api = TestApi::with_database().await;
     let admin = api.signup_admin("root").await;
-    let low = api.signup_player("low").await;
-    let mid_a = api.signup_player("mida").await;
-    let mid_b = api.signup_player("midb").await;
-    let top = api.signup_player("top").await;
+    let low = api.signup_active("low").await;
+    let mid_a = api.signup_active("mida").await;
+    let mid_b = api.signup_active("midb").await;
+    let top = api.signup_active("top").await;
     adjust(&api, &admin, low.id, 10, "x").await;
     adjust(&api, &admin, mid_a.id, 300, "x").await;
     adjust(&api, &admin, mid_b.id, 300, "x").await;
     adjust(&api, &admin, top.id, 700, "x").await;
 
     let board: Paginated<Player> = read_json(api.get("/api/players").await).await;
-    let order: Vec<(&str, u32)> = board
+    let order: Vec<(&str, Option<u32>)> = board
         .items
         .iter()
         .map(|p| (p.handle.as_ref(), p.standing.place))
@@ -272,11 +273,11 @@ async fn the_leaderboard_sorts_by_cycles_and_equal_totals_share_a_place() {
     assert_eq!(
         order,
         [
-            ("top", 1),
-            ("midb", 2),
-            ("mida", 2),
-            ("low", 4),
-            ("root", 5),
+            ("top", Some(1)),
+            ("midb", Some(2)),
+            ("mida", Some(2)),
+            ("low", Some(4)),
+            ("root", Some(5)),
         ],
         "first place first, a shared place, then the newest signup first"
     );

@@ -3,6 +3,7 @@ use bunker_models::{Handle, MatchLog, PageQuery};
 use crate::storage::{MatchStorage, PlayerStorage};
 
 use super::error::ServiceError;
+use super::player_service::public_by_handle;
 
 /// What the bracket results say about one player. The results themselves are
 /// written by `TournamentService`, which owns the bracket.
@@ -21,11 +22,7 @@ impl MatchService {
     /// nemesis. Every read goes to the bracket rows, so a corrected result
     /// changes the answer at once.
     pub async fn log(&self, handle: &Handle, query: PageQuery) -> Result<MatchLog, ServiceError> {
-        let player = self
-            .players
-            .get_by_handle(handle)
-            .await?
-            .ok_or_else(|| ServiceError::PlayerNotFound(handle.clone()))?;
+        let player = public_by_handle(&self.players, handle).await?;
 
         Ok(MatchLog {
             record: self.storage.record(player.id).await?,

@@ -811,14 +811,14 @@ async fn the_events_migration_keeps_every_ledger_row() {
         assert_eq!(created_by.as_deref(), Some(PLAYER));
         assert_eq!(*created_at, 7);
     }
-    let (cycles, place): (i64, i64) =
+    let (cycles, place): (i64, Option<i64>) =
         sqlx::query_as("select cycles, place from player_standings where player_id = ?1")
             .bind(PLAYER)
             .fetch_one(&pool)
             .await
             .unwrap();
     assert_eq!(cycles, 130, "the view sums the copied rows");
-    assert_eq!(place, 1);
+    assert_eq!(place, None, "a player with no check-in has no place");
 
     // The old key still holds on the new table.
     let twice = sqlx::query(

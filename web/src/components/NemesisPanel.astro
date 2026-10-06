@@ -48,7 +48,7 @@ const record = `${nemesis.wins} ${nemesis.wins === 1 ? "win" : "wins"}, ${nemesi
         <PlayerLink player={opponent} class="text-base tracking-wider" />
         <div class="mt-1 flex flex-wrap items-baseline gap-2 text-2xs text-dim">
           <RankMark rank={standing.rank} labelled />
-          <span class="tabular-nums">#{standing.place}</span>
+          <span class="tabular-nums">#{standing.place ?? "--"}</span>
         </div>
       </div>
     </div>

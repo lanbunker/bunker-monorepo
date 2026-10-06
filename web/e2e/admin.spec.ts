@@ -6,6 +6,7 @@ import {
     apiDraft,
     apiSignup,
     apiHeaders,
+    activate,
     clearSession,
     createDraft,
     handle,
@@ -151,12 +152,51 @@ test("the roster search scopes the rows, counts them, pages them and clears", as
     await expect(page).toHaveURL(new RegExp(`/admin/players\\?q=${prefix}&page=2$`))
     await expect(page.locator("tbody tr")).toHaveCount(1)
 
+    // The filter rides along the pages too.
+    await page.goto(`/admin/players?q=${prefix}&show=active`)
+    await pager.getByRole("link", { name: "NEXT →" }).click()
+    await expect(page).toHaveURL(new RegExp(`q=${prefix}&show=active&page=2$`))
+    await expect(page.locator("tbody tr")).toHaveCount(1)
+
     await page.getByRole("link", { name: "CLEAR" }).click()
     await expect(page).toHaveURL(/\/admin\/players$/)
     await expect(page.getByRole("search")).toContainText("rows")
 
     await page.goto("/admin/players?q=nobody-has-this")
     await expect(page.getByRole("search")).toContainText("0 matches")
+    await expect(page.locator("tbody tr")).toHaveCount(0)
+})
+
+test("the roster marks an inactive player, and the filter survives a search", async ({
+    page,
+    context,
+}) => {
+    await newAdmin(context)
+    const prefix = handle("ain")
+    const [on, off] = [`${prefix}a`, `${prefix}b`]
+    await apiSignup(context.request, on)
+    activate(on)
+    await apiSignup(context.request, off)
+
+    await page.goto(`/admin/players?q=${prefix}`)
+    const row = (name: string) => page.getByRole("row", { name: new RegExp(name) })
+    await expect(row(off).getByText("inactive", { exact: true })).toBeVisible()
+    await expect(row(on).getByText("inactive", { exact: true })).toHaveCount(0)
+
+    const filter = page.getByRole("navigation", { name: "Filter players" })
+    await filter.getByRole("link", { name: "inactive" }).click()
+    await expect(page).toHaveURL(new RegExp(`\\?q=${prefix}&show=inactive$`))
+    await expect(filter.getByRole("link", { name: "inactive" })).toHaveAttribute(
+        "aria-current",
+        "true",
+    )
+    await expect(page.locator("tbody tr")).toHaveCount(1)
+    await expect(row(off)).toBeVisible()
+
+    const field = page.getByLabel("search players by name")
+    await field.fill(on)
+    await field.press("Enter")
+    await expect(page).toHaveURL(/show=inactive/)
     await expect(page.locator("tbody tr")).toHaveCount(0)
 })
 
@@ -228,10 +268,11 @@ test("an entrant is added once however often, listed, and removed", async ({
     await expect(page.getByText("nobody yet.")).toBeVisible()
 
     // The same player is still in the roster: a removed entrant is not deleted.
+    // They never checked in, so only the admin lookup finds them.
     expect(
         (
-            await page.request.get(`${API}/api/players/${player}`, {
-                headers: apiHeaders(),
+            await page.request.get(`${API}/api/admin/players/by-handle/${player}`, {
+                headers: apiHeaders(admin.token),
             })
         ).ok(),
     ).toBe(true)

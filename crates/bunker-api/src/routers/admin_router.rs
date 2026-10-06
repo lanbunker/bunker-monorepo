@@ -3,8 +3,8 @@ use axum::http::StatusCode;
 use axum::routing::{get, patch, post, put};
 use axum::{Json, Router};
 use bunker_models::{
-    Adjustment, HandleChange, Paginated, Player, PlayerId, PointEntry, RoleUpdate, RosterQuery,
-    TemporaryPassword,
+    Adjustment, AdminRosterQuery, HandleChange, Paginated, Player, PlayerId, PointEntry,
+    RoleUpdate, TemporaryPassword,
 };
 use serde::Deserialize;
 
@@ -13,12 +13,13 @@ use crate::internal::http::{
 };
 use crate::services::{AuthService, PlayerService, PointsService};
 
-use super::AppState;
 use super::responses::{AdminErrors, BodyErrors, PathErrors};
+use super::{AppState, HandlePath};
 
 pub fn admin_router() -> Router<AppState> {
     Router::new()
         .route("/api/admin/players", get(list_players))
+        .route("/api/admin/players/by-handle/{handle}", get(lookup_player))
         .route(
             "/api/admin/players/{id}",
             patch(set_role).delete(delete_player),
@@ -41,7 +42,7 @@ pub(super) struct PlayerIdPath {
     path = "/api/admin/players",
     tag = "admin",
     security(("bearer" = [])),
-    params(RosterQuery),
+    params(AdminRosterQuery),
     responses(
         AdminErrors,
         (status = 200, body = Paginated<Player>, description = "The last signup first"),
@@ -50,9 +51,31 @@ pub(super) struct PlayerIdPath {
 )]
 pub(super) async fn list_players(
     State(players): State<PlayerService>,
-    ValidQuery(query): ValidQuery<RosterQuery>,
+    ValidQuery(query): ValidQuery<AdminRosterQuery>,
 ) -> Result<Json<Paginated<Player>>, ApiError> {
     Ok(Json(players.roster(&query).await?))
+}
+
+/// Finds an inactive player too, unlike `/api/players/{handle}`, so an admin
+/// can check in or register a player who is not on the board yet.
+#[utoipa::path(
+    get,
+    path = "/api/admin/players/by-handle/{handle}",
+    tag = "admin",
+    security(("bearer" = [])),
+    params(HandlePath),
+    responses(
+        AdminErrors,
+        PathErrors,
+        (status = 200, body = Player),
+        (status = 404, body = ApiErrorBody),
+    )
+)]
+pub(super) async fn lookup_player(
+    State(players): State<PlayerService>,
+    ValidPath(path): ValidPath<HandlePath>,
+) -> Result<Json<Player>, ApiError> {
+    Ok(Json(players.lookup(&path.handle).await?))
 }
 
 #[utoipa::path(

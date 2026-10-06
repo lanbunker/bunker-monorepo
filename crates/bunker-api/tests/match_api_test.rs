@@ -132,7 +132,7 @@ async fn an_unknown_handle_has_no_match_log() {
 #[tokio::test]
 async fn a_player_who_never_played_has_an_empty_log() {
     let api = TestApi::with_database().await;
-    api.signup_player("dave").await;
+    api.signup_active("dave").await;
 
     let log = log_of(&api, "dave").await;
 
@@ -150,8 +150,8 @@ async fn a_player_who_never_played_has_an_empty_log() {
 async fn one_loss_names_nobody_and_a_second_names_the_nemesis() {
     let api = TestApi::with_database().await;
     let admin = api.signup_admin("root").await;
-    let mallory = api.signup_player("mallory").await;
-    let dave = api.signup_player("dave").await;
+    let mallory = api.signup_active("mallory").await;
+    let dave = api.signup_active("dave").await;
 
     duel(&api, &admin, "2026-01-01", &mallory, &dave).await;
     let after_one = log_of(&api, "dave").await;
@@ -187,9 +187,9 @@ async fn one_loss_names_nobody_and_a_second_names_the_nemesis() {
 async fn the_opponent_with_the_most_wins_is_the_nemesis() {
     let api = TestApi::with_database().await;
     let admin = api.signup_admin("root").await;
-    let mallory = api.signup_player("mallory").await;
-    let trudy = api.signup_player("trudy").await;
-    let dave = api.signup_player("dave").await;
+    let mallory = api.signup_active("mallory").await;
+    let trudy = api.signup_active("trudy").await;
+    let dave = api.signup_active("dave").await;
 
     // Trudy wins three, mallory two. Mallory's losses are the more recent, so
     // only the count can name trudy.
@@ -213,9 +213,9 @@ async fn the_opponent_with_the_most_wins_is_the_nemesis() {
 async fn the_creation_instant_separates_two_losses_on_one_day() {
     let api = TestApi::with_database().await;
     let admin = api.signup_admin("root").await;
-    let mallory = api.signup_player("mallory").await;
-    let trudy = api.signup_player("trudy").await;
-    let dave = api.signup_player("dave").await;
+    let mallory = api.signup_active("mallory").await;
+    let trudy = api.signup_active("trudy").await;
+    let dave = api.signup_active("dave").await;
 
     // Each cup is created after the one above it, and a cup is dated freely, so
     // the creation order and the day order differ on purpose. Both opponents
@@ -243,9 +243,9 @@ async fn the_creation_instant_separates_two_losses_on_one_day() {
 async fn the_most_recent_loss_breaks_a_tie_on_the_count() {
     let api = TestApi::with_database().await;
     let admin = api.signup_admin("root").await;
-    let mallory = api.signup_player("mallory").await;
-    let trudy = api.signup_player("trudy").await;
-    let dave = api.signup_player("dave").await;
+    let mallory = api.signup_active("mallory").await;
+    let trudy = api.signup_active("trudy").await;
+    let dave = api.signup_active("dave").await;
 
     duel(&api, &admin, "2026-01-01", &mallory, &dave).await;
     duel(&api, &admin, "2026-01-02", &mallory, &dave).await;
@@ -281,9 +281,9 @@ async fn the_most_recent_loss_breaks_a_tie_on_the_count() {
 async fn a_full_tie_answers_the_same_handle_every_time() {
     let api = TestApi::with_database().await;
     let admin = api.signup_admin("root").await;
-    let anna = api.signup_player("anna").await;
-    let zoe = api.signup_player("zoe").await;
-    let dave = api.signup_player("dave").await;
+    let anna = api.signup_active("anna").await;
+    let zoe = api.signup_active("zoe").await;
+    let dave = api.signup_active("dave").await;
 
     let cups = [
         duel(&api, &admin, "2026-01-01", &anna, &dave).await,
@@ -313,8 +313,8 @@ async fn a_full_tie_answers_the_same_handle_every_time() {
 async fn only_a_live_or_concluded_tournament_counts() {
     let api = TestApi::with_database().await;
     let admin = api.signup_admin("root").await;
-    let mallory = api.signup_player("mallory").await;
-    let dave = api.signup_player("dave").await;
+    let mallory = api.signup_active("mallory").await;
+    let dave = api.signup_active("dave").await;
 
     let tournament = duel(&api, &admin, "2026-01-01", &mallory, &dave).await;
     assert_eq!(log_of(&api, "dave").await.record.losses, 1);
@@ -349,8 +349,8 @@ async fn only_a_live_or_concluded_tournament_counts() {
 async fn a_cleared_result_leaves_the_log() {
     let api = TestApi::with_database().await;
     let admin = api.signup_admin("root").await;
-    let mallory = api.signup_player("mallory").await;
-    let dave = api.signup_player("dave").await;
+    let mallory = api.signup_active("mallory").await;
+    let dave = api.signup_active("dave").await;
 
     let (tournament, bracket) = cup(&api, &admin, "2026-01-01", &[&mallory, &dave]).await;
     let m = bracket.flat().next().cloned().unwrap();
@@ -379,9 +379,9 @@ async fn a_bye_is_not_a_match() {
     let api = TestApi::with_database().await;
     let admin = api.signup_admin("root").await;
     let players = [
-        api.signup_player("anna").await,
-        api.signup_player("bert").await,
-        api.signup_player("carl").await,
+        api.signup_active("anna").await,
+        api.signup_active("bert").await,
+        api.signup_active("carl").await,
     ];
     let (tournament, bracket) = cup(
         &api,
@@ -438,8 +438,8 @@ async fn a_bye_is_not_a_match() {
 async fn the_log_puts_the_newest_tournament_first() {
     let api = TestApi::with_database().await;
     let admin = api.signup_admin("root").await;
-    let mallory = api.signup_player("mallory").await;
-    let dave = api.signup_player("dave").await;
+    let mallory = api.signup_active("mallory").await;
+    let dave = api.signup_active("dave").await;
 
     // The write order is neither the day order nor the answer, so a log that
     // followed it fails here. The last two share a day, so only the creation
@@ -472,9 +472,9 @@ async fn the_log_puts_the_newest_tournament_first() {
 async fn a_deleted_opponent_hands_the_title_to_the_next_candidate() {
     let api = TestApi::with_database().await;
     let admin = api.signup_admin("root").await;
-    let mallory = api.signup_player("mallory").await;
-    let trudy = api.signup_player("trudy").await;
-    let dave = api.signup_player("dave").await;
+    let mallory = api.signup_active("mallory").await;
+    let trudy = api.signup_active("trudy").await;
+    let dave = api.signup_active("dave").await;
 
     duel(&api, &admin, "2026-01-01", &mallory, &dave).await;
     duel(&api, &admin, "2026-01-02", &mallory, &dave).await;
@@ -514,10 +514,10 @@ async fn the_log_names_the_round_and_pages() {
     let api = TestApi::with_database().await;
     let admin = api.signup_admin("root").await;
     let players = [
-        api.signup_player("anna").await,
-        api.signup_player("bert").await,
-        api.signup_player("carl").await,
-        api.signup_player("dana").await,
+        api.signup_active("anna").await,
+        api.signup_active("bert").await,
+        api.signup_active("carl").await,
+        api.signup_active("dana").await,
     ];
     let (tournament, bracket) = cup(
         &api,
@@ -584,8 +584,8 @@ async fn the_log_names_the_round_and_pages() {
 async fn a_deleted_opponent_stays_in_the_log_and_is_never_the_nemesis() {
     let api = TestApi::with_database().await;
     let admin = api.signup_admin("root").await;
-    let mallory = api.signup_player("mallory").await;
-    let dave = api.signup_player("dave").await;
+    let mallory = api.signup_active("mallory").await;
+    let dave = api.signup_active("dave").await;
 
     duel(&api, &admin, "2026-01-01", &mallory, &dave).await;
     duel(&api, &admin, "2026-01-02", &mallory, &dave).await;

@@ -3,7 +3,8 @@
  * The heading of a player list, with a handle search in it: the prompt, the
  * command, `grep -i` and the field on one line, as one shell command. It is a
  * GET form, so a search is a URL a player can share, and the pager keeps it.
- * A blank submit lists everyone.
+ * A blank submit lists everyone. The slot takes hidden fields, so a search
+ * keeps the filters of the list.
  */
 import { SEARCH_MAX } from "../../lib/paging"
 import Button from "./Button.astro"
@@ -82,6 +83,7 @@ const buttonVariant = tone === "admin" ? "warn" : "ghost"
     aria-label="search players by name"
     class:list={["w-40 border-b bg-transparent px-1 outline-none", fieldClass[tone]]}
   />
+  <slot />
   <Button variant={buttonVariant} size="sm">
     SEARCH
   </Button>

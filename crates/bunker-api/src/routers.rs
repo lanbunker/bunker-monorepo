@@ -25,7 +25,7 @@ pub use tournament_router::tournament_router;
 use axum::Json;
 use axum::extract::FromRef;
 use axum::http::StatusCode;
-use bunker_models::TournamentId;
+use bunker_models::{Handle, TournamentId};
 use serde::Deserialize;
 
 use crate::services::{
@@ -87,6 +87,11 @@ impl FromRef<AppState> for PlayerService {
 #[derive(Debug, Deserialize, utoipa::IntoParams)]
 struct TournamentPath {
     id: TournamentId,
+}
+
+#[derive(Debug, Deserialize, utoipa::IntoParams)]
+struct HandlePath {
+    handle: Handle,
 }
 
 /// `201` for a row the call created, `200` for one that was already there.

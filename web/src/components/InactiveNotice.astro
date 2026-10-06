@@ -1,0 +1,44 @@
+---
+import type { Event } from "../lib/api"
+import LocalTime from "./ui/LocalTime.astro"
+import Panel from "./ui/Panel.astro"
+
+interface Props {
+  /** The soonest night still to come. */
+  next?: Event | undefined
+  /** False when the event list did not answer, so "none yet" would be a guess. */
+  known: boolean
+}
+
+const { next, known } = Astro.props
+const unscheduled = known ? "to be announced" : "see the events"
+---
+
+<Panel tone="warn" class="mb-4">
+  <section aria-label="account not active" class="text-xs" data-inactive>
+    <p class="m-0 text-sm tracking-wider text-warn">
+      <span aria-hidden="true">[!] </span>account not active
+    </p>
+    <p class="m-0 mt-2">
+      to activate it, come to the next event and check in at the door: scan the QR code at
+      the entrance with your phone.
+    </p>
+    <p class="m-0 mt-1 text-dim">
+      until then you are not on the board, and only you see this profile.
+    </p>
+    <p class="m-0 mt-2">
+      <span class="text-dim">next event:</span>{" "}
+      <a href="/events" class="text-bright no-underline hover:text-accent">
+        {next ? (
+          <>
+            {next.name} <span class="text-dim">//</span>{" "}
+            <LocalTime at={next.startsAt} mode="date" />
+          </>
+        ) : (
+          unscheduled
+        )}{" "}
+        <span aria-hidden="true">→</span>
+      </a>
+    </p>
+  </section>
+</Panel>

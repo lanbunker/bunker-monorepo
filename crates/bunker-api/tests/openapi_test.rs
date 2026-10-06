@@ -58,7 +58,15 @@ fn the_player_schema_has_the_documented_fields() {
 
     assert_eq!(
         fields,
-        ["createdAt", "glyph", "handle", "id", "role", "standing"]
+        [
+            "active",
+            "createdAt",
+            "glyph",
+            "handle",
+            "id",
+            "role",
+            "standing"
+        ]
     );
     assert_eq!(
         document["components"]["schemas"]["Rank"]["enum"],

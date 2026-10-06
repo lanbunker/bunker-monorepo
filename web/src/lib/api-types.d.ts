@@ -84,6 +84,26 @@ export interface paths {
         patch?: never
         trace?: never
     }
+    "/api/admin/players/by-handle/{handle}": {
+        parameters: {
+            query?: never
+            header?: never
+            path?: never
+            cookie?: never
+        }
+        /**
+         * Finds an inactive player too, unlike `/api/players/{handle}`, so an admin
+         *     can check in or register a player who is not on the board yet.
+         */
+        get: operations["lookup_player"]
+        put?: never
+        post?: never
+        delete?: never
+        options?: never
+        head?: never
+        patch?: never
+        trace?: never
+    }
     "/api/admin/players/{id}": {
         parameters: {
             query?: never
@@ -652,6 +672,11 @@ export interface components {
          *     first check-in and pays nothing.
          */
         CheckinReceipt: {
+            /**
+             * @description Set when this check-in made the account active, so the player is on
+             *     the board from now on.
+             */
+            activated: boolean
             /** Format: date-time */
             checkedInAt: string
             /**
@@ -1017,6 +1042,11 @@ export interface components {
         /** @description One page of results, and the totals a client needs for a pager. */
         Paginated_Player: {
             items: {
+                /**
+                 * @description Set by a first check-in, and always set for an admin. Only an active
+                 *     player is on the board and has a public page.
+                 */
+                active: boolean
                 /** Format: date-time */
                 createdAt: string
                 glyph: components["schemas"]["Glyph"]
@@ -1139,6 +1169,11 @@ export interface components {
         }
         /** @description A player, as the API shows it to anyone. It holds no credential. */
         Player: {
+            /**
+             * @description Set by a first check-in, and always set for an admin. Only an active
+             *     player is on the board and has a public page.
+             */
+            active: boolean
             /** Format: date-time */
             createdAt: string
             glyph: components["schemas"]["Glyph"]
@@ -1261,12 +1296,13 @@ export interface components {
             next?: null | components["schemas"]["NextRank"]
             /**
              * Format: int32
-             * @description 1 is the top. Equal totals share a place.
+             * @description 1 is the top. Equal totals share a place. Present exactly when the
+             *     player is active, because only an active player is on the board.
              */
-            place: number
+            place?: number | null
             /**
              * Format: int32
-             * @description How many players the place is among.
+             * @description How many active players the place is among.
              */
             players: number
             rank: components["schemas"]["Rank"]
@@ -1877,6 +1913,11 @@ export interface operations {
                 pageSize?: number
                 /** @description A piece of a handle. The match ignores case. */
                 q?: string
+                /**
+                 * @description `true` lists only active players, `false` only inactive ones. Absent
+                 *     lists every player.
+                 */
+                active?: boolean
             }
             header?: never
             path?: never
@@ -1913,6 +1954,62 @@ export interface operations {
             }
             /** @description Not an admin, or `PasswordChangeRequired`: a new password first */
             403: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+        }
+    }
+    lookup_player: {
+        parameters: {
+            query?: never
+            header?: never
+            path: {
+                handle: components["schemas"]["Handle"]
+            }
+            cookie?: never
+        }
+        requestBody?: never
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["Player"]
+                }
+            }
+            /** @description A path parameter is malformed */
+            400: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            /** @description No valid bearer token, or no valid `X-Api-Key` header */
+            401: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            /** @description Not an admin, or `PasswordChangeRequired`: a new password first */
+            403: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            404: {
                 headers: {
                     [name: string]: unknown
                 }

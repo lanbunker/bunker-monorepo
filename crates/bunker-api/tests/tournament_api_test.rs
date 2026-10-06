@@ -254,6 +254,11 @@ async fn a_player_applies_and_retires_while_registration_is_open() {
     assert_eq!(detail.tournament.entrant_count, 1);
     assert_eq!(detail.entrants.len(), 1);
     assert_eq!(detail.entrants[0].skill.map(SkillLevel::value), Some(5));
+    // Dave never checked in. He may still apply, and the entrant list shows
+    // him without a place.
+    let listed = detail.entrants[0].player.as_ref().unwrap();
+    assert!(!listed.active);
+    assert_eq!(listed.standing.place, None);
 
     assert_eq!(
         api.delete_as(&path, &dave).await.status(),

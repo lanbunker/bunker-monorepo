@@ -39,8 +39,13 @@ export const eventActions = {
                 ),
             )
             // The API pays on the first scan only, so the receipt says whether
-            // this scan paid or found the player already in.
-            return { code: input.code, paid: receipt.cycles > 0 }
+            // this scan paid or found the player already in, and whether it was
+            // the first night of the player.
+            return {
+                code: input.code,
+                paid: receipt.cycles > 0,
+                activated: receipt.activated,
+            }
         },
     }),
 
