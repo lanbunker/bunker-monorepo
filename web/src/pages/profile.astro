@@ -25,37 +25,20 @@ if (loggedOut && !loggedOut.error) return Astro.redirect("/login")
 const session = sessionOf(Astro.locals)
 if (!session) return Astro.redirect("/login")
 const player = session.player
-// The public routes do not show an inactive player, and the event list is
-// small, so the first page holds the next night.
+// The own logs answer for an inactive account too, unlike the public ones. The
+// event list is small, so the first page holds the next night.
+const recent = { params: { query: { page: 1, pageSize: RECENT_ENTRIES } } }
 const [logResult, matchResult, eventResult] = await Promise.all([
-  player.active
-    ? call(client =>
-        client.GET("/api/players/{handle}/cycles", {
-          params: {
-            path: { handle: player.handle },
-            query: { page: 1, pageSize: RECENT_ENTRIES },
-          },
-        }),
-      )
-    : undefined,
-  player.active
-    ? call(client =>
-        client.GET("/api/players/{handle}/matches", {
-          params: {
-            path: { handle: player.handle },
-            query: { page: 1, pageSize: RECENT_ENTRIES },
-          },
-        }),
-      )
-    : undefined,
+  call(client => client.GET("/api/me/cycles", recent), session.token),
+  call(client => client.GET("/api/me/matches", recent), session.token),
   player.active
     ? undefined
     : call(client =>
         client.GET("/api/events", { params: { query: { page: 1, pageSize: 100 } } }),
       ),
 ])
-const log = logResult && dataOf(logResult)
-const matches = matchResult && dataOf(matchResult)
+const log = dataOf(logResult)
+const matches = dataOf(matchResult)
 const events = eventResult && dataOf(eventResult)
 const next = nextEvent(events?.items ?? [])
 
@@ -73,18 +56,14 @@ const notice = noticeFrom(Astro.url, {
 
   {!player.active && <InactiveNotice next={next} known={events !== undefined} />}
   <PlayerCard player={player} own />
-  {player.active && (
-    <>
-      <StandingPanels standing={player.standing} totals={log?.totals} />
-      <MedalsPanel />
-      {matches?.nemesis && (
-        <NemesisPanel handle={player.handle} nemesis={matches.nemesis} own />
-      )}
-
-      <MatchPanel handle={player.handle} log={matches} own />
-      <CyclesPanel handle={player.handle} log={log} own />
-    </>
+  <StandingPanels standing={player.standing} totals={log?.totals} />
+  <MedalsPanel />
+  {matches?.nemesis && (
+    <NemesisPanel handle={player.handle} nemesis={matches.nemesis} own />
   )}
+
+  <MatchPanel handle={player.handle} log={matches} own />
+  <CyclesPanel handle={player.handle} log={log} own />
 
   <div class="mt-6 flex flex-wrap items-center gap-3">
     {player.active && (

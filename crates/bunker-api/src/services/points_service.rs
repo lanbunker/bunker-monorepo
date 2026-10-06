@@ -66,8 +66,18 @@ impl PointsService {
         query: PageQuery,
     ) -> Result<CyclesLog, ServiceError> {
         let player = public_by_handle(&self.players, handle).await?;
-        let entries = self.storage.history(player.id, query).await?;
-        let mut totals = self.storage.totals(player.id).await?;
+
+        self.history_of(player.id, query).await
+    }
+
+    /// The same history for the caller's own account, active or not.
+    pub async fn history_of(
+        &self,
+        player: PlayerId,
+        query: PageQuery,
+    ) -> Result<CyclesLog, ServiceError> {
+        let entries = self.storage.history(player, query).await?;
+        let mut totals = self.storage.totals(player).await?;
         // The legend lists the kinds in this order, so the breakdown does too.
         totals.sort_by_key(|total| PointKind::ALL.iter().position(|k| *k == total.kind));
 

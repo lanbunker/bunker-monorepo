@@ -20,6 +20,8 @@ pub fn player_router() -> Router<AppState> {
         .route("/api/me", get(me).layer(no_store()))
         .route("/api/me/password", post(change_password).layer(no_store()))
         .route("/api/me/handle", put(change_handle).layer(no_store()))
+        .route("/api/me/cycles", get(my_cycles).layer(no_store()))
+        .route("/api/me/matches", get(my_matches).layer(no_store()))
         .route("/api/players", get(list_players))
         .route("/api/players/{handle}", get(get_player))
         .route("/api/players/{handle}/cycles", get(cycles_history))
@@ -102,6 +104,50 @@ pub(super) async fn list_players(
     ValidQuery(query): ValidQuery<RosterQuery>,
 ) -> Result<Json<Paginated<Player>>, ApiError> {
     Ok(Json(players.leaderboard(&query).await?))
+}
+
+/// The caller's own history. Unlike `/api/players/{handle}/cycles`, it answers
+/// for an inactive account too.
+#[utoipa::path(
+    get,
+    path = "/api/me/cycles",
+    tag = "players",
+    security(("bearer" = [])),
+    params(PageQuery),
+    responses(
+        BearerErrors,
+        (status = 200, body = CyclesLog, description = "Newest first, with the totals by kind"),
+        (status = 400, body = ApiErrorBody, description = "A query parameter is malformed"),
+    )
+)]
+pub(super) async fn my_cycles(
+    State(points): State<PointsService>,
+    Authenticated(caller): Authenticated,
+    ValidQuery(query): ValidQuery<PageQuery>,
+) -> Result<Json<CyclesLog>, ApiError> {
+    Ok(Json(points.history_of(caller.id, query).await?))
+}
+
+/// The caller's own match log. Unlike `/api/players/{handle}/matches`, it
+/// answers for an inactive account too.
+#[utoipa::path(
+    get,
+    path = "/api/me/matches",
+    tag = "players",
+    security(("bearer" = [])),
+    params(PageQuery),
+    responses(
+        BearerErrors,
+        (status = 200, body = MatchLog, description = "Newest first, with the record and the nemesis"),
+        (status = 400, body = ApiErrorBody, description = "A query parameter is malformed"),
+    )
+)]
+pub(super) async fn my_matches(
+    State(matches): State<MatchService>,
+    Authenticated(caller): Authenticated,
+    ValidQuery(query): ValidQuery<PageQuery>,
+) -> Result<Json<MatchLog>, ApiError> {
+    Ok(Json(matches.log_of(caller.id, query).await?))
 }
 
 #[utoipa::path(

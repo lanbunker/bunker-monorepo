@@ -39,6 +39,8 @@ use super::{
         player_router::me,
         player_router::change_password,
         player_router::change_handle,
+        player_router::my_cycles,
+        player_router::my_matches,
         player_router::list_players,
         player_router::get_player,
         player_router::cycles_history,

@@ -10,7 +10,7 @@
 mod support;
 
 use axum::http::StatusCode;
-use bunker_models::{Account, Paginated, Player};
+use bunker_models::{Account, CyclesLog, MatchLog, Paginated, Player};
 use serde_json::Value;
 use support::{TestApi, assert_error, read_json};
 
@@ -299,4 +299,31 @@ async fn the_public_board_refuses_the_backoffice_filter() {
 
     let refused = api.get("/api/players?active=false").await;
     assert_eq!(refused.status(), StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+async fn an_inactive_player_reads_their_own_logs() {
+    let api = TestApi::with_database().await;
+    let admin = api.signup_admin("root").await;
+    let token = api.signup("dave").await.token;
+    let dave = api.lookup(&admin, "dave").await;
+    let adjusted = api
+        .post_as(
+            &format!("/api/admin/players/{}/cycles", dave.id),
+            &serde_json::json!({ "amount": 40, "note": "early bird" }),
+            &admin,
+        )
+        .await;
+    assert_eq!(adjusted.status(), StatusCode::CREATED);
+
+    let cycles: CyclesLog = read_json(api.get_as("/api/me/cycles", &token).await).await;
+    assert_eq!(cycles.entries.total, 1);
+    assert_eq!(cycles.entries.items[0].amount, 40);
+    let matches: MatchLog = read_json(api.get_as("/api/me/matches", &token).await).await;
+    assert_eq!(matches.matches.total, 0);
+
+    let hidden = api.get("/api/players/dave/cycles").await;
+    assert_error(hidden, StatusCode::NOT_FOUND, "ItemNotFound").await;
+    let anonymous = api.get("/api/me/cycles").await;
+    assert_error(anonymous, StatusCode::UNAUTHORIZED, "Unauthorized").await;
 }

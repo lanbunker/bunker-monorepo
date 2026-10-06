@@ -373,13 +373,18 @@ test("a player who never checked in sees a notice and has no public page", async
     await page.goto("/profile")
     const notice = page.locator("[data-inactive]")
     await expect(notice).toContainText("account not active")
-    await expect(notice).toContainText("check in at the door")
-    await expect(page.getByRole("heading", { name: "medals" })).toHaveCount(0)
-    await expect(page.locator("[data-cycles-log]")).toHaveCount(0)
+    await expect(notice).toContainText("scan the QR code")
+    // Every card shows, empty, so the player sees what the platform holds.
+    await expect(page.getByRole("heading", { name: "medals" })).toBeVisible()
+    await expect(page.getByText("no matches yet. enter a tournament.")).toBeVisible()
+    await expect(page.getByText("no cycles yet. enter a tournament.")).toBeVisible()
+    await expect(page.getByText(/unreachable/)).toHaveCount(0)
     await expect(page.getByRole("link", { name: "PUBLIC PAGE" })).toHaveCount(0)
 
     // Their own public link leads back to the profile. A stranger gets a 404.
     await page.goto(`/players/${player.name}`)
+    await expect(page).toHaveURL(/\/profile$/)
+    await page.goto(`/players/${player.name}/cycles`)
     await expect(page).toHaveURL(/\/profile$/)
     await clearSession(context)
     expect((await page.goto(`/players/${player.name}`))?.status()).toBe(404)

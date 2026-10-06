@@ -1,4 +1,4 @@
-use bunker_models::{Handle, MatchLog, PageQuery};
+use bunker_models::{Handle, MatchLog, PageQuery, PlayerId};
 
 use crate::storage::{MatchStorage, PlayerStorage};
 
@@ -24,10 +24,19 @@ impl MatchService {
     pub async fn log(&self, handle: &Handle, query: PageQuery) -> Result<MatchLog, ServiceError> {
         let player = public_by_handle(&self.players, handle).await?;
 
+        self.log_of(player.id, query).await
+    }
+
+    /// The same log for the caller's own account, active or not.
+    pub async fn log_of(
+        &self,
+        player: PlayerId,
+        query: PageQuery,
+    ) -> Result<MatchLog, ServiceError> {
         Ok(MatchLog {
-            record: self.storage.record(player.id).await?,
-            nemesis: self.storage.nemesis(player.id).await?,
-            matches: self.storage.history(player.id, query).await?,
+            record: self.storage.record(player).await?,
+            nemesis: self.storage.nemesis(player).await?,
+            matches: self.storage.history(player, query).await?,
         })
     }
 }

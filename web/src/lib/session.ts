@@ -30,3 +30,10 @@ export const adminSessionOf = (locals: App.Locals): Session | undefined => {
     const session = sessionOf(locals)
     return session?.player.role === "admin" ? session : undefined
 }
+
+/**
+ * Whether a handle is the caller's own. An inactive player has no public page,
+ * so their own link to it leads back to the profile, which says why.
+ */
+export const isOwnHandle = (locals: App.Locals, handle: string): boolean =>
+    sessionOf(locals)?.player.handle.toLowerCase() === handle.toLowerCase()

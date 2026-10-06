@@ -11,6 +11,7 @@ import Layout from "../../../layouts/Layout.astro"
 import { call, dataOf, failureOf, isMissing } from "../../../lib/api"
 import { formatCycles } from "../../../lib/cycles"
 import { PAGE_SIZE, pageFrom } from "../../../lib/paging"
+import { isOwnHandle } from "../../../lib/session"
 
 const handle = Astro.params.handle ?? ""
 const page = pageFrom(Astro.url)
@@ -23,7 +24,11 @@ const [result, logResult] = await Promise.all([
   ),
 ])
 const failure = failureOf(result)
-if (failure && isMissing(failure)) return Astro.rewrite("/404")
+if (failure && isMissing(failure)) {
+  return isOwnHandle(Astro.locals, handle)
+    ? Astro.redirect("/profile")
+    : Astro.rewrite("/404")
+}
 
 const player = dataOf(result)
 const log = dataOf(logResult)

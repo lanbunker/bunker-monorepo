@@ -3186,6 +3186,88 @@
         ]
       }
     },
+    "/api/me/cycles": {
+      "get": {
+        "tags": [
+          "players"
+        ],
+        "summary": "The caller's own history. Unlike `/api/players/{handle}/cycles`, it answers\nfor an inactive account too.",
+        "operationId": "my_cycles",
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 1,
+              "minimum": 1
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Newest first, with the totals by kind",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CyclesLog"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "A query parameter is malformed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid bearer token, or no valid `X-Api-Key` header",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`PasswordChangeRequired`: the caller must choose a new password first",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "api_key": [],
+            "bearer": []
+          }
+        ]
+      }
+    },
     "/api/me/handle": {
       "put": {
         "tags": [
@@ -3275,6 +3357,88 @@
           },
           "422": {
             "description": "A field is missing, unknown or out of range",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "api_key": [],
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/me/matches": {
+      "get": {
+        "tags": [
+          "players"
+        ],
+        "summary": "The caller's own match log. Unlike `/api/players/{handle}/matches`, it\nanswers for an inactive account too.",
+        "operationId": "my_matches",
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 1,
+              "minimum": 1
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Newest first, with the record and the nemesis",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MatchLog"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "A query parameter is malformed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid bearer token, or no valid `X-Api-Key` header",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`PasswordChangeRequired`: the caller must choose a new password first",
             "content": {
               "application/json": {
                 "schema": {

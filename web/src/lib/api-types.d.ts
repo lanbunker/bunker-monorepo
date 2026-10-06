@@ -409,6 +409,26 @@ export interface paths {
         patch?: never
         trace?: never
     }
+    "/api/me/cycles": {
+        parameters: {
+            query?: never
+            header?: never
+            path?: never
+            cookie?: never
+        }
+        /**
+         * The caller's own history. Unlike `/api/players/{handle}/cycles`, it answers
+         *     for an inactive account too.
+         */
+        get: operations["my_cycles"]
+        put?: never
+        post?: never
+        delete?: never
+        options?: never
+        head?: never
+        patch?: never
+        trace?: never
+    }
     "/api/me/handle": {
         parameters: {
             query?: never
@@ -418,6 +438,26 @@ export interface paths {
         }
         get?: never
         put: operations["change_handle"]
+        post?: never
+        delete?: never
+        options?: never
+        head?: never
+        patch?: never
+        trace?: never
+    }
+    "/api/me/matches": {
+        parameters: {
+            query?: never
+            header?: never
+            path?: never
+            cookie?: never
+        }
+        /**
+         * The caller's own match log. Unlike `/api/players/{handle}/matches`, it
+         *     answers for an inactive account too.
+         */
+        get: operations["my_matches"]
+        put?: never
         post?: never
         delete?: never
         options?: never
@@ -3805,6 +3845,56 @@ export interface operations {
             }
         }
     }
+    my_cycles: {
+        parameters: {
+            query?: {
+                page?: number
+                pageSize?: number
+            }
+            header?: never
+            path?: never
+            cookie?: never
+        }
+        requestBody?: never
+        responses: {
+            /** @description Newest first, with the totals by kind */
+            200: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["CyclesLog"]
+                }
+            }
+            /** @description A query parameter is malformed */
+            400: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            /** @description No valid bearer token, or no valid `X-Api-Key` header */
+            401: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            /** @description `PasswordChangeRequired`: the caller must choose a new password first */
+            403: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+        }
+    }
     change_handle: {
         parameters: {
             query?: never
@@ -3882,6 +3972,56 @@ export interface operations {
             }
             /** @description A field is missing, unknown or out of range */
             422: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+        }
+    }
+    my_matches: {
+        parameters: {
+            query?: {
+                page?: number
+                pageSize?: number
+            }
+            header?: never
+            path?: never
+            cookie?: never
+        }
+        requestBody?: never
+        responses: {
+            /** @description Newest first, with the record and the nemesis */
+            200: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["MatchLog"]
+                }
+            }
+            /** @description A query parameter is malformed */
+            400: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            /** @description No valid bearer token, or no valid `X-Api-Key` header */
+            401: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            /** @description `PasswordChangeRequired`: the caller must choose a new password first */
+            403: {
                 headers: {
                     [name: string]: unknown
                 }
