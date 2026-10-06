@@ -17,7 +17,7 @@ A push to `main` builds the binary, uploads it through the tunnel, and runs
 | `bootstrap.sh` | Sets up the container. Safe to run again. |
 | `bunker-deploy.sh` | Installs an uploaded binary, and rolls back when it is not healthy. The only command the `deploy` user can run with sudo. |
 | `bunker-api.service` | The API, as the `bunker` user. |
-| `litestream.service`, `litestream.yml` | Sends each database change to Backblaze B2 within 10 seconds. A full copy each day, kept 7 days. |
+| `litestream.service`, `litestream.yml` | Sends each database change to Backblaze B2 within 10 seconds. A full copy each day, kept 7 days. Its timers run hourly, so it stays far under the 2,500 free B2 class C calls a day. |
 | `bunker-backup.sh`, `.service`, `.timer` | A checked copy of the database on the box at 04:00, kept 14 days. |
 
 ## Setup

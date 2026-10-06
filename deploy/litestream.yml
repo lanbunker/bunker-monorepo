@@ -13,12 +13,17 @@ dbs:
       # the request count low, and a stop of the unit uploads the rest first.
       sync-interval: 10s
 
-# Fewer and larger files in B2 than the default of 30s, 5m and 1h.
+# B2 gives 2,500 free class C calls a day, and a bucket list is one. Each L0
+# check and each compaction lists the bucket, even when nothing changed, and the
+# defaults (a check every 15s) make about 11,500 a day. Hourly timers make about
+# 75. Uploads are class A, so a busy night adds almost none.
+l0-retention: 1h
+l0-retention-check-interval: 1h
 levels:
-  - interval: 5m
   - interval: 1h
 
-# A daily full copy, kept a week. A restore can land on any point inside it.
+# A daily full copy, kept a week. A restore lands on an hour boundary inside it,
+# or on any sync of the last hour.
 snapshot:
   interval: 24h
   retention: 168h
