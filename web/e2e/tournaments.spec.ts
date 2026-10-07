@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test"
 import type { Page } from "@playwright/test"
 
 import {
+    confirmed,
     apiDraft,
     apiSignup,
     clearSession,
@@ -275,8 +276,7 @@ test("a bracket runs from generation to a champion, live on the kiosk", async ({
     await expect(page.locator("[data-champion]")).toHaveAttribute("data-champion", /.+/)
     await expect(page.getByRole("button", { name: "regenerate" })).toBeDisabled()
 
-    page.once("dialog", dialog => dialog.accept())
-    await page.getByRole("button", { name: "conclude" }).click()
+    await confirmed(page, page.getByRole("button", { name: "conclude" }))
     await expect(page.getByRole("heading", { level: 1 })).toContainText("# concluded")
     const winner = (await page.locator("[data-winner]").getAttribute("data-winner")) ?? ""
     expect(players).toContain(winner)
@@ -358,8 +358,15 @@ test("an odd field gets byes, a result can be cleared, the bracket regenerates a
     await expect(page.locator("[data-match]")).toHaveCount(7)
     await expect(page.getByText("bye")).toHaveCount(3)
 
-    page.once("dialog", dialog => dialog.accept())
+    // "no" keeps the bracket. "yes" removes it.
     await page.getByRole("button", { name: "remove bracket" }).click()
+    await expect(page.getByText("remove the bracket? seeds are lost.")).toBeVisible()
+    await page.getByRole("button", { name: "no", exact: true }).click()
+    await expect(page.getByRole("button", { name: "yes", exact: true })).toHaveCount(0)
+    await expect(page.getByRole("button", { name: "remove bracket" })).toBeEnabled()
+    await expect(page.getByRole("button", { name: "remove bracket" })).toBeFocused()
+    await expect(page.locator("[data-match]")).toHaveCount(7)
+    await confirmed(page, page.getByRole("button", { name: "remove bracket" }))
     await expect(page.locator("[data-match]")).toHaveCount(0)
     await expect(page.getByRole("button", { name: "generate bracket" })).toBeVisible()
 })

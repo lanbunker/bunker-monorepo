@@ -321,9 +321,55 @@ test("the door is closed outside the window, and a bad code is a 404", async ({
     }
 
     // Back to draft, and the door of the early event opens nothing.
+    // The question stops every way in but "yes": "no", Escape, a click on
+    // "yes" before it is armed, and a page that Back brings out of the cache.
     await page.goto(`/admin/events/${early.id}`)
-    page.once("dialog", dialog => dialog.accept())
-    await page.getByRole("button", { name: "back to draft" }).click()
-    await expect(page.getByRole("heading", { level: 1 })).toContainText("# draft")
+    const heading = page.getByRole("heading", { level: 1 })
+    const toDraft = page.getByRole("button", { name: "back to draft" })
+    const yes = page.getByRole("button", { name: "yes", exact: true })
+    const no = page.getByRole("button", { name: "no", exact: true })
+    await toDraft.click()
+    await expect(page.getByText("back to draft? the event leaves the site")).toBeVisible()
+    await expect(toDraft).toBeHidden()
+    await expect(no).toBeFocused()
+    await expect(no).toHaveAccessibleDescription(/back to draft\?/)
+    await no.click()
+    await expect(yes).toHaveCount(0)
+    await expect(toDraft).toBeFocused()
+
+    await toDraft.click()
+    await page.keyboard.press("Escape")
+    await expect(yes).toHaveCount(0)
+    await expect(toDraft).toBeFocused()
+
+    await toDraft.click()
+    await expect(yes).toBeEnabled()
+    await page.evaluate(() =>
+        window.dispatchEvent(new PageTransitionEvent("pageshow", { persisted: true })),
+    )
+    await expect(yes).toHaveCount(0)
+    await expect(toDraft).toBeVisible()
+    await expect(heading).toContainText("# published")
+
+    // "yes" stays off for 400 ms, so the second click of a double click on the
+    // action cannot confirm it. A paused clock makes this exact on any machine.
+    await page.clock.install()
+    await page.clock.pauseAt(Date.now() + 60_000)
+    await toDraft.click()
+    await page.clock.runFor(350)
+    await expect(yes).toBeDisabled()
+    await page.clock.runFor(100)
+    await expect(yes).toBeEnabled()
+
+    // Once "yes" sends, Escape cannot bring the action back for a second send.
+    // Both happen in one task, before the page leaves.
+    const reopened = await yes.evaluate(answer => {
+        if (!(answer instanceof HTMLButtonElement)) return undefined
+        answer.click()
+        document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }))
+        return document.querySelector("[data-confirm-prompt]") === null
+    })
+    expect(reopened, "Escape after yes").toBe(false)
+    await expect(heading).toContainText("# draft")
     expect((await page.goto(`/checkin/${early.code}`))?.status()).toBe(404)
 })

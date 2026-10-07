@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test"
 
 import {
+    confirmed,
     API,
     DENY_SITE,
     FROM_SITE,
@@ -226,11 +227,12 @@ test("an admin reset forces the player to set a new password before anything els
     // The roster pages at twenty rows and other workers are enlisting, so the
     // search is the only way to be sure this row is on the page.
     await page.goto(`/admin/players?q=${user.name}`)
-    page.once("dialog", dialog => dialog.accept())
-    await page
-        .getByRole("row", { name: new RegExp(user.name) })
-        .getByRole("button", { name: "reset password" })
-        .click()
+    await confirmed(
+        page,
+        page
+            .getByRole("row", { name: new RegExp(user.name) })
+            .getByRole("button", { name: "reset password" }),
+    )
     const notice = page.getByRole("status")
     await expect(notice).toContainText("temporary password")
     const temporary = (await notice.locator("p").nth(1).textContent())?.trim() ?? ""

@@ -1,5 +1,6 @@
 ---
 import "../styles/global.css"
+import Button from "../components/ui/Button.astro"
 import { adminSessionOf } from "../lib/session"
 
 type Section = "overview" | "players" | "events" | "tournaments" | "scores"
@@ -104,19 +105,28 @@ const sections: { key: Section; label: string; href: string; ready: boolean }[] 
     </div>
 
     <div class="hazard fixed inset-x-0 bottom-0 h-1.5"></div>
+    <template id="confirm-prompt">
+      <span data-confirm-prompt class="inline-flex flex-wrap items-center gap-2">
+        <span data-confirm-text class="text-2xs text-warn"></span>
+        <span data-confirm-yes>
+          <Button variant="danger" size="sm" type="button">
+            yes
+          </Button>
+        </span>
+        <span data-confirm-no>
+          <Button variant="warn" size="sm" type="button">
+            no
+          </Button>
+        </span>
+      </span>
+    </template>
     <script>
+      import { enableConfirmations } from "../lib/confirm-form"
       import { toLocalInput } from "../lib/dates"
 
-      // One listener for every destructive form. The text lives in a data
-      // attribute, so a name never lands inside a JavaScript string.
-      for (const form of document.querySelectorAll<HTMLFormElement>(
-        "form[data-confirm]",
-      )) {
-        form.addEventListener("submit", event => {
-          if (!window.confirm(form.dataset.confirm ?? "are you sure?"))
-            event.preventDefault()
-        })
-      }
+      // The text of each question lives in a data attribute, so a name never
+      // lands inside a JavaScript string.
+      enableConfirmations(document)
 
       // The server cannot know the admin's timezone. A local datetime field
       // writes its instant into the hidden field that the form sends.

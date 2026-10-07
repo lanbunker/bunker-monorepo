@@ -1,7 +1,8 @@
 import { actions } from "astro:actions"
-import { useState } from "react"
+import { useEffect, useId, useRef, useState } from "react"
 
 import type { Bracket, Entrant, Match } from "../lib/api"
+import { ARM_DELAY_MS } from "../lib/confirm-form"
 import { errorMessage } from "../lib/form"
 import { UNRATED_SKILL } from "../lib/tournaments"
 import { useHydrated } from "../lib/use-hydrated"
@@ -41,6 +42,12 @@ export const BracketEditor = (props: BracketEditorProps) => {
     const [entrants, setEntrants] = useState(props.entrants)
     const [error, setError] = useState<string | undefined>()
     const [busy, setBusy] = useState(false)
+    // The question before a removal, and whether "yes" takes a click yet.
+    const [asking, setAsking] = useState(false)
+    const [armed, setArmed] = useState(false)
+    const keep = useRef<HTMLButtonElement>(null)
+    const removeButton = useRef<HTMLButtonElement>(null)
+    const questionId = useId()
     const idle = useHydrated() && !busy
     const id = props.tournamentId
     const hasResults = bracket?.rounds.flat().some(isPlayed) ?? false
@@ -76,10 +83,27 @@ export const BracketEditor = (props: BracketEditorProps) => {
     }
     const generate = () => void reloadWhenDone(() => actions.generateBracket({ id }))
     const remove = () => {
-        if (window.confirm("remove the bracket? seeds are lost.")) {
-            void reloadWhenDone(() => actions.deleteBracket({ id }))
-        }
+        setAsking(false)
+        void reloadWhenDone(() => actions.deleteBracket({ id }))
     }
+
+    useEffect(() => {
+        if (!asking) return undefined
+        keep.current?.focus()
+        const back = removeButton.current
+        const timer = window.setTimeout(() => setArmed(true), ARM_DELAY_MS)
+        const cancel = (event: KeyboardEvent) => {
+            if (event.key === "Escape") setAsking(false)
+        }
+        document.addEventListener("keydown", cancel)
+        return () => {
+            window.clearTimeout(timer)
+            document.removeEventListener("keydown", cancel)
+            // The question is gone and the button is back, so the focus goes
+            // back where it came from.
+            back?.focus()
+        }
+    }, [asking])
 
     const swapSeeds = async (swapped: string[]) => {
         if (!(await run(() => actions.reorderSeeds({ id, entrants: swapped })))) return
@@ -125,12 +149,42 @@ export const BracketEditor = (props: BracketEditorProps) => {
                     {bracket && (
                         <button
                             type="button"
+                            ref={removeButton}
+                            hidden={asking}
                             className={danger}
                             disabled={!idle || hasResults}
-                            onClick={remove}
+                            onClick={() => {
+                                setArmed(false)
+                                setAsking(true)
+                            }}
                         >
                             remove bracket
                         </button>
+                    )}
+                    {bracket && asking && (
+                        <span className="inline-flex flex-wrap items-center gap-2">
+                            <span id={questionId} className="text-2xs text-warn">
+                                remove the bracket? seeds are lost.
+                            </span>
+                            <button
+                                type="button"
+                                aria-describedby={questionId}
+                                className={danger}
+                                disabled={!armed || !idle || hasResults}
+                                onClick={remove}
+                            >
+                                yes
+                            </button>
+                            <button
+                                type="button"
+                                aria-describedby={questionId}
+                                className={warn}
+                                ref={keep}
+                                onClick={() => setAsking(false)}
+                            >
+                                no
+                            </button>
+                        </span>
                     )}
                     {bracket && (
                         <span className="text-2xs text-admin-dim">

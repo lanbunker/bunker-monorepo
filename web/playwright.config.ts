@@ -67,7 +67,9 @@ export default defineConfig({
             // `.wrangler/deploy/config.json`. CLOUDFLARE_INCLUDE_PROCESS_ENV lets
             // the shell beat the Worker var for this server only, and
             // `--ignore-lock` lets a second preview of one project start.
-            command: `CLOUDFLARE_INCLUDE_PROCESS_ENV=true TURNSTILE_SECRET_KEY=${TURNSTILE_DENY_SECRET} ASTRO_PREVIEW_BACKGROUND=0 pnpm exec astro preview --ignore-lock --host 127.0.0.1 --port ${DENY_PORT}`,
+            // Without CLOUDFLARE_ENV it reads the top level of `wrangler.jsonc`,
+            // whose API is production.
+            command: `CLOUDFLARE_ENV=e2e CLOUDFLARE_INCLUDE_PROCESS_ENV=true TURNSTILE_SECRET_KEY=${TURNSTILE_DENY_SECRET} ASTRO_PREVIEW_BACKGROUND=0 pnpm exec astro preview --ignore-lock --host 127.0.0.1 --port ${DENY_PORT}`,
             url: `${DENY_SITE}/`,
             reuseExistingServer: false,
             timeout: 60_000,

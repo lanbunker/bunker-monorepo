@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test"
 import { z } from "zod"
 
 import {
+    confirmed,
     API,
     apiDraft,
     apiSignup,
@@ -95,8 +96,7 @@ test("an admin promotes, renames and deletes a player from the roster", async ({
     await page.goto(adminRoster(renamed))
     await expect(row(renamed)).toBeVisible()
     await expect(row(user.name)).toHaveCount(0)
-    page.once("dialog", dialog => dialog.accept())
-    await row(renamed).getByRole("button", { name: "delete" }).click()
+    await confirmed(page, row(renamed).getByRole("button", { name: "delete" }))
     await expect(page.getByRole("status")).toContainText("player deleted")
 
     await page.goto(adminRoster(renamed))
@@ -259,11 +259,12 @@ test("an entrant is added once however often, listed, and removed", async ({
     await expect(page.getByText("entrants # 1")).toBeVisible()
     await expect(page.getByRole("alert")).toHaveCount(0)
 
-    page.once("dialog", dialog => dialog.accept())
-    await entrants
-        .getByRole("row", { name: new RegExp(player) })
-        .getByRole("button", { name: "remove" })
-        .click()
+    await confirmed(
+        page,
+        entrants
+            .getByRole("row", { name: new RegExp(player) })
+            .getByRole("button", { name: "remove" }),
+    )
     await expect(page.getByRole("status")).toContainText("entrant removed")
     await expect(page.getByText("nobody yet.")).toBeVisible()
 
@@ -283,8 +284,7 @@ test("a concluded tournament takes no more changes", async ({ page, context }) =
     const id = await apiDraft(context.request, admin.token)
 
     await page.goto(`/admin/tournaments/${id}`)
-    page.once("dialog", dialog => dialog.accept())
-    await page.getByRole("button", { name: "conclude" }).click()
+    await confirmed(page, page.getByRole("button", { name: "conclude" }))
     await expect(page.getByRole("heading", { level: 1 })).toContainText("# concluded")
 
     await expect(page.getByRole("button", { name: "add entrant" })).toHaveCount(0)

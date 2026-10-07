@@ -7,6 +7,7 @@ import type {
     APIRequestContext,
     APIResponse,
     BrowserContext,
+    Dialog,
     Locator,
     Page,
 } from "@playwright/test"
@@ -230,6 +231,26 @@ export const logout = async (page: Page) => {
     await page.goto("/profile")
     await page.getByRole("button", { name: "LOGOUT" }).click()
     await expect(page).toHaveURL(/\/login(\?|$)/)
+}
+
+/**
+ * Clicks a destructive action, then answers "yes" to the question the page
+ * asks in place. The backoffice never opens a native dialog, so one fails here.
+ */
+export const confirmed = async (page: Page, action: Locator) => {
+    const native: string[] = []
+    const record = (dialog: Dialog) => {
+        native.push(dialog.message())
+        void dialog.dismiss()
+    }
+    page.on("dialog", record)
+    try {
+        await action.click()
+        expect(native, "a native dialog opened").toEqual([])
+        await page.getByRole("button", { name: "yes", exact: true }).click()
+    } finally {
+        page.off("dialog", record)
+    }
 }
 
 /** The sentence a failed form shows. */
