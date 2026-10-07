@@ -78,6 +78,9 @@ const notice = noticeFrom(Astro.url, {
   penalized: `cycles taken from ${who}`,
 })
 const temporaryPassword = resetResult?.data?.temporaryPassword
+// An admin changes neither the role nor the account of their own row, but may
+// adjust their own cycles.
+const own = (player: { id: string }) => player.id === session.player.id
 
 const SHOWS = ["all", "active", "inactive"] as const
 type Show = (typeof SHOWS)[number]
@@ -87,6 +90,10 @@ const show: Show = SHOWS.find(s => s === Astro.url.searchParams.get("show")) ?? 
 const filters = { show: show === "all" ? undefined : show }
 const page = pageFrom(Astro.url)
 const q = searchFrom(Astro.url)
+// A refused change renders on the URL its form posts to. Each row form keeps
+// the search, the filter and the page, so the row the admin was on stays.
+const listed = listPath("", q, page, filters).replace(/^\?/, "&")
+const rowAction = (action: string) => `${action}${listed}`
 const active = match(show)
   .with("all", () => undefined)
   .with("active", () => true)
@@ -220,97 +227,103 @@ if (roster && page > roster.totalPages && roster.totalPages > 0) {
                 {formatDate(new Date(player.createdAt))}
               </td>
               <td class="px-3 py-2">
-                {player.id === session.player.id ? (
-                  <span class="text-2xs text-admin-dim">this is you</span>
-                ) : (
-                  <div class="flex flex-wrap justify-end gap-2">
-                    <form method="POST" action={actions.setRole}>
-                      <input type="hidden" name="id" value={player.id} />
-                      <input
-                        type="hidden"
-                        name="role"
-                        value={player.role === "admin" ? "user" : "admin"}
-                      />
-                      <Button variant="warn" size="sm">
-                        {player.role === "admin" ? "demote" : "promote"}
-                      </Button>
-                    </form>
-                    <form
-                      method="POST"
-                      action={actions.renamePlayer}
-                      class="flex items-center gap-1"
-                    >
-                      <input type="hidden" name="id" value={player.id} />
-                      <input
-                        name="handle"
-                        type="text"
-                        required
-                        minlength="3"
-                        maxlength="20"
-                        pattern="[A-Za-z0-9_.\-]+"
-                        placeholder={player.handle}
-                        aria-label={`new handle for ${player.handle}`}
-                        class="w-24 border-b border-warn/40 bg-transparent px-1 py-0.5 text-2xs text-admin-ink outline-none focus:border-warn"
-                      />
-                      <Button variant="warn" size="sm">
-                        rename
-                      </Button>
-                    </form>
-                    <form
-                      method="POST"
-                      action={actions.adjustCycles}
-                      class="flex items-center gap-1"
-                    >
-                      <input type="hidden" name="id" value={player.id} />
-                      <input type="hidden" name="handle" value={player.handle} />
-                      <input
-                        name="amount"
-                        type="number"
-                        required
-                        min="-10000"
-                        max="10000"
-                        step="1"
-                        placeholder="±cycles"
-                        aria-label={`cycles for ${player.handle}`}
-                        value={typed.id === player.id ? typed.amount : undefined}
-                        class="w-20 border-b border-warn/40 bg-transparent px-1 py-0.5 text-2xs text-admin-ink outline-none focus:border-warn"
-                      />
-                      <input
-                        name="note"
-                        type="text"
-                        required
-                        maxlength="200"
-                        placeholder="why"
-                        aria-label={`reason for the cycles of ${player.handle}`}
-                        value={typed.id === player.id ? typed.note : undefined}
-                        class="w-32 border-b border-warn/40 bg-transparent px-1 py-0.5 text-2xs text-admin-ink outline-none focus:border-warn"
-                      />
-                      <Button variant="warn" size="sm">
-                        adjust
-                      </Button>
-                    </form>
-                    <form
-                      method="POST"
-                      action={actions.resetPassword}
-                      data-confirm={`reset the password of ${player.handle}? the current one stops working.`}
-                    >
-                      <input type="hidden" name="id" value={player.id} />
-                      <Button variant="warn" size="sm">
-                        reset password
-                      </Button>
-                    </form>
-                    <form
-                      method="POST"
-                      action={actions.deletePlayer}
-                      data-confirm={`delete ${player.handle}? this cannot be undone.`}
-                    >
-                      <input type="hidden" name="id" value={player.id} />
-                      <Button variant="danger" size="sm">
-                        delete
-                      </Button>
-                    </form>
-                  </div>
-                )}
+                <div class="flex flex-wrap items-center justify-end gap-2">
+                  {own(player) ? (
+                    <span class="text-2xs text-admin-dim">this is you</span>
+                  ) : (
+                    <>
+                      <form method="POST" action={rowAction(actions.setRole)}>
+                        <input type="hidden" name="id" value={player.id} />
+                        <input
+                          type="hidden"
+                          name="role"
+                          value={player.role === "admin" ? "user" : "admin"}
+                        />
+                        <Button variant="warn" size="sm">
+                          {player.role === "admin" ? "demote" : "promote"}
+                        </Button>
+                      </form>
+                      <form
+                        method="POST"
+                        action={rowAction(actions.renamePlayer)}
+                        class="flex items-center gap-1"
+                      >
+                        <input type="hidden" name="id" value={player.id} />
+                        <input
+                          name="handle"
+                          type="text"
+                          required
+                          minlength="3"
+                          maxlength="20"
+                          pattern="[A-Za-z0-9_.\-]+"
+                          placeholder={player.handle}
+                          aria-label={`new handle for ${player.handle}`}
+                          class="w-24 border-b border-warn/40 bg-transparent px-1 py-0.5 text-2xs text-admin-ink outline-none focus:border-warn"
+                        />
+                        <Button variant="warn" size="sm">
+                          rename
+                        </Button>
+                      </form>
+                    </>
+                  )}
+                  <form
+                    method="POST"
+                    action={rowAction(actions.adjustCycles)}
+                    class="flex items-center gap-1"
+                  >
+                    <input type="hidden" name="id" value={player.id} />
+                    <input type="hidden" name="handle" value={player.handle} />
+                    <input
+                      name="amount"
+                      type="number"
+                      required
+                      min="-10000"
+                      max="10000"
+                      step="1"
+                      placeholder="±cycles"
+                      aria-label={`cycles for ${player.handle}`}
+                      value={typed.id === player.id ? typed.amount : undefined}
+                      class="w-20 border-b border-warn/40 bg-transparent px-1 py-0.5 text-2xs text-admin-ink outline-none focus:border-warn"
+                    />
+                    <input
+                      name="note"
+                      type="text"
+                      required
+                      maxlength="200"
+                      placeholder="why"
+                      aria-label={`reason for the cycles of ${player.handle}`}
+                      value={typed.id === player.id ? typed.note : undefined}
+                      class="w-32 border-b border-warn/40 bg-transparent px-1 py-0.5 text-2xs text-admin-ink outline-none focus:border-warn"
+                    />
+                    <Button variant="warn" size="sm">
+                      adjust
+                    </Button>
+                  </form>
+                  {!own(player) && (
+                    <>
+                      <form
+                        method="POST"
+                        action={rowAction(actions.resetPassword)}
+                        data-confirm={`reset the password of ${player.handle}? the current one stops working.`}
+                      >
+                        <input type="hidden" name="id" value={player.id} />
+                        <Button variant="warn" size="sm">
+                          reset password
+                        </Button>
+                      </form>
+                      <form
+                        method="POST"
+                        action={rowAction(actions.deletePlayer)}
+                        data-confirm={`delete ${player.handle}? this cannot be undone.`}
+                      >
+                        <input type="hidden" name="id" value={player.id} />
+                        <Button variant="danger" size="sm">
+                          delete
+                        </Button>
+                      </form>
+                    </>
+                  )}
+                </div>
               </td>
             </tr>
           ))}

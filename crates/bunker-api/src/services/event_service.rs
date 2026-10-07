@@ -135,6 +135,15 @@ impl EventService {
         self.record(id, player).await
     }
 
+    /// Idempotent. The cycles the check-in paid go with it, so a player whose
+    /// only night it was is inactive again.
+    pub async fn remove_checkin(&self, id: EventId, player: PlayerId) -> Result<(), ServiceError> {
+        self.load(id).await?;
+        self.storage.remove_checkin(id, player).await?;
+
+        Ok(())
+    }
+
     pub async fn checkins_of(&self, player: PlayerId) -> Result<Checkins, ServiceError> {
         Ok(Checkins {
             events: self.storage.events_of(player).await?,

@@ -3,6 +3,7 @@ import type { APIRequestContext } from "@playwright/test"
 import { z } from "zod"
 
 import {
+    confirmed,
     API,
     PASSWORD,
     apiLogin,
@@ -255,6 +256,22 @@ test("an admin checks a player in by hand for a night that is over", async ({
     // The player never scanned a door, and this check-in put them on the board.
     await page.goto(`/admin/players?q=${player.name}&show=active`)
     await expect(page.getByRole("link", { name: player.name })).toBeVisible()
+
+    // The admin takes the check-in back, and the cycles and the board go too.
+    await page.goto(`/admin/events/${event.id}`)
+    const checkins = page.getByRole("table", { name: "check-ins" })
+    await confirmed(
+        page,
+        checkins
+            .getByRole("row", { name: new RegExp(player.name) })
+            .getByRole("button", { name: "remove" }),
+    )
+    await expect(page.getByRole("status")).toContainText("check-in removed")
+    await expect(page.getByText("nobody yet.")).toBeVisible()
+    // It was their only night, so they are inactive again, with nothing.
+    await page.goto(`/admin/players?q=${player.name}&show=inactive`)
+    const row = page.getByRole("row", { name: new RegExp(player.name) })
+    await expect(row.locator("[data-cycles]")).toHaveText("0")
 
     // This night is over, so the public page files it under the archive.
     await page.goto("/events")

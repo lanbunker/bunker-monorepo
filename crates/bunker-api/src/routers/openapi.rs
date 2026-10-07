@@ -81,6 +81,7 @@ use super::{
         admin_event_router::update_event,
         admin_event_router::change_event_status,
         admin_event_router::add_checkin,
+        admin_event_router::remove_checkin,
         admin_event_router::delete_event,
         health_router::live,
         health_router::ready,

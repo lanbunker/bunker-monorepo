@@ -23,21 +23,24 @@ const NOTICES = {
   saved: "saved",
   status: "status changed",
   checked: "check-in added",
+  unchecked: "check-in removed, with its cycles",
 }
 
 const saved = Astro.getActionResult(actions.updateEvent)
 const status = Astro.getActionResult(actions.setEventStatus)
 const added = Astro.getActionResult(actions.addCheckin)
+const removed = Astro.getActionResult(actions.removeCheckin)
 const done = [
   saved?.data && "saved",
   status?.data && "status",
   added?.data && "checked",
+  removed?.data && "unchecked",
 ].find(key => typeof key === "string")
 if (done) return Astro.redirect(`/admin/events/${id}?done=${done}`)
 const deleted = Astro.getActionResult(actions.deleteEvent)
 if (deleted?.data) return Astro.redirect("/admin/events?done=deleted")
 
-const failure = firstError(saved, status, added, deleted)
+const failure = firstError(saved, status, added, removed, deleted)
 const notice = noticeFrom(Astro.url, NOTICES)
 // A refused add keeps the handle that was typed.
 const typed = Astro.locals.submitted
@@ -264,9 +267,12 @@ const pays = checkinCycles(dataOf(rules))
           <Table label="check-ins">
             <thead>
               <tr class="text-left text-2xs tracking-wider text-admin-dim">
-                <th class="w-[10%] pb-2 font-normal">#</th>
-                <th class="w-[50%] pb-2 font-normal">player</th>
-                <th class="w-[40%] pb-2 text-right font-normal">at the door</th>
+                <th class="w-[6%] pb-2 font-normal">#</th>
+                <th class="w-[32%] pb-2 font-normal">player</th>
+                <th class="w-[22%] pb-2 text-right font-normal">at the door</th>
+                <th class="w-[40%] pb-2 text-right font-normal">
+                  <span class="sr-only">actions</span>
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -284,6 +290,19 @@ const pays = checkinCycles(dataOf(rules))
                   </td>
                   <td class="nowrap py-1.5 text-right text-admin-dim">
                     <LocalTime at={c.checkedInAt} />
+                  </td>
+                  <td class="py-1.5 text-right">
+                    <form
+                      method="POST"
+                      action={actions.removeCheckin}
+                      data-confirm={`remove ${c.player.handle}? the cycles go too.`}
+                    >
+                      <input type="hidden" name="id" value={e.id} />
+                      <input type="hidden" name="playerId" value={c.player.id} />
+                      <Button variant="danger" size="sm">
+                        remove
+                      </Button>
+                    </form>
                   </td>
                 </tr>
               ))}

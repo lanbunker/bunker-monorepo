@@ -1,6 +1,6 @@
 use bunker_models::{
     Award, Checkin, CheckinCode, Description, Event, EventFields, EventId, EventName, EventStatus,
-    EventWindow, Games, ImageName, Location, PageQuery, Paginated, PlayerId,
+    EventWindow, Games, ImageName, Location, PageQuery, Paginated, PlayerId, PointKind,
 };
 use time::OffsetDateTime;
 
@@ -236,6 +236,40 @@ impl EventStorage {
             .map_err(StorageError::from_query)?;
 
         Ok(result.rows_affected() > 0)
+    }
+
+    /// The check-in and the cycles it paid go in one transaction. `false` when
+    /// the player was not checked in.
+    pub async fn remove_checkin(
+        &self,
+        event: EventId,
+        player: PlayerId,
+    ) -> Result<bool, StorageError> {
+        let event = event.into_inner().to_string();
+        let player = player.into_inner().to_string();
+        let kind = PointKind::Checkin.as_str();
+
+        let mut tx = begin_write(&self.pool).await?;
+        sqlx::query!(
+            "delete from point_entries where kind = ?1 and event_id = ?2 and player_id = ?3",
+            kind,
+            event,
+            player,
+        )
+        .execute(&mut *tx)
+        .await
+        .map_err(StorageError::from_query)?;
+        let removed = sqlx::query!(
+            "delete from event_checkins where event_id = ?1 and player_id = ?2",
+            event,
+            player,
+        )
+        .execute(&mut *tx)
+        .await
+        .map_err(StorageError::from_query)?;
+        tx.commit().await.map_err(StorageError::from_query)?;
+
+        Ok(removed.rows_affected() > 0)
     }
 
     /// First at the door first, up to [`CHECKINS_MAX`].

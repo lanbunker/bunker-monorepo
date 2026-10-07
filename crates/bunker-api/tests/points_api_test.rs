@@ -173,16 +173,6 @@ async fn an_adjustment_is_checked_at_the_boundary_and_by_the_rules() {
         .await;
     assert_error(ghost, StatusCode::NOT_FOUND, "ItemNotFound").await;
 
-    let root = api.player("root").await;
-    let selfish = api
-        .post_as(
-            &format!("/api/admin/players/{}/cycles", root.id),
-            &json!({ "amount": 10, "note": "x" }),
-            &admin,
-        )
-        .await;
-    assert_error(selfish, StatusCode::FORBIDDEN, "Forbidden").await;
-
     assert_eq!(
         api.player("dave").await.standing.cycles,
         0,
@@ -499,4 +489,25 @@ async fn the_rules_are_public_and_name_every_way_to_earn() {
     assert_eq!(rules.tiers.len(), 3);
     assert_eq!(rules.tiers[2].tier, FieldTier::Large);
     assert!(rules.awards.iter().all(|a| a.cycles.len() == 3));
+}
+
+#[tokio::test]
+async fn an_admin_adjusts_their_own_cycles() {
+    let api = TestApi::with_database().await;
+    let admin = api.signup_admin("root").await;
+    let root = api.player("root").await;
+
+    let response = api
+        .post_as(
+            &format!("/api/admin/players/{}/cycles", root.id),
+            &json!({ "amount": 250, "note": "ran the door all night" }),
+            &admin,
+        )
+        .await;
+    assert_eq!(response.status(), StatusCode::CREATED);
+
+    assert_eq!(api.player("root").await.standing.cycles, 250);
+    let line = &api.cycles_log("root").await.entries.items[0];
+    assert_eq!(line.kind, PointKind::Adjustment);
+    assert_eq!(line.amount, 250);
 }

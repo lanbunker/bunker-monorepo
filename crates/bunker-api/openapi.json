@@ -558,6 +558,83 @@
         ]
       }
     },
+    "/api/admin/events/{id}/checkins/{player}": {
+      "delete": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "remove_checkin",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/EventId"
+            }
+          },
+          {
+            "name": "player",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/PlayerId"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Gone, with the cycles it paid. Also when the player was not checked in"
+          },
+          "400": {
+            "description": "A path parameter is malformed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid bearer token, or no valid `X-Api-Key` header",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not an admin, or `PasswordChangeRequired`: a new password first",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown event",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "api_key": [],
+            "bearer": []
+          }
+        ]
+      }
+    },
     "/api/admin/events/{id}/status": {
       "post": {
         "tags": [

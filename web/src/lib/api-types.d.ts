@@ -52,6 +52,22 @@ export interface paths {
         patch?: never
         trace?: never
     }
+    "/api/admin/events/{id}/checkins/{player}": {
+        parameters: {
+            query?: never
+            header?: never
+            path?: never
+            cookie?: never
+        }
+        get?: never
+        put?: never
+        post?: never
+        delete: operations["remove_checkin"]
+        options?: never
+        head?: never
+        patch?: never
+        trace?: never
+    }
     "/api/admin/events/{id}/status": {
         parameters: {
             query?: never
@@ -1849,6 +1865,63 @@ export interface operations {
             }
             /** @description A field is missing, unknown or out of range */
             422: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+        }
+    }
+    remove_checkin: {
+        parameters: {
+            query?: never
+            header?: never
+            path: {
+                id: components["schemas"]["EventId"]
+                player: components["schemas"]["PlayerId"]
+            }
+            cookie?: never
+        }
+        requestBody?: never
+        responses: {
+            /** @description Gone, with the cycles it paid. Also when the player was not checked in */
+            204: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content?: never
+            }
+            /** @description A path parameter is malformed */
+            400: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            /** @description No valid bearer token, or no valid `X-Api-Key` header */
+            401: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            /** @description Not an admin, or `PasswordChangeRequired`: a new password first */
+            403: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ApiErrorBody"]
+                }
+            }
+            /** @description Unknown event */
+            404: {
                 headers: {
                     [name: string]: unknown
                 }

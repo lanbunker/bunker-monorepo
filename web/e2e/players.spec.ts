@@ -162,6 +162,8 @@ test("an admin adjusts cycles, and the rank, the bar and the log follow", async 
     await row().getByLabel(`reason for the cycles of ${name}`).fill("nothing at all")
     await row().getByRole("button", { name: "adjust" }).click()
     await readableFailure(page, /not zero/)
+    // A refusal keeps the search, so the row stays on the page.
+    await expect(page).toHaveURL(new RegExp(`q=${name}`))
     await expect(row().getByLabel(`cycles for ${name}`)).toHaveValue("0")
     await expect(row().getByLabel(`reason for the cycles of ${name}`)).toHaveValue(
         "nothing at all",

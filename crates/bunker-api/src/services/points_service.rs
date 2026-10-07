@@ -22,17 +22,14 @@ impl PointsService {
         Self { storage, players }
     }
 
-    /// An admin gives or takes cycles, with a reason. Not to themself: the
-    /// ledger is for the crew, and an admin who wants cycles plays for them.
+    /// An admin gives or takes cycles, with a reason, to any player, themself
+    /// included. The entry names the admin, so the ledger shows who wrote it.
     pub async fn adjust(
         &self,
         admin: PlayerId,
         player: PlayerId,
         adjustment: Adjustment,
     ) -> Result<PointEntry, ServiceError> {
-        if admin == player {
-            return Err(ServiceError::SelfAction);
-        }
         if !self.players.exists(player).await? {
             return Err(ServiceError::PlayerIdNotFound(player));
         }

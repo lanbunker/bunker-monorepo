@@ -96,7 +96,8 @@ The full contract is `crates/bunker-api/openapi.json`, also served at
 game. A draft is visible to admins only. Each event has a secret check-in code
 of 12 characters, printed as a QR poster from the backoffice. A player scans
 it at the door and gets 100 cycles, one time per event. The server decides the
-window. An admin can check a player in by hand at any time. Event covers are
+window. An admin can check a player in by hand at any time, and take a
+check-in back with the cycles it paid. Event covers are
 files under `web/src/assets/images/events`.
 
 **Tournaments.** The statuses are `draft`, `open`, `live` and `concluded`.

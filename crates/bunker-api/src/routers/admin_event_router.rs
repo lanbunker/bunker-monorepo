@@ -1,10 +1,10 @@
 use axum::extract::State;
 use axum::http::StatusCode;
-use axum::routing::{get, post};
+use axum::routing::{delete, get, post};
 use axum::{Json, Router};
 use bunker_models::{
     CheckinAdd, CheckinReceipt, Event, EventDetail, EventFields, EventId, EventStatusChange,
-    PageQuery, Paginated,
+    PageQuery, Paginated, PlayerId,
 };
 use serde::Deserialize;
 
@@ -23,11 +23,21 @@ pub fn admin_event_router() -> Router<AppState> {
         )
         .route("/api/admin/events/{id}/status", post(change_event_status))
         .route("/api/admin/events/{id}/checkins", post(add_checkin))
+        .route(
+            "/api/admin/events/{id}/checkins/{player}",
+            delete(remove_checkin),
+        )
 }
 
 #[derive(Debug, Deserialize, utoipa::IntoParams)]
 pub(super) struct EventPath {
     id: EventId,
+}
+
+#[derive(Debug, Deserialize, utoipa::IntoParams)]
+pub(super) struct EventPlayerPath {
+    id: EventId,
+    player: PlayerId,
 }
 
 #[utoipa::path(
@@ -157,6 +167,28 @@ pub(super) async fn add_checkin(
     Ok(created_or_existing(
         events.add_checkin(path.id, add.player_id).await?,
     ))
+}
+
+#[utoipa::path(
+    delete,
+    path = "/api/admin/events/{id}/checkins/{player}",
+    tag = "admin",
+    security(("bearer" = [])),
+    params(EventPlayerPath),
+    responses(
+        AdminErrors,
+        PathErrors,
+        (status = 204, description = "Gone, with the cycles it paid. Also when the player was not checked in"),
+        (status = 404, body = ApiErrorBody, description = "Unknown event"),
+    )
+)]
+pub(super) async fn remove_checkin(
+    State(events): State<EventService>,
+    ValidPath(path): ValidPath<EventPlayerPath>,
+) -> Result<StatusCode, ApiError> {
+    events.remove_checkin(path.id, path.player).await?;
+
+    Ok(StatusCode::NO_CONTENT)
 }
 
 #[utoipa::path(

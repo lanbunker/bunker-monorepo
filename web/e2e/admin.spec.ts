@@ -200,6 +200,26 @@ test("the roster marks an inactive player, and the filter survives a search", as
     await expect(page.locator("tbody tr")).toHaveCount(0)
 })
 
+test("an admin adjusts their own cycles, and nothing else on their own row", async ({
+    page,
+    context,
+}) => {
+    const admin = await newAdmin(context)
+
+    await page.goto(adminRoster(admin.name))
+    const own = page.getByRole("row", { name: new RegExp(admin.name) })
+    await expect(own.getByText("this is you")).toBeVisible()
+    await expect(own.getByRole("button", { name: "delete" })).toHaveCount(0)
+    await expect(own.getByRole("button", { name: "demote" })).toHaveCount(0)
+    await own.getByLabel(`cycles for ${admin.name}`).fill("40")
+    await own.getByLabel(`reason for the cycles of ${admin.name}`).fill("ran the door")
+    await own.getByRole("button", { name: "adjust" }).click()
+    await expect(page.getByRole("status")).toContainText(`cycles added to ${admin.name}`)
+
+    await page.goto(adminRoster(admin.name))
+    await expect(own.locator("[data-cycles]")).toHaveText("40")
+})
+
 test("an admin edits the details of a tournament and the change survives a reload", async ({
     page,
     context,

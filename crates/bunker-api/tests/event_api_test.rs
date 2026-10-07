@@ -19,6 +19,7 @@ use serde_json::json;
 use support::{HOUR, TestApi, assert_error, read_json};
 use time::format_description::well_known::Rfc3339;
 use time::{Duration, OffsetDateTime};
+use uuid::Uuid;
 
 #[tokio::test]
 async fn a_new_event_is_a_draft_that_only_admins_see() {
@@ -424,4 +425,79 @@ async fn an_admin_checks_a_player_in_by_hand_for_any_night() {
         )
         .await;
     assert_error(no_night, StatusCode::NOT_FOUND, "ItemNotFound").await;
+}
+
+#[tokio::test]
+async fn an_admin_removes_a_checkin_and_the_cycles_it_paid() {
+    let api = TestApi::with_database().await;
+    let admin = api.signup_admin("root").await;
+    let user = api.signup("dave").await.token;
+    let created = api.create_event(&admin, -HOUR, 6 * HOUR).await;
+    let detail = api.publish_event(&admin, created.id).await;
+    let door = format!("/api/checkin/{}", detail.checkin_code);
+    api.post_as(&door, &json!({}), &user).await;
+    let dave = api.lookup(&admin, "dave").await;
+    assert!(dave.active);
+    let path = format!("/api/admin/events/{}/checkins/{}", created.id, dave.id);
+
+    let refused = api.delete_as(&path, &user).await;
+    assert_error(refused, StatusCode::FORBIDDEN, "Forbidden").await;
+
+    assert_eq!(
+        api.delete_as(&path, &admin).await.status(),
+        StatusCode::NO_CONTENT
+    );
+    let after = api.lookup(&admin, "dave").await;
+    assert_eq!(after.standing.cycles, 0, "the cycles of the night go too");
+    assert!(!after.active, "it was the only night");
+    let mine: Checkins = read_json(api.get_as("/api/me/checkins", &user).await).await;
+    assert!(mine.events.is_empty());
+    let detail: EventDetail = read_json(
+        api.get_as(&format!("/api/admin/events/{}", created.id), &admin)
+            .await,
+    )
+    .await;
+    assert!(detail.checkins.is_empty());
+    assert_eq!(detail.event.checkin_count, 0);
+
+    let again = api.delete_as(&path, &admin).await;
+    assert_eq!(again.status(), StatusCode::NO_CONTENT, "idempotent");
+    let ghost = api
+        .delete_as(
+            &format!("/api/admin/events/{}/checkins/{}", Uuid::new_v4(), dave.id),
+            &admin,
+        )
+        .await;
+    assert_error(ghost, StatusCode::NOT_FOUND, "ItemNotFound").await;
+
+    // The door pays again, as on a first night.
+    let receipt: CheckinReceipt = read_json(api.post_as(&door, &json!({}), &user).await).await;
+    assert_eq!(receipt.cycles, CHECKIN_CYCLES);
+    assert!(receipt.activated);
+}
+
+#[tokio::test]
+async fn an_admin_removes_their_own_checkin() {
+    let api = TestApi::with_database().await;
+    let admin = api.signup_admin("root").await;
+    let created = api.create_event(&admin, -HOUR, 6 * HOUR).await;
+    let detail = api.publish_event(&admin, created.id).await;
+    api.post_as(
+        &format!("/api/checkin/{}", detail.checkin_code),
+        &json!({}),
+        &admin,
+    )
+    .await;
+    let root = api.player("root").await;
+    assert_eq!(root.standing.cycles, CHECKIN_CYCLES);
+
+    let path = format!("/api/admin/events/{}/checkins/{}", created.id, root.id);
+    assert_eq!(
+        api.delete_as(&path, &admin).await.status(),
+        StatusCode::NO_CONTENT
+    );
+
+    let after = api.player("root").await;
+    assert_eq!(after.standing.cycles, 0);
+    assert!(after.active, "an admin stays active");
 }

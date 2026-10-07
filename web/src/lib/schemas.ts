@@ -228,3 +228,5 @@ export const eventStatusInput = z.object({
 export const checkinCode = z.string().regex(/^[a-z0-9]{12}$/, "That link is not valid.")
 
 export const checkinInput = z.object({ code: checkinCode })
+
+export const checkinRemovalInput = z.object({ id: uuid, playerId: uuid })

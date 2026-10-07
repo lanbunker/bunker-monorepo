@@ -6,6 +6,7 @@ import { call, callEmpty } from "../lib/api"
 import {
     byId,
     checkinInput,
+    checkinRemovalInput,
     eventInput,
     eventStatusInput,
     eventUpdateInput,
@@ -117,6 +118,23 @@ export const eventActions = {
                 ),
             )
             return { handle: player.handle }
+        },
+    }),
+
+    removeCheckin: defineAction({
+        accept: "form",
+        input: checkinRemovalInput,
+        handler: async (input, context) => {
+            unwrap(
+                await callEmpty(
+                    client =>
+                        client.DELETE("/api/admin/events/{id}/checkins/{player}", {
+                            params: { path: { id: input.id, player: input.playerId } },
+                        }),
+                    requireAdmin(context.locals),
+                ),
+            )
+            return { removed: true }
         },
     }),
 
